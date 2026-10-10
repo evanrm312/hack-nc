@@ -14,10 +14,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import db, iso_utc, new_id, utcnow
 
-EXCHANGE_MODES = ("sale", "borrow")
+EXCHANGE_MODES = ("sale", "borrow", "service")
 EXCHANGE_STATUSES = (
     "negotiating",
     "reserved",
+    "scheduled",
     "on_loan",
     "return_pending",
     "completed",
@@ -41,6 +42,8 @@ class Exchange(db.Model):
     current_offer_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cancellation_reason: Mapped[str | None] = mapped_column(Text)
     dispute_reason: Mapped[str | None] = mapped_column(Text)
+    owner_service_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    requester_service_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -54,7 +57,7 @@ class Exchange(db.Model):
         return {self.owner_id, self.requester_id}
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "id": self.id,
             "listing_id": self.listing_id,
             "owner_id": self.owner_id,
@@ -68,6 +71,11 @@ class Exchange(db.Model):
             "created_at": iso_utc(self.created_at),
             "updated_at": iso_utc(self.updated_at),
         }
+        if self.mode == "service":
+            result["owner_service_confirmed_at"] = iso_utc(self.owner_service_confirmed_at)
+            result["requester_service_confirmed_at"] = iso_utc(self.requester_service_confirmed_at)
+            result["payment_notice"] = "Simulated: no real funds are reserved or charged."
+        return result
 
 
 class OfferRevision(db.Model):
@@ -85,6 +93,9 @@ class OfferRevision(db.Model):
     rental_fee_cents: Mapped[int | None] = mapped_column(Integer)
     agreed_item_value_cents: Mapped[int | None] = mapped_column(Integer)
     deposit_cents: Mapped[int | None] = mapped_column(Integer)
+    service_price_cents: Mapped[int | None] = mapped_column(Integer)
+    service_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    service_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Required true when deposit_cents < agreed_item_value_cents.
     lower_deposit_acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -111,7 +122,7 @@ class OfferRevision(db.Model):
         return max(self.agreed_item_value_cents - self.deposit_cents, 0)
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "id": self.id,
             "exchange_id": self.exchange_id,
             "version": self.version,
@@ -133,6 +144,17 @@ class OfferRevision(db.Model):
             "requester_accepted_at": iso_utc(self.requester_accepted_at),
             "created_at": iso_utc(self.created_at),
         }
+        if self.exchange and self.exchange.mode == "service":
+            for key in ("sale_price_cents", "rental_fee_cents", "agreed_item_value_cents",
+                        "deposit_cents", "uncovered_value_cents", "lower_deposit_acknowledged",
+                        "condition_snapshot", "pickup_meeting_spot_id", "pickup_at",
+                        "return_meeting_spot_id", "return_deadline", "pricing_range_version",
+                        "price_reference_id"):
+                result.pop(key)
+            result.update(service_price_cents=self.service_price_cents,
+                          service_duration_minutes=self.service_duration_minutes,
+                          service_scheduled_at=iso_utc(self.service_scheduled_at))
+        return result
 
 
 class Message(db.Model):

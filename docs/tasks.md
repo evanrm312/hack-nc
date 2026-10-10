@@ -27,16 +27,21 @@ user creates a listing; another user can read it; the other user's PATCH is
 
 ### P1-2 Deploy skeleton + Supabase auth/storage — Person 1, `p1-backend`
 
-Status: open. Acceptance: deployed URL serves `/healthz`; `AUTH_MODE=supabase`
+Status: in progress. Automated Supabase Auth adapter and browser lifecycle
+checks pass with mocked responses; production config rejects sandbox auth and
+development secrets. `SupabaseStorage` has mocked adapter checks; local storage
+remains available. Acceptance: deployed URL serves `/healthz`; `AUTH_MODE=supabase`
 magic-link sign-in works with a real `@unc.edu` address (configure SMTP or
 confirm Supabase default sender reaches team addresses); `DATABASE_URL` points
-at Postgres; `flask db upgrade` runs in the release step; records survive a
+at Postgres; `flask db upgrade` runs in a verified deployment step; records survive a
 restart. Implement `SupabaseStorage` or keep `local` with a persistent disk and
 say which.
 
 ### P2-1 normalize_request + match_listings — Person 2, `p2-intelligence`
 
-Status: open. Acceptance: `normalize_request` uses Gemini structured output
+Status: done; normalization and matching merged into `main` in `4e9083e`.
+The later bounded Gemini model fallback (`21d1212`) is included in Person 1's
+PR #2 as `8d872d4`. `normalize_request` uses Gemini structured output
 validated by Pydantic; unknowns stay null; ambiguous dates are flagged and
 resolved in America/New_York with confirmation; Gemini timeout returns an
 editable manual result, not fabricated values. `match_listings` is deterministic
@@ -48,11 +53,12 @@ your functions.
 
 ### P3-1 Shell + request-to-results journey — Person 3, `p3-marketplace-ui`
 
-Status: open. Acceptance: shared Frutiger Aero shell in `base.html` and
+Status: merged into `main` by PR #4; live browser integration check pending.
+Acceptance: shared Frutiger Aero shell in `base.html` and
 `theme.css`; home request input calls `/api/requests/normalize` then shows the
 editable interpretation and creates the request; results page renders
 confirmed vs needs-confirmation matches with reasons from
-`/api/requests/{id}/matches` (stub returns labeled fixture data now), a genuine
+`/api/requests/{id}/matches` (deterministic matches from real listings), a genuine
 no-match state, and an explicit Publish Request button with the public preview;
 listing form posts to `/api/listings` and uploads a photo; public request feed.
 Keyboard focus, readable contrast, reduced motion, phone width. Reuse
@@ -60,7 +66,8 @@ Keyboard focus, readable contrast, reduced motion, phone width. Reuse
 
 ### P4-1 negotiating → reserved — Person 4, `p4-exchanges`
 
-Status: open. Acceptance: replace the stubs in `server/exchanges/routes.py`:
+Status: implemented on `p4-exchanges`; PR #7 remains open. Acceptance: replace
+the stubs in `server/exchanges/routes.py`:
 create exchange (requester only, listing available, mode allowed), private
 messages (participants only, polling), versioned offers (any term change =
 new version, both acceptances reset), accept with `version` check
@@ -78,12 +85,34 @@ separate tasks (P4-2, P4-3).
 
 ## Known blockers / limitations of the scaffold
 
-- Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen.
-- `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` but has not
-  been exercised against a real Supabase project.
-- `SupabaseStorage` is an interface only; `STORAGE_BACKEND=local` is the
-  working backend.
-- Gemini, matching, pricing: stubs with labeled fixture output.
-- Exchange endpoints: labeled fixture reads, `501` writes.
+- Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen and
+  its migration/release behavior is unverified.
+- `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` and covered
+  by mocked provider tests. A real UNC magic-link callback was observed by the
+  user; `/api/me`, refresh persistence, and sign-out still need a live browser
+  check with an existing authenticated session.
+- `SupabaseStorage` is implemented and mocked for upload, download, deletion,
+  bucket separation, and private-read gating. Live adapter checks verified both
+  bucket visibility settings, disposable upload/retrieval, private denial, and
+  cleanup. PR #7 implements participant-only evidence routes; live end-to-end
+  evidence access remains unverified.
+- The application's effective SQLAlchemy configuration connected through the
+  Supabase Session pooler and returned `SELECT 1`. The initial migration was
+  applied to the designated development database; the explicit opt-in demo
+  seed created three meeting spots, one labeled demo profile, two labeled suit
+  listings, and two fixture price references. API reads verified the listings
+  and meeting spots; both listings persisted after a Flask restart. The cause
+  of the earlier password authentication error was not established. No reset
+  was run.
+- PostgreSQL migration/persistence validation requires a dedicated
+  `TEST_DATABASE_URL` ending in `_test`; none is configured in this environment.
+- Normalization and matching are implemented by Person 2. Price appraisal
+  remains a stub. A direct live Gemini normalization in the Person 1 integration
+  run succeeded with `gemini-3.5-flash-lite`; authenticated request creation and
+  live seeded-catalog matching remain unverified.
+- PR #8's services and PR #3's Person 1 integration are merged into main.
+  PR #7 contains persisted item exchanges and remains open. This branch
+  reconciles its item routes with the merged service routes; reviews and item
+  cancellation/general dispute remain `501` follow-up work.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.

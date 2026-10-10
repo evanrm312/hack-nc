@@ -27,7 +27,7 @@ class NeedRequest(db.Model):
     original_text: Mapped[str] = mapped_column(Text, nullable=False)
     # NormalizedRequest dict from docs/contracts.md (editable by the user).
     normalized: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    modes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # subset of ["sale","borrow"]
+    modes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # sale, borrow, or service
 
     budget_cents: Mapped[int | None] = mapped_column(Integer)
     max_deposit_cents: Mapped[int | None] = mapped_column(Integer)
@@ -37,6 +37,8 @@ class NeedRequest(db.Model):
     use_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # [{"start": iso, "end": iso}] -- private, never published.
     pickup_windows: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    service_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    service_time_windows: Mapped[list | None] = mapped_column(JSON)
     area: Mapped[str | None] = mapped_column(String(80))  # coarse campus area, public
 
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private", index=True)
@@ -50,7 +52,7 @@ class NeedRequest(db.Model):
     requester = relationship("Profile", lazy="joined")
 
     def to_owner_dict(self) -> dict:
-        return {
+        result = {
             "id": self.id,
             "requester_id": self.requester_id,
             "original_text": self.original_text,
@@ -68,12 +70,18 @@ class NeedRequest(db.Model):
             "created_at": iso_utc(self.created_at),
             "updated_at": iso_utc(self.updated_at),
         }
+        if "service" in (self.modes or []):
+            for key in ("max_deposit_cents", "use_start", "use_end", "pickup_windows"):
+                result.pop(key)
+            result.update(service_duration_minutes=self.service_duration_minutes,
+                          service_time_windows=self.service_time_windows or [])
+        return result
 
     def to_public_dict(self) -> dict:
         """Sanitized shape for the public request feed."""
         normalized = self.normalized or {}
         needed_by = self.needed_by
-        return {
+        result = {
             "id": self.id,
             "requester": self.requester.to_public_dict() if self.requester else None,
             "category": normalized.get("category"),
@@ -87,3 +95,6 @@ class NeedRequest(db.Model):
             "status": self.status,
             "created_at": iso_utc(self.created_at),
         }
+        if "service" in (self.modes or []):
+            result["service_duration_minutes"] = self.service_duration_minutes
+        return result
