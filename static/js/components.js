@@ -232,12 +232,15 @@
   // server says verification_source === "supabase" (same rule as auth.js).
   function profileBadge(profile) {
     if (!profile || !profile.badge) return badge("Unknown identity", "neutral");
-    return badge(profile.badge, profile.verification_source === "supabase" ? undefined : "warn");
+    if (profile.verification_source === "supabase") return badge(profile.badge);
+    if (profile.verification_source === "sandbox") return badge(profile.badge, "warn");
+    return badge(profile.badge, "fixture"); // e.g. "sample": never green, never sandbox-yellow
   }
 
   function modeBadge(mode) {
     if (mode === "sale") return badge("For sale", "sale");
     if (mode === "borrow") return badge("To borrow", "borrow");
+    if (mode === "service") return badge("Service", "service");
     return badge(String(mode), "neutral");
   }
 
@@ -394,6 +397,7 @@
   }
 
   function simulationNotice(label) { return notice("sim", el("span", {}, el("strong", { text: "Simulated. " }), label || SIMULATION_LABEL)); }
+
 
   // Toasts (brief, non-blocking confirmations)
   let toastRegion = null;
