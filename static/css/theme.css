@@ -51,7 +51,8 @@
   --shadow-float: 0 14px 36px rgba(10, 75, 125, 0.20);
   --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.9);
   /* type & spacing */
-  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  /* Mid-2000s system stack (Vista/7, Mac OS X, early iPhone). No downloads. */
+  --font: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px;
@@ -80,9 +81,18 @@ body {
 }
 
 h1, h2, h3, h4 { line-height: 1.2; margin: 0 0 var(--space-3); color: var(--ink); letter-spacing: -0.01em; }
-h1 { font-size: clamp(1.6rem, 2.2vw + 1rem, 2.3rem); }
-h2 { font-size: clamp(1.25rem, 1vw + 1rem, 1.5rem); }
+/* Large headings get the era's soft "etched" polish: a white top highlight
+   and a faint sky shadow. Body text, fields, and buttons stay plain. */
+h1 { font-size: clamp(1.6rem, 2.2vw + 1rem, 2.3rem); font-weight: 700; letter-spacing: -0.015em; text-shadow: 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(10,75,125,0.18); }
+h2 { font-size: clamp(1.25rem, 1vw + 1rem, 1.5rem); text-shadow: 0 1px 0 rgba(255,255,255,0.8); }
 h3 { font-size: 1.1rem; }
+@supports (-webkit-background-clip: text) or (background-clip: text) {
+  .card--hero h1 {
+    background: linear-gradient(180deg, var(--ink) 0%, var(--ink) 55%, var(--sky-900) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+    text-shadow: none; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.9));
+  }
+}
 p { margin: 0 0 var(--space-3); }
 p:last-child { margin-bottom: 0; }
 a { color: var(--sky-700); text-decoration-thickness: 1px; text-underline-offset: 2px; }
@@ -189,9 +199,12 @@ img { max-width: 100%; display: block; }
   .nav, .nav[data-open="true"] { display: flex !important; flex-direction: row; }
   .session { justify-content: flex-end; }
 }
-@media (min-width: 1000px) {
+@media (min-width: 720px) and (max-width: 1179px) {
+  .nav { justify-content: center; }
+}
+@media (min-width: 1180px) {
   .aero-header__inner {
-    grid-template-columns: auto 1fr auto; grid-template-areas: "brand nav status";
+    max-width: 1240px; grid-template-columns: auto 1fr auto; grid-template-areas: "brand nav status";
   }
   .brand, .nav a { white-space: nowrap; }
   .brand__tag { display: none; }
@@ -199,7 +212,7 @@ img { max-width: 100%; display: block; }
   .nav a { padding: 8px 11px; }
   .session { flex-direction: column; align-items: flex-end; gap: 2px; max-width: 240px; }
 }
-@media (min-width: 1180px) {
+@media (min-width: 1360px) {
   .brand__tag { display: inline; }
   .nav a { padding: 8px 14px; }
 }
@@ -661,3 +674,26 @@ input[type="range"].range:focus-visible { box-shadow: var(--focus); }
 /* Home hero placement: its own box beside the headline, never behind text. */
 .hero-mark { display: flex; justify-content: flex-start; margin: 0 0 var(--space-2) -6px; }
 @media (min-width: 860px) { .hero-mark { margin-bottom: var(--space-3); } }
+
+/* --------------------------------------------------------------- services */
+.badge--service { color: #fff; background: linear-gradient(180deg, #2fb1c7, #0b6f80); border-color: #064e5a; }
+
+/* ------------------------------------------------------------ how it works */
+.how h2 { margin-bottom: var(--space-4); }
+.how__steps { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); counter-reset: how; }
+.how__step { position: relative; padding: var(--space-4); border-radius: var(--r-md); background: var(--surface-solid); border: 1px solid var(--sky-200); box-shadow: var(--shadow-inset), 0 2px 8px rgba(10,75,125,0.08); }
+.how__step::before { counter-increment: how; content: counter(how); position: absolute; top: 10px; right: 12px; font-size: .8rem; font-weight: 700; color: var(--ink-muted); }
+.how__step h3 { font-size: 1.02rem; margin: var(--space-3) 0 var(--space-1); }
+.how__step p { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+.how__icon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; color: var(--sky-900);
+  background: radial-gradient(circle at 32% 28%, #fff 0 18%, rgba(255,255,255,0) 46%), linear-gradient(160deg, var(--sky-100), var(--sky-300) 60%, var(--leaf-300));
+  border: 1px solid var(--sky-200); box-shadow: inset 0 -3px 6px rgba(10,75,125,0.18), 0 2px 6px rgba(10,75,125,0.15); }
+.how__icon svg { width: 24px; height: 24px; }
+.how .simulated-notice { margin-bottom: 0; }
+.hero-grid--single { grid-template-columns: 1fr; }
+@media (min-width: 860px) { .hero-grid--single { grid-template-columns: 1fr; } .hero-grid--single .request-box { max-width: 720px; } }
+
+/* ------------------------------------------------------------ my listings */
+.tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
+.tab { min-height: 38px; padding: 6px 14px; border-radius: var(--r-pill); }
+.tab--selected { color: var(--sky-900); border-color: var(--sky-500); background: linear-gradient(180deg, #fff, var(--sky-100)); box-shadow: var(--shadow-inset), inset 0 0 0 1px var(--sky-200); }

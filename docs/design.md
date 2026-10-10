@@ -21,6 +21,25 @@ without redesign. Files: `static/css/theme.css`, `static/js/components.js`,
 - Unknown is rendered as "unknown" (via `api.formatCents`/`api.formatTime`),
   never as `$0.00` or a made-up value.
 
+## Typography
+
+System stack only, no downloaded fonts, matching the mid-2000s Frutiger Aero
+era (Windows Vista/7, Mac OS X, early iPhone):
+
+```css
+--font: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
+```
+
+Windows renders Segoe UI, macOS/iOS fall back to Lucida Grande, older systems
+to Tahoma/Verdana. Body text is 1rem/1.5, plain weight, `--ink` on opaque
+surfaces. Only large headings get polish: `h1` has a white top highlight plus a
+faint sky shadow, the hero `h1` uses an ink-to-sky-900 gradient fill (both
+colors are dark, so contrast stays high; it falls back to plain ink where
+`background-clip: text` is unsupported), `h2` gets the highlight only. Form
+fields, buttons, badges, and body copy have no shadows or gradients on text
+except the white text on primary/leaf buttons, which keeps a 1px dark shadow
+for legibility. No pixel, novelty, or display fonts anywhere.
+
 ## Tokens (`:root`)
 
 | Token | Value | Use |
@@ -207,6 +226,62 @@ on load, and has a Replay button.
 Testing reduced motion: Chrome DevTools → Rendering panel → "Emulate CSS
 media feature prefers-reduced-motion: reduce", or Windows Settings →
 Accessibility → Visual effects → Animation effects off, then reload.
+
+## Services (pending backend; sample data)
+
+A third listing kind. Person 1 is adding the backend; the UI runs on the
+`SERVICES` block at the top of `marketplace.js` (`backendReady: false` plus
+labeled sample listings and one sample request). To switch over: set
+`backendReady = true` and delete the samples. Assumed shape, to check against
+the contract:
+
+- Listing: `kind: "service"`, `allowed_modes: ["service"]`, `title`,
+  `description`, `category` ∈ `tutoring | proofreading | moving_help`,
+  `price_cents`, `duration_minutes`, `time_windows: [{start, end}]` (ISO UTC),
+  `meeting_spot_ids`; no condition, accessories, defects, specifications,
+  sale/rental/value/collateral fields. Physical listings: `kind: "item"` or
+  absent.
+- NeedRequest: `"service"` accepted in `modes`; `normalized.kind = "service"`;
+  the public view exposes `kind` (or `"service"` in `modes`).
+- Endpoints: the existing `POST/GET/PATCH /api/listings` accept the shape;
+  `GET /api/requests/{id}/matches` may return service listings.
+
+Behavior: the listing form has a **Service** pill (exclusive with sale/borrow)
+that shows service category, price, duration, and time windows and hides every
+item field; while the backend is pending, submitting shows a labeled preview of
+the exact request body instead of posting. Listing detail renders a service
+layout (no deposit section). Service cards everywhere carry the teal
+`badge--service` "Service" badge; samples carry "Sample data (not saved)" and
+a "Sample data, not a member" provider badge (never green). The interpretation
+form offers "A service"; until the server accepts it, the choice is stored in
+`normalized.modes`/`normalized.kind` and stripped from the top-level `modes`
+(a fixture notice says so), and the results page appends the sample services
+under "needs confirmation". The feed gets a "Needs a service" badge and filter
+plus one sample service request.
+
+## Home "How it works" (implemented)
+
+Below the request box: four steps on opaque step cards with inline SVG icons
+(describe, matches with reasons, agree on price and deposit, meet at a public
+spot) and a simulated-money note. No numbers or impact claims.
+
+## My listings (implemented; route pending)
+
+Template `templates/marketplace/my_listings.html` (page `my-listings`) and
+`initMyListings` in `marketplace.js`. Person 1 needs to add
+`@bp.get("/listings/mine")` rendering it in `server/routes/pages.py`; until
+then `/listings/mine` is served by the listing-detail route and the script
+mounts the same view there. Flow: redirect to `/sign-in` without a token;
+identity from `GET /api/me`; listings from
+`GET /api/listings?owner_id=<me>&status=all` (filtered again by `owner_id`
+client-side); tabs Active (available, reserved) and Past (sold, withdrawn);
+Withdraw only on available listings, confirmed in a `components.dialog`, then
+`PATCH /api/listings/{id} {"status": "withdrawn"}`; `409 listing_locked` and
+`403` are shown inside the dialog. Withdrawn listings get a **Relist** button
+(`PATCH {"status": "available"}`). An in-flight set blocks double clicks on both. "On
+loan" is not a listing status (the listing stays `reserved` during a loan), so
+reserved cards say "Reserved or on loan; manage it in the exchange". The nav
+shows "My listings" only when a token is present.
 
 ## Public request feed (implemented)
 
