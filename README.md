@@ -187,6 +187,22 @@ development key and network access.
   `DATABASE_URL` to the Supabase Postgres URL. The service-role key stays
   backend-only.
 
+`server/config.py` loads `.env` when the app starts; an already-exported shell
+variable takes precedence. Restart Flask after editing `.env`. For the shared
+Supabase Session pooler, use the URL copied from **Connect → Session pooler**,
+change only the scheme to `postgresql+psycopg://`, and percent-encode reserved
+password characters. A `password authentication failed` response from a
+read-only `SELECT 1` means the `DATABASE_URL` database password or its encoding
+still needs checking; do not run migrations until the connection succeeds.
+
+Browser storage is scoped to the exact origin. Start the magic-link flow and
+open its callback on the same scheme, hostname, and port (for example, use
+`127.0.0.1:5055` throughout, not `localhost:5000` for one step). A saved
+Supabase session can outlive a temporary `/api/me` database failure; the
+header then reports that account details are unavailable without treating
+the user as signed out. Confirm the actual `/api/me` status before concluding
+that authentication failed.
+
 ## Supabase project setup and live checks
 
 In the Supabase dashboard, enable email magic links and set the site URL to
