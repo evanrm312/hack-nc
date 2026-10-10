@@ -8,5 +8,7 @@ the signatures and the documented return shapes in docs/contracts.md.
 from .matching import match_listings
 from .normalize import normalize_request
 from .pricing import evaluate_price
+from .vision import normalize_reference_image, ReferenceImageError
 
-__all__ = ["normalize_request", "match_listings", "evaluate_price"]
+__all__ = ["normalize_request", "match_listings", "evaluate_price",
+           "normalize_reference_image", "ReferenceImageError"]
