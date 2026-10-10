@@ -66,7 +66,8 @@ Keyboard focus, readable contrast, reduced motion, phone width. Reuse
 
 ### P4-1 negotiating → reserved — Person 4, `p4-exchanges`
 
-Status: open. Acceptance: replace the stubs in `server/exchanges/routes.py`:
+Status: implemented on `p4-exchanges`; PR #7 remains open. Acceptance: replace
+the stubs in `server/exchanges/routes.py`:
 create exchange (requester only, listing available, mode allowed), private
 messages (participants only, polling), versioned offers (any term change =
 new version, both acceptances reset), accept with `version` check
@@ -93,7 +94,8 @@ separate tasks (P4-2, P4-3).
 - `SupabaseStorage` is implemented and mocked for upload, download, deletion,
   bucket separation, and private-read gating. Live adapter checks verified both
   bucket visibility settings, disposable upload/retrieval, private denial, and
-  cleanup. End-to-end evidence access awaits Person 4's evidence routes.
+  cleanup. PR #7 implements participant-only evidence routes; live end-to-end
+  evidence access remains unverified.
 - The application's effective SQLAlchemy configuration connected through the
   Supabase Session pooler and returned `SELECT 1`. The initial migration was
   applied to the designated development database; the explicit opt-in demo
@@ -108,8 +110,9 @@ separate tasks (P4-2, P4-3).
   remains a stub. A direct live Gemini normalization in the Person 1 integration
   run succeeded with `gemini-3.5-flash-lite`; authenticated request creation and
   live seeded-catalog matching remain unverified.
-- PR #7 contains persisted item exchanges and PR #8 contains services. Both
-  remain draft and require integration review before merging; main still serves
-  labeled exchange fixtures and `501` writes.
+- PR #8's services and PR #3's Person 1 integration are merged into main.
+  PR #7 contains persisted item exchanges and remains open. This branch
+  reconciles its item routes with the merged service routes; reviews and item
+  cancellation/general dispute remain `501` follow-up work.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.

@@ -1,14 +1,172 @@
 {% extends "base.html" %}
-{# Person 4 owns templates/exchanges/. Stub created by Person 1. #}
 {% block title %}Exchange · Campus Current{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Exchange room</h1>
-  <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
-  <p>Stub for exchange <code>{{ exchange_id }}</code>. Person 4 renders messages
-     (<code>GET/POST /api/exchanges/{id}/messages</code>, polled every few seconds),
-     the current offer revision with fee, agreed value, deposit, uncovered amount,
-     the lender's lower-deposit acknowledgment, meeting selection, and both
-     acceptances (<code>/offers</code>, <code>/accept</code>).</p>
-</section>
+{% include "exchanges/_styles.html" %}
+<div class="exchanges" id="exchange-room-page" data-exchange-id="{{ exchange_id }}">
+  {% if config.get("EXCHANGE_PREVIEW") %}<p class="simulated-notice" role="note">Sandbox preview: demo inventory and identities. Exchanges here are local examples.</p>{% endif %}
+  <section class="card">
+    <a href="{{ url_for('pages.my_exchanges') }}">← My exchanges</a>
+    <div class="exchange-heading"><h1 id="room-title">Exchange room</h1><span id="exchange-status" class="exchange-status"></span></div>
+    <p id="participants"></p>
+    <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
+    <p id="page-status" role="status">Loading your private exchange…</p>
+    <p id="page-error" class="exchange-error" role="alert"></p>
+    <p id="sign-in-hint" hidden><a href="{{ url_for('pages.sign_in') }}">Sign in</a> with a participant account to access this exchange.</p>
+    <button type="button" id="refresh-room">Refresh exchange</button>
+  </section>
+  <div id="room-content" hidden>
+    <section class="card" id="reservation-notice" hidden>
+      <h2>Item reserved</h2>
+      <p>Both participants accepted the same offer revision. The item is reserved for this exchange.</p>
+      <p>Upload pickup photos, review the condition and accessories, then each participant confirms the handoff below.</p>
+    </section>
+    <section class="card" id="evidence-card">
+      <h2>Private condition photos</h2>
+      <p class="exchange-help">Only the two participants can upload or view these photos. Use JPEG, PNG, or WebP. Finish uploading before either participant confirms this stage.</p>
+      <form id="evidence-form">
+        <fieldset id="evidence-fields">
+          <div class="exchange-field"><label for="evidence-stage">Photo purpose</label><select id="evidence-stage" required></select></div>
+          <div class="exchange-field"><label for="evidence-photo">Condition photo</label><input id="evidence-photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="evidence-help"></div>
+          <p id="evidence-help" class="exchange-help"></p>
+          <img id="selected-photo" class="exchange-photo" alt="Selected condition photo preview" hidden>
+          <button type="submit" class="button" id="upload-evidence">Upload private photo</button>
+        </fieldset>
+      </form>
+      <p id="evidence-status" role="status"></p>
+      <p id="evidence-error" class="exchange-error" role="alert"></p>
+      <div id="evidence-list" class="exchange-photos"></div>
+    </section>
+    <section class="card" id="pickup-card" hidden>
+      <h2>Confirm pickup</h2>
+      <p>Compare the pickup photos and the agreed condition/accessories below. Confirm only after possession has changed.</p>
+      <p id="pickup-confirmations"></p>
+      <form id="pickup-form">
+        <fieldset id="pickup-fields">
+          <label class="exchange-check"><input type="checkbox" id="pickup-condition" required><span>I acknowledge the recorded condition and included accessories.</span></label>
+          <label class="exchange-check"><input type="checkbox" id="pickup-possession" required><span>I confirm the item has been handed over.</span></label>
+          <button type="submit" class="button" id="confirm-pickup">Confirm handoff</button>
+        </fieldset>
+      </form>
+      <p id="pickup-status" role="status"></p>
+      <p id="pickup-error" class="exchange-error" role="alert"></p>
+    </section>
+    <section class="card" id="return-card" hidden>
+      <h2>Return the borrowed item</h2>
+      <p id="return-help"></p>
+      <p id="return-confirmations"></p>
+      <button type="button" class="button" id="initiate-return" hidden>Initiate return</button>
+      <form id="return-form" hidden>
+        <fieldset id="return-fields">
+          <label class="exchange-check"><input type="checkbox" id="return-condition" required><span>I reviewed the before/after return photos and acknowledge the condition and accessories. I confirm the item has been returned.</span></label>
+          <button type="submit" class="button" id="confirm-return">Accept and confirm return</button>
+        </fieldset>
+      </form>
+      <form id="return-issue-form" hidden>
+        <fieldset id="return-issue-fields">
+          <div class="exchange-field"><label for="return-reason">Specific return issue</label><textarea id="return-reason" maxlength="2000" rows="2" required></textarea></div>
+          <button type="submit" id="contest-return">Contest return</button>
+        </fieldset>
+      </form>
+      <p id="return-status" role="status"></p>
+      <p id="return-error" class="exchange-error" role="alert"></p>
+    </section>
+    <section class="card" id="dispute-card" hidden>
+      <h2>Return disputed</h2>
+      <p id="dispute-reason"></p>
+      <p>The item remains reserved for manual review. A dispute never automatically triggers a charge. No real funds are reserved or charged.</p>
+    </section>
+    <div class="exchange-layout">
+      <div>
+        <section class="card">
+          <h2 id="offer-heading">Current offer</h2>
+          <p id="pricing-notice" class="exchange-help">Insufficient comparable data. No validated price range is attached to this offer.</p>
+          <dl id="offer-summary" class="exchange-terms"></dl>
+          <p id="deposit-status" class="exchange-help"></p>
+          <p id="owner-acceptance"></p>
+          <p id="requester-acceptance"></p>
+          <form id="accept-form">
+            <label id="acknowledgment-label" class="exchange-check" hidden>
+              <input type="checkbox" id="lower-deposit-acknowledged">
+              <span id="acknowledgment-text"></span>
+            </label>
+            <p id="accept-help" class="exchange-help"></p>
+            <p id="accept-error" class="exchange-error" role="alert"></p>
+            <button type="submit" id="accept-offer" class="button">Accept current offer</button>
+          </form>
+        </section>
+        <section class="card" id="offer-editor-card">
+          <h2>Propose updated terms</h2>
+          <p>Any changed term creates a new revision and clears both acceptances and the lender's collateral acknowledgment.</p>
+          <p id="draft-status" role="status" class="exchange-help"></p>
+          <form id="offer-form">
+            <fieldset id="offer-fields">
+              <div class="exchange-fields">
+                <div class="exchange-field" data-mode="sale">
+                  <label for="sale-price">Sale price (USD)</label>
+                  <input id="sale-price" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="rental-fee">Rental fee (USD)</label>
+                  <input id="rental-fee" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="item-value">Agreed item value (USD)</label>
+                  <input id="item-value" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="deposit">Simulated deposit (USD)</label>
+                  <input id="deposit" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field">
+                  <label for="pickup-spot">Pickup meeting spot</label><select id="pickup-spot" required></select>
+                </div>
+                <div class="exchange-field">
+                  <label for="pickup-at">Pickup time (Eastern)</label><input id="pickup-at" type="datetime-local" required>
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="return-spot">Return meeting spot</label><select id="return-spot"></select>
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="return-deadline">Return deadline (Eastern)</label><input id="return-deadline" type="datetime-local">
+                </div>
+              </div>
+              <p class="exchange-help">Times use America/New_York. Check the displayed meeting times before accepting.</p>
+              <p id="meeting-notes" class="exchange-help"></p>
+              <div class="exchange-field">
+                <label for="condition">Agreed condition</label>
+                <select id="condition"><option value="">Unknown / needs confirmation</option><option value="new">New</option><option value="like_new">Like new</option><option value="good">Good</option><option value="fair">Fair</option><option value="worn">Worn</option></select>
+              </div>
+              <div class="exchange-field"><label for="accessories">Included accessories (one per line)</label><textarea id="accessories" rows="2"></textarea></div>
+              <div class="exchange-field"><label for="known-defects">Known defects (one per line)</label><textarea id="known-defects" rows="2"></textarea></div>
+              <p id="draft-deposit" class="exchange-help"></p>
+              <p id="offer-error" class="exchange-error" role="alert"></p>
+              <div class="exchange-actions"><button type="submit" class="button">Propose terms</button><button type="button" id="reset-draft">Use current terms</button></div>
+            </fieldset>
+          </form>
+        </section>
+        <section class="card">
+          <h2>Offer history</h2>
+          <div id="offer-history"></div>
+        </section>
+      </div>
+      <section class="card">
+        <h2>Private messages</h2>
+        <p class="exchange-help">Only you and the other participant can read this conversation. Messages refresh every five seconds.</p>
+        <p id="message-status" role="status"></p>
+        <ol id="message-list" class="exchange-messages" aria-label="Private conversation"></ol>
+        <form id="message-form">
+          <fieldset id="message-fields">
+            <div class="exchange-field"><label for="message-body">Message</label><textarea id="message-body" rows="3" maxlength="4000" required></textarea></div>
+            <p id="message-error" class="exchange-error" role="alert"></p>
+            <button type="submit" class="button">Send message</button>
+          </fieldset>
+        </form>
+      </section>
+    </div>
+  </div>
+</div>
+<noscript><p class="card">Enable JavaScript to view your private exchange.</p></noscript>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/exchanges.js') }}"></script>
 {% endblock %}

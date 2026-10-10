@@ -333,10 +333,16 @@ and releases the listing. `POST /cancel` or `/dispute` accepts a nonempty
 fee in integer cents; no real payment is collected. Service responses omit
 deposit status, item condition, collateral, agreed value, handoff, return,
 and evidence fields. Service calls to `/handoff`, `/return`, or `/evidence`
-return `409 invalid_transition`; nonparticipants receive `403`. Use
-`GET /api/exchanges?mode=service` for the caller's real service exchanges;
-`GET /api/exchanges/{id}` returns the service exchange and offers to its
-participants only.
+return `409 invalid_transition`; nonparticipants receive `403`.
+`GET /api/exchanges` includes all of the caller's sale, borrow, and service
+exchanges without a mode query parameter. `GET /api/exchanges/{id}` returns the
+service exchange and offers to its participants only.
+
+Scheduling uses the listing's single active reservation. A service listing can
+have only one scheduled booking at a time, even when two proposed appointments
+do not overlap. A second exchange receives `409 reservation_conflict` when both
+participants try to schedule it; completion, cancellation, or dispute releases
+the reservation. There is no multi-appointment calendar in this scope.
 
 ### OfferRevision
 
@@ -592,31 +598,50 @@ rejected in both cases.
 
 ## Exchange endpoints
 
-All require a verified user. Service exchanges enforce a participant check
-(`exchange.owner_id` or `exchange.requester_id == caller`), else `403`. The
-item exchange paths below remain Person 4 stubs on this branch.
+Every endpoint requires a verified user. Detail, messages, offers, evidence,
+acceptance, and state changes require the listing owner or requester; outsiders
+receive `403`. Exchange responses use `Cache-Control: private, no-store` and
+`X-Content-Type-Options: nosniff`.
 
-| Method | Path | Body (request) | Response now | Response when real |
-|---|---|---|---|---|
-| GET | `/api/exchanges` | — | `{"fixture": true, "exchanges": [Exchange]}` | `{"exchanges": [Exchange + listing summary]}` for the caller |
-| POST | `/api/exchanges` | `{"listing_id", "mode", "source_request_id"?}` | `501` | `201 {"exchange": Exchange, "current_offer": OfferRevision}` |
-| GET | `/api/exchanges/{id}` | — | `{"fixture": true, "simulation_notice", "exchange", "current_offer", "offers", "deposit_status", "participants"}` | real `exchange`, `current_offer`, `offers`, `simulation_notice`, `deposit_status`, `participants`, `confirmations`, and `max_upload_bytes` |
-| GET | `/api/exchanges/{id}/messages` | `?after=<iso>` | `{"fixture": true, "messages": [Message]}` | `{"messages": [Message]}` |
-| POST | `/api/exchanges/{id}/messages` | `{"body"}` | `501` | `201 {"message": Message}` |
-| POST | `/api/exchanges/{id}/offers` | OfferRevision terms (no `version`) | `501` | `201 {"offer": OfferRevision, "exchange": Exchange}`; new version resets acceptances |
-| POST | `/api/exchanges/{id}/accept` | `{"version": 2, "lower_deposit_acknowledged": true?}` | `501` | `200 {"exchange", "current_offer"}`; `409 stale_offer` if version ≠ current; `409 reservation_conflict` if the atomic reserve fails; repeat accept is idempotent |
-| GET | `/api/exchanges/{id}/evidence` | — | `{"fixture": true, "evidence": [Evidence]}` | `{"evidence": [Evidence]}` |
-| POST | `/api/exchanges/{id}/evidence` | multipart `photo`, field `stage` | `501` | `201 {"evidence": Evidence}` |
-| GET | `/api/exchanges/{id}/evidence/{evidence_id}` | `?preview=1` optional | `501` | image bytes, or JSON `{"data_url": "data:image/jpeg;base64,..."}` for an authenticated preview; participants only |
-| POST | `/api/exchanges/{id}/handoff` | `{"confirm": true, "accept_condition": true}` | `501` | `200 {"exchange"}`; sale → `completed`, loan → `on_loan` after both confirm |
-| POST | `/api/exchanges/{id}/return` | `{"action": "initiate"|"accept"|"issue", "reason"?}` | `501` | `200 {"exchange"}`; `on_loan → return_pending → completed`, or `disputed` |
-| POST | `/api/exchanges/{id}/review` | Review fields | `501` | `201 {"review": Review}` |
-| POST | `/api/exchanges/{id}/cancel` | `{"reason"}` | `501` | `200 {"exchange"}`; releases an unused reservation; cannot cancel `on_loan` |
-| POST | `/api/exchanges/{id}/dispute` | `{"reason"}` | `501` | `200 {"exchange"}`; status `disputed`, no charge ever |
+| Method | Path | Body | Implemented result |
+|---|---|---|---|
+| GET | `/api/exchanges` | — | `200 {"exchanges": [Exchange with listing summary]}` for all caller-owned or requested sale, borrow, and service exchanges; no mode parameter is needed |
+| POST | `/api/exchanges` | `{"listing_id":"…","mode":"sale"|"borrow"|"service","source_request_id":"…"?}` | `201 {"exchange": Exchange,"current_offer": OfferRevision}` for items; service starts with `current_offer: null` |
+| GET | `/api/exchanges/{id}` | — | Item: `exchange`, `current_offer`, `offers`, `simulation_notice`, `deposit_status`, `participants`, `confirmations`, `max_upload_bytes`; service: `fixture: false`, `exchange`, `current_offer`, `offers` |
+| GET | `/api/exchanges/{id}/messages` | item: `?after=<iso>` optional | `200 {"messages":[Message]}` for items; service also includes `fixture:false` |
+| POST | `/api/exchanges/{id}/messages` | `{"body":"…"}` | `201 {"message":Message}` |
+| POST | `/api/exchanges/{id}/offers` | Item offer terms or service price, duration, scheduled UTC time | `201 {"offer":OfferRevision,"exchange":Exchange}`; a changed offer creates a revision and clears both acceptances |
+| POST | `/api/exchanges/{id}/accept` | `{"version":2,"lower_deposit_acknowledged":true?}` | `200 {"exchange":Exchange,"current_offer":OfferRevision}`; stale version `409 stale_offer`; competing reservation `409 reservation_conflict` |
+| POST | `/api/exchanges/{id}/complete` | Service only: `{"confirm":true}` | `200 {"exchange":Exchange}`; both independent confirmations complete a scheduled service; items get `409 invalid_transition` |
+| GET | `/api/exchanges/{id}/evidence` | — | Item: `200 {"evidence":[Evidence]}`; service: `409 invalid_transition` |
+| POST | `/api/exchanges/{id}/evidence` | Item only: multipart `photo` and `stage` | `201 {"evidence":Evidence}`; service: `409 invalid_transition` |
+| GET | `/api/exchanges/{id}/evidence/{evidence_id}` | Item only: `?preview=1` optional | Private image bytes, or authenticated JSON `{"data_url":"data:image/jpeg;base64,..."}` preview; service: `409 invalid_transition` |
+| POST | `/api/exchanges/{id}/handoff` | Item only: `{"confirm":true,"accept_condition":true}` | After pickup evidence and both confirmations: sale → `completed`, borrow → `on_loan`; service: `409 invalid_transition` |
+| POST | `/api/exchanges/{id}/return` | Borrow only: `{"action":"initiate"|"accept"|"issue","reason":"…"?}` | Borrower before-return and owner after-return evidence precede mutual completion; issue → `disputed`; sale/service: `409 invalid_transition` |
+| POST | `/api/exchanges/{id}/cancel` | Service: `{"reason":"…"}` | Service `negotiating` or `scheduled` → `cancelled`; item endpoint remains `501 not_implemented` |
+| POST | `/api/exchanges/{id}/dispute` | Service: `{"reason":"…"}` | Service `scheduled` or `completed` → `disputed`; item endpoint remains `501 not_implemented` |
+| POST | `/api/exchanges/{id}/review` | — | `501 not_implemented` for now |
+
+If `source_request_id` is supplied, it must identify the caller's request,
+have status `draft` or `open`, and include the selected exchange mode. Missing
+or foreign item requests return `404`; closed requests return `409 request_closed`;
+a mode mismatch returns `400 validation_error`. Service creation rejects a
+missing, foreign, or nonservice source with `400 validation_error`, and a closed
+service source with `409 request_closed`. An exchange cannot be started for the
+caller's own listing or for an unavailable listing.
+
+Item offers record sale price or rental fee, agreed item value and deposit,
+condition snapshot, and required pickup/return meeting terms. Both participants
+accept the current revision before `reserved`. A lender must explicitly
+acknowledge the uncovered value of a lower deposit. Service offers instead
+record `service_price_cents`, `service_duration_minutes`, and
+`service_scheduled_at` within an available window. Both participants accept
+that revision before `scheduled`; item deposit, collateral, condition, meeting,
+evidence, handoff, pickup, and return fields are rejected for services.
 
 Deposit status values are simulated and labeled:
 `{"state": "simulated_pending"|"simulated_held"|"simulated_released", "label": "Simulated: no real funds are reserved or charged."}`.
-The planned real item detail includes `confirmations` with `stage`
+Item detail includes `confirmations` with `stage`
 (`handoff` or `return`), `participant_id`, `condition_acknowledged_at`,
 `confirmed_at`, and `evidence_ids`. `max_upload_bytes` is the server's evidence
 upload limit. Evidence previews remain private and must use the authenticated
@@ -634,7 +659,10 @@ API request; no public URL or storage path is returned.
 - Service: `negotiating → scheduled` after both accept the latest service offer;
   `scheduled → completed` after both confirm the session happened. Services
   cannot enter `reserved`, `on_loan`, or `return_pending`.
-- `cancelled` from `negotiating`/`reserved` only; `release_listing()`; records a reason.
+- Service `cancelled` from `negotiating` or `scheduled` records a reason and
+  releases an active reservation. Service `disputed` from `scheduled` or
+  `completed` records a reason and never charges funds. Item cancellation and
+  the general dispute endpoint remain follow-up work.
 - Any change to price, collateral, meeting, condition, or dates creates a new revision and resets both acceptances.
 - Duplicate actions are rejected (`409`) or idempotent.
 

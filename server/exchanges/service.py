@@ -15,7 +15,9 @@ from ..validation import FieldErrors, datetime_utc, json_body, money_cents, stri
 
 
 _ITEM_TERMS = ("sale_price_cents", "rental_fee_cents", "agreed_item_value_cents",
-               "deposit_cents", "lower_deposit_acknowledged", "condition_snapshot",
+               "deposit_cents", "collateral_percent", "lower_deposit_acknowledged",
+               "condition", "condition_snapshot", "evidence", "evidence_ids",
+               "handoff", "pickup", "return",
                "pickup_meeting_spot_id", "pickup_at", "return_meeting_spot_id",
                "return_deadline", "pricing_range_version", "price_reference_id")
 
@@ -85,9 +87,10 @@ def create():
     for field in _ITEM_TERMS:
         if field in body:
             raise validation_error({field: "not applicable to services"})
-    listing_id = body.get("listing_id")
-    if not isinstance(listing_id, str) or not listing_id:
-        raise validation_error({"listing_id": "required"})
+    errors = FieldErrors()
+    listing_id = string(body.get("listing_id"), "listing_id", errors, required=True, max_len=32)
+    source_id = string(body.get("source_request_id"), "source_request_id", errors, max_len=32)
+    errors.raise_if_any()
     listing = db.session.get(Listing, listing_id)
     if listing is None:
         raise not_found("listing")
@@ -96,11 +99,12 @@ def create():
     requester_id = current_profile().id
     if requester_id == listing.owner_id:
         raise forbidden("Cannot request your own service")
-    source_id = body.get("source_request_id")
-    if source_id is not None:
+    if source_id:
         need = db.session.get(NeedRequest, source_id)
         if need is None or need.requester_id != requester_id or "service" not in (need.modes or []):
             raise validation_error({"source_request_id": "must be your service request"})
+        if need.status not in ("draft", "open"):
+            raise ApiError(409, "request_closed", "This request is closed")
     exchange = Exchange(listing_id=listing.id, owner_id=listing.owner_id,
                         requester_id=requester_id, source_request_id=source_id,
                         mode="service", status="negotiating")
