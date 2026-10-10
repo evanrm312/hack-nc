@@ -179,3 +179,165 @@ def test_total_deadline_prevents_more_calls(sdk, monkeypatch):
     assert sdk[1].models.generate_content.call_count == 1
     options = sdk[1].models.generate_content.call_args.kwargs['config'].http_options
     assert options.timeout == module.ATTEMPT_TIMEOUT_MS
+
+
+# Reference-photo tests share the mocked SDK; images never reach a network.
+from server.intelligence.vision import (
+    normalize_reference_image, ReferenceImageError, MAX_REFERENCE_IMAGE_BYTES,
+)
+
+PNG = b'\x89PNG\r\n\x1a\nsynthetic-image-for-mocked-sdk'
+
+
+def visual_payload(**changes):
+    data = dict(category=None, type=None, color=None, pattern=None, style=None)
+    data.update(changes)
+    return data
+
+
+def vision(text=None, image=PNG, mime='image/png'):
+    return normalize_reference_image(image, mime, NOW, 'America/New_York', text)
+
+
+def test_suit_photo_preferred_attributes_and_confirmation(sdk):
+    sdk[2](visual_payload(category='formalwear', type='suit', color='navy', pattern='solid', style='formal'))
+    result = vision()
+    assert result['source'] == 'gemini'
+    assert result['category'] == 'formalwear'
+    assert result['required_specifications'] == {}
+    assert result['preferred_specifications'] == dict(type='suit', color='navy', pattern='solid', style='formal')
+    for field in ('modes', 'budget_cents', 'max_deposit_cents', 'needed_by', 'use_start', 'use_end', 'area'):
+        assert result[field] is None
+    assert set(result) == set(module.manual(''))
+    assert any('confirm or edit all' in q and 'color=navy' in q for q in result['follow_up_questions'])
+    parts = sdk[1].models.generate_content.call_args.kwargs['contents']
+    assert parts[1].inline_data.data == PNG
+    assert parts[1].inline_data.mime_type == 'image/png'
+
+
+def test_unclear_reference_image(sdk):
+    sdk[2](visual_payload())
+    result = vision()
+    assert result['source'] == 'gemini'
+    assert result['category'] is None
+    assert result['preferred_specifications'] == {}
+    assert any('unclear' in q for q in result['follow_up_questions'])
+
+
+@pytest.mark.parametrize('mime,image', [('image/gif', b'GIF89a'), ('image/png', b'not-image'), ('image/jpeg', PNG)])
+def test_invalid_reference_mime_and_signature(sdk, mime, image):
+    with pytest.raises(ReferenceImageError) as error:
+        vision(image=image, mime=mime)
+    assert error.value.code == 'unsupported_image'
+    assert error.value.status == 400
+    sdk[0].assert_not_called()
+
+
+def test_oversized_reference_input(sdk):
+    with pytest.raises(ReferenceImageError) as error:
+        vision(image=PNG + b'x' * MAX_REFERENCE_IMAGE_BYTES)
+    assert error.value.code == 'payload_too_large'
+    assert error.value.status == 413
+    sdk[0].assert_not_called()
+
+
+def test_empty_reference_input(sdk):
+    with pytest.raises(ReferenceImageError) as error:
+        vision(image=b'')
+    assert error.value.code == 'invalid_image'
+    sdk[0].assert_not_called()
+
+
+def test_reference_primary_503_fallback(sdk):
+    sdk[1].models.generate_content.side_effect = [api_error(503), SimpleNamespace(text=json.dumps(visual_payload(category='formalwear', color='navy')))]
+    assert vision()['source'] == 'gemini'
+    assert [call.kwargs['model'] for call in sdk[1].models.generate_content.call_args_list] == list(module.DEFAULT_MODELS[:2])
+
+
+def test_reference_total_failure(sdk):
+    sdk[1].models.generate_content.side_effect = api_error(503)
+    assert vision() == module.manual('')
+    assert sdk[1].models.generate_content.call_count == 3
+
+
+@pytest.mark.parametrize('forbidden', ['jacket_size', 'model', 'authenticity', 'condition', 'price', 'deposit', 'availability', 'location', 'ownership'])
+def test_reference_schema_rejects_nonvisual_fields(sdk, forbidden):
+    sdk[2](dict(visual_payload(color='navy'), **{forbidden: 'invented'}))
+    assert vision() == module.manual('')
+    assert sdk[1].models.generate_content.call_count == 1
+
+
+def test_reference_text_is_separate_and_constraints_take_priority(sdk):
+    sdk[1].models.generate_content.side_effect = [
+        SimpleNamespace(text=json.dumps(visual_payload(category='formalwear', type='suit', color='navy'))),
+        SimpleNamespace(text=json.dumps(payload(modes=['borrow'], category='formalwear', budget_dollars='20',
+            required_specifications=[dict(name='jacket_size', value='40R'), dict(name='color', value='black')]))),
+    ]
+    result = vision('Borrow size 40R under $20; must be black.')
+    assert result['required_specifications'] == {'jacket_size': '40R', 'color': 'black'}
+    assert result['preferred_specifications'] == {'type': 'suit'}
+    assert result['budget_cents'] == 2000
+    calls = sdk[1].models.generate_content.call_args_list
+    assert isinstance(calls[1].kwargs['contents'], str)
+    assert 'Borrow size 40R' in calls[1].kwargs['contents']
+    assert 'Borrow size 40R' not in calls[0].kwargs['contents'][0].text
+
+
+def test_reference_explicit_required_visual_attribute(sdk):
+    sdk[1].models.generate_content.side_effect = [
+        SimpleNamespace(text=json.dumps(visual_payload(color='navy'))),
+        SimpleNamespace(text=json.dumps(payload())),
+    ]
+    result = vision('Must be navy.')
+    assert result['required_specifications'] == {'color': 'navy'}
+    assert result['preferred_specifications'] == {}
+
+
+def test_reference_text_failure_discards_visual_partial_success(sdk):
+    sdk[1].models.generate_content.side_effect = [
+        SimpleNamespace(text=json.dumps(visual_payload(color='navy'))), api_error(401)]
+    assert vision('Borrow a suit') == module.manual('Borrow a suit')
+
+
+def test_reference_suit_followups_reconciled_after_merge(sdk):
+    specific = [
+        'What jacket size do you need?',
+        'What is your purchase or rental fee budget in USD?',
+        'Which campus area works for pickup?',
+        'What is the maximum refundable deposit you can afford?',
+        'When does your borrowing period start?',
+        'When can you return the item?',
+        'Would you like to buy, borrow, or consider either?',
+    ]
+    sdk[1].models.generate_content.side_effect = [
+        SimpleNamespace(text=json.dumps(visual_payload(category='formalwear', type='suit', color='blue', style='business'))),
+        SimpleNamespace(text=json.dumps(payload(modes=['borrow'], follow_up_questions=[
+            'What type of item are you looking to borrow?',
+            'What specific item or category are you looking to borrow?',
+            'What kind of item do you need?', *specific, specific[0]]))),
+    ]
+    result = vision('I want to borrow something like this.')
+    assert result['follow_up_questions'] == specific + [
+        'Before searching, confirm or edit all proposed visual attributes: category=formalwear, type=suit, color=blue, style=business.']
+
+
+@pytest.mark.parametrize('category,type_location,type_value,expected', [
+    ('formalwear', 'preferred_specifications', 'suit', []),
+    ('formalwear', 'required_specifications', 'suit', []),
+    ('formalwear', 'preferred_specifications', None, ['What type of item are you looking to borrow?']),
+    (None, 'preferred_specifications', 'suit', ['What kind of item do you need?']),
+    (None, 'preferred_specifications', None, ['What kind of item do you need?', 'What type of item are you looking to borrow?']),
+])
+def test_reference_followup_unknowns_required_types_and_dedup(category, type_location, type_value, expected):
+    from server.intelligence.vision import _reconcile_questions
+    result = module.manual('')
+    result['category'] = category
+    result[type_location]['type'] = type_value
+    specific = 'What type of suit lapel do you prefer?'
+    confirmation = 'Before searching, confirm or edit all proposed visual attributes: color=blue.'
+    result['follow_up_questions'] = [
+        'What kind of item do you need?', 'What type of item are you looking to borrow?',
+        specific, specific, confirmation, confirmation,
+    ]
+    _reconcile_questions(result)
+    assert result['follow_up_questions'] == expected + [specific, confirmation]
