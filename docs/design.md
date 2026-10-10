@@ -246,17 +246,34 @@ pattern?, style?}`); when absent the client derives it from the vision
 whitelist.
 
 Flow: photo present → photo endpoint (loading state "Analyzing photo…",
-double-submit guard) → the result is tagged `reference_photo: true` and
-`photo_attributes` and saved like any interpretation. On the results page a
-notice explains the photo was analyzed, and the category select plus any
-type/color/pattern/style rows carry a "from photo, please confirm" badge.
-Unknowns stay unknown. If the endpoint is missing (404/405/501) or fails, a
-note says the photo was not used and the normal text interpretation (or the
-manual form) is used instead; photo-only input then asks for a description.
-Photo-only requests store the placeholder original text "(No written
-description; a reference photo was analyzed.)" because the server requires
-`original_text`. The photo is never stored, never sent anywhere else, and
-never appears on request cards or the public feed.
+double-submit guard). Photo-derived attributes are turned into **pending
+proposals** (`normalized.photo_proposals: [{name, value, status}]`) and
+removed from the normalized category/specs, so nothing from the photo is part
+of the request until the user accepts it. If the endpoint is missing
+(404/405/501) or fails, a note says the photo was not used and the text
+interpretation (or the manual form) is used instead.
+
+Confirmation step (home page, `#confirm`, before any request exists). It
+appears whenever there are photo proposals, the description is empty, or no
+buy/borrow/service mode was interpreted. It contains:
+- a required description textarea ("Add a few words about what you need" is
+  shown beside it while empty);
+- the proposals list: each attribute shows a "from photo" badge with
+  **Accept** / **Dismiss** (and Change afterwards), plus Accept all / Dismiss
+  all. Accepting sets the category or adds a preferred-specification row the
+  user can still edit; dismissed proposals are never sent;
+- the same editable interpretation form as the results page with the mode
+  choice marked required ("Choose buy, borrow, or a service." beside it);
+- a live summary line and a **Find matches** button that stays disabled until
+  the description, a mode, and every proposal decision are present. Money and
+  date validation is the same as for text requests and runs on submit.
+Find matches then creates the request (`POST /api/requests`) with the
+confirmed values and `photo_proposals` statuses recorded in `normalized`, and
+redirects to results. Text requests whose interpretation already has a mode
+skip this step exactly as before. On the results page only *accepted*
+proposals are marked, with a neutral "from photo (accepted)" badge. The photo
+is never stored, never sent anywhere else, and never appears on request cards
+or the public feed.
 
 ## Services (pending backend; sample data)
 

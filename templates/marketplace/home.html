@@ -63,6 +63,27 @@
   </div>
 </section>
 
+<section class="card" id="confirm" aria-labelledby="confirm-heading" hidden>
+  <div class="section__head">
+    <h2 id="confirm-heading" tabindex="-1">Confirm your request</h2>
+    <div class="cluster" id="confirm-badges"></div>
+  </div>
+  <div id="confirm-notices"></div>
+  <div id="confirm-proposals"></div>
+  <form id="confirm-form" novalidate>
+    <div id="confirm-fields"></div>
+    <div id="confirm-error" class="notice notice--error" role="alert" hidden></div>
+    <p class="confirm-summary" id="confirm-summary" aria-live="polite"></p>
+    <div class="cluster cluster--between">
+      <div class="cluster">
+        <button type="submit" class="btn btn--leaf" id="confirm-submit" disabled aria-describedby="confirm-summary">Find matches</button>
+        <button type="button" class="btn btn--ghost" id="confirm-reset">Start over</button>
+      </div>
+      <span class="muted">Nothing is saved until you click Find matches.</span>
+    </div>
+  </form>
+</section>
+
 <section class="card how" aria-labelledby="how-heading">
   <h2 id="how-heading">How it works</h2>
   <ol class="how__steps">

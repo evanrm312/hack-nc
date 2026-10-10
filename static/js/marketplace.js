@@ -276,7 +276,19 @@
         if (photoNote) normalized.follow_up_questions = [photoNote].concat(normalized.follow_up_questions || []);
       }
 
-      // Step 2: save the request and go to results, where every field is editable.
+      // Step 2: anything that still needs the user's decision stops here, on
+      // the page, before a request exists: photo proposals to accept or
+      // dismiss, a missing description, or no buy/borrow choice.
+      const pendingProposals = (normalized.photo_proposals || []).length > 0;
+      if (pendingProposals || !text || !cleanModes(normalized.modes).length) {
+        status.textContent = "";
+        C.setBusy(submit, false);
+        submitting = false;
+        renderConfirmStep(text, normalized);
+        return;
+      }
+
+      // Step 3: save the request and go to results, where every field is editable.
       status.textContent = "Saving your request…";
       try {
         const request = await createRequestFrom(text, normalized);
@@ -294,20 +306,186 @@
       }
     });
 
+    // ---- confirmation step (before any request is created) ---------------
+    const confirmSection = $("confirm");
+    $("confirm-reset").addEventListener("click", () => {
+      confirmSection.hidden = true;
+      C.clear($("confirm-fields")); C.clear($("confirm-proposals"));
+      textarea.focus();
+    });
+
+    function renderConfirmStep(text, normalized) {
+      const fieldsBox = C.clear($("confirm-fields"));
+      const proposalsBox = C.clear($("confirm-proposals"));
+      const noticesBox = C.clear($("confirm-notices"));
+      const badges = C.clear($("confirm-badges"));
+      const summary = $("confirm-summary");
+      const errorBox = $("confirm-error");
+      const findBtn = $("confirm-submit");
+      const cform = $("confirm-form");
+      showNotice(errorBox, null);
+      let creating = false;
+
+      const source = normalized.source || "unknown";
+      if (normalized.reference_photo) badges.append(C.badge("Reference photo", "info"));
+      if (source === "stub") badges.append(C.fixtureBadge("Stub output, not Gemini"));
+      else if (source === "manual") badges.append(C.badge("Manual entry", "warn"));
+      else badges.append(C.badge("Proposed by Gemini", "info"));
+      noticesBox.append(C.notice("info", C.el("span", {},
+        C.el("strong", { text: "Nothing is saved yet. " }),
+        "Check the fields below. Anything proposed by the interpreter or your photo is a suggestion until you confirm it; blank means unknown.")));
+      const questions = (normalized.follow_up_questions || []).filter(Boolean);
+      if (questions.length) {
+        noticesBox.append(C.el("div", { className: "notice notice--warn", role: "note" }, C.el("div", {},
+          C.el("strong", { text: "Please confirm" }),
+          C.el("ul", { style: { margin: 0, paddingLeft: "1.2em" } }, questions.map((q) => C.el("li", { text: String(q) }))))));
+      }
+
+      // Description is required (image-only normalization returns "").
+      const desc = C.field({ id: "c-text", label: "What you need", type: "textarea", rows: 3, value: text, required: true,
+        hint: "Required. A few words about what you need; the search is based on this." });
+      const descTodo = C.el("p", { className: "field__todo", id: "c-text-todo" });
+      desc.root.append(descTodo);
+      desc.control.setAttribute("aria-describedby", desc.control.getAttribute("aria-describedby") + " c-text-todo");
+
+      const values = {
+        modes: cleanModes(normalized.modes),
+        category: normalized.category || "",
+        required_specifications: normalized.required_specifications || {},
+        preferred_specifications: normalized.preferred_specifications || {},
+        budget_cents: normalized.budget_cents, max_deposit_cents: normalized.max_deposit_cents,
+        needed_by: normalized.needed_by, use_start: normalized.use_start, use_end: normalized.use_end,
+        area: normalized.area,
+      };
+      const editor = buildInterpretationForm(fieldsBox, values, { modesUnknown: false, requireModes: true, ambiguous: normalized.ambiguous_dates || [] });
+      fieldsBox.prepend(desc.root);
+      const modesTodo = C.el("p", { className: "field__todo", id: "modes-todo" });
+      editor.fields.modes.control.append(modesTodo);
+
+      // Photo proposals: nothing is part of the request until accepted.
+      const proposals = (normalized.photo_proposals || []).map((p) => Object.assign({ status: null, row: null }, p));
+      const proposalsTodo = C.el("p", { className: "field__todo" });
+      function applyProposal(p) {
+        if (p.name === "category") {
+          const sel = editor.fields.category.control;
+          if (!Array.from(sel.options).some((o) => o.value === p.value)) sel.append(C.el("option", { value: p.value, text: String(p.value) }));
+          sel.value = p.value;
+        } else {
+          p.row = editor.fields.preferred_specifications.add(p.name, p.value);
+        }
+      }
+      function undoProposal(p) {
+        if (p.name === "category") { if (editor.fields.category.control.value === p.value) editor.fields.category.control.value = ""; }
+        else if (p.row) { p.row.remove(); p.row = null; if (!editor.fields.preferred_specifications.control.children.length) editor.fields.preferred_specifications.add(); }
+      }
+      function renderProposals() {
+        C.clear(proposalsBox);
+        if (!proposals.length) return;
+        const list = C.el("ul", { className: "proposals", "aria-label": "Attributes proposed from your photo" });
+        proposals.forEach((p, i) => {
+          const where = p.name === "category" ? "the category" : "preferred specifications";
+          const statusText = p.status === "accepted" ? "Accepted and added to " + where + "." : p.status === "dismissed" ? "Dismissed; not part of your request." : "Not part of your request until you accept it.";
+          const actions = C.el("span", { className: "cluster" });
+          if (!p.status) {
+            actions.append(
+              C.button({ label: "Accept", variant: "leaf", size: "sm", attrs: { "aria-label": "Accept " + p.name + " " + p.value }, onClick: () => { p.status = "accepted"; applyProposal(p); renderProposals(); refresh(); focusProposal(i); } }),
+              C.button({ label: "Dismiss", size: "sm", attrs: { "aria-label": "Dismiss " + p.name + " " + p.value }, onClick: () => { p.status = "dismissed"; renderProposals(); refresh(); focusProposal(i); } }));
+          } else {
+            actions.append(C.button({ label: "Change", variant: "ghost", size: "sm", attrs: { "aria-label": "Change decision for " + p.name }, onClick: () => { if (p.status === "accepted") undoProposal(p); p.status = null; renderProposals(); refresh(); focusProposal(i); } }));
+          }
+          list.append(C.el("li", { className: "proposal" + (p.status ? " proposal--" + p.status : ""), dataset: { index: String(i) } },
+            C.el("span", { className: "proposal__attr" }, C.badge("from photo", "warn"), " ", C.el("strong", { text: String(p.name).replace(/_/g, " ") }), " = ", C.el("span", { text: String(p.value) })),
+            C.el("span", { className: "proposal__status muted", text: statusText }),
+            actions));
+        });
+        proposalsBox.append(C.el("fieldset", {},
+          C.el("legend", { text: "Proposed from your photo" }),
+          C.el("p", { className: "field__hint", text: "Visual guesses only (category, type, color, pattern, style). Accept the ones that are right; they become preferences you can still edit below. Size, price, condition, and dates are never read from a photo." }),
+          list,
+          C.el("div", { className: "cluster" },
+            C.button({ label: "Accept all", size: "sm", onClick: () => { proposals.forEach((p) => { if (!p.status) { p.status = "accepted"; applyProposal(p); } }); renderProposals(); refresh(); } }),
+            C.button({ label: "Dismiss all", size: "sm", onClick: () => { proposals.forEach((p) => { if (!p.status) p.status = "dismissed"; }); renderProposals(); refresh(); } })),
+          proposalsTodo));
+      }
+      function focusProposal(i) { const li = proposalsBox.querySelector('.proposal[data-index="' + i + '"] button'); if (li) li.focus(); }
+
+      // Live "what's missing": next to each field and in the summary; the
+      // button stays disabled until every required decision is made.
+      function refresh() {
+        const problems = [];
+        const hasText = !!desc.value().trim();
+        descTodo.textContent = hasText ? "" : "Add a few words about what you need.";
+        if (!hasText) problems.push("a short description");
+        const modeCount = fieldsBox.querySelectorAll('input[name="modes"]:checked').length;
+        modesTodo.textContent = modeCount ? "" : "Choose buy, borrow, or a service.";
+        if (!modeCount) problems.push("buy or borrow");
+        const pending = proposals.filter((p) => !p.status).length;
+        proposalsTodo.textContent = pending ? pending + " photo proposal" + (pending === 1 ? "" : "s") + " still need" + (pending === 1 ? "s" : "") + " Accept or Dismiss." : "";
+        if (pending) problems.push("a decision on " + pending + " photo proposal" + (pending === 1 ? "" : "s"));
+        findBtn.disabled = problems.length > 0 || creating;
+        summary.textContent = problems.length ? "To find matches, still needed: " + problems.join("; ") + "." : "Ready. Click Find matches when you are done editing.";
+        summary.classList.toggle("confirm-summary--ready", !problems.length);
+      }
+      fieldsBox.addEventListener("input", refresh);
+      fieldsBox.addEventListener("change", refresh);
+      renderProposals();
+      refresh();
+
+      cform.onsubmit = async (event) => {
+        event.preventDefault();
+        if (creating || findBtn.disabled) return;
+        showNotice(errorBox, null);
+        const read = editor.read();                 // same validation as text requests
+        if (!read.ok) return;
+        const v = read.values;
+        const descText = desc.value().trim();
+        const merged = Object.assign({}, normalized, {
+          source: source === "stub" ? "manual" : source,
+          modes: v.modes,
+          kind: v.modes.includes("service") ? "service" : "item",
+          category: v.category || null,
+          required_specifications: v.required_specifications,
+          preferred_specifications: v.preferred_specifications,
+          budget_cents: v.budget_cents, max_deposit_cents: v.max_deposit_cents,
+          needed_by: v.needed_by, use_start: v.use_start, use_end: v.use_end, area: v.area,
+          ambiguous_dates: [], follow_up_questions: [],
+          photo_proposals: proposals.map((p) => ({ name: p.name, value: p.value, status: p.status })),
+          original_text: descText,
+        });
+        creating = true;
+        C.setBusy(findBtn, true, "Saving your request");
+        try {
+          const request = await createRequestFrom(descText, merged);
+          window.location.href = "/results/" + enc(request.id);
+        } catch (err) {
+          creating = false;
+          C.setBusy(findBtn, false);
+          refresh();
+          if (err instanceof api.ApiError && err.code === "validation_error") {
+            const leftovers = C.applyFieldErrors(Object.assign({ original_text: desc }, editor.fields), err.fields);
+            showNotice(errorBox, leftovers.length ? "Please fix: " + leftovers.join("; ") : "Some fields need attention; see the messages next to them.");
+          } else if (C.isAuthError(err)) { if (err.status === 401) api.setToken(null); showNotice(errorBox, authMessage(err)); }
+          else showNotice(errorBox, C.errorMessage(err));
+        }
+      };
+
+      confirmSection.hidden = false;
+      $("confirm-heading").focus();
+      confirmSection.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }
+
     loadListings();
   }
 
-  // Photo-only requests have no wording; the server requires original_text,
-  // so a plain, honest placeholder is stored and shown as such.
-  const PHOTO_ONLY_TEXT = "(No written description; a reference photo was analyzed.)";
-
-  // Tag which fields a photo proposal could have filled, so the form can show
-  // "from photo, please confirm". Prefers the server's photo_attributes when
-  // present (assumed optional response field); otherwise derives from the
-  // vision whitelist (category, type, color, pattern, style). Over-marking is
-  // harmless: every mark only asks the user to confirm.
+  // Turn photo-derived attributes into PENDING proposals. They are removed
+  // from the normalized specs/category so nothing from the photo is part of
+  // the request until the user accepts it on the confirmation step. Prefers
+  // the server's photo_attributes when present (assumed optional response
+  // field); otherwise derives from the vision whitelist (category, type,
+  // color, pattern, style). A text-derived color would also become a
+  // proposal; accepting it is one click, and nothing is lost silently.
   function markPhotoProposals(normalized, text) {
-    const n = normalized || manualNormalized(text, "The photo analyzer returned nothing. Fill in the fields yourself.");
+    const n = Object.assign({}, normalized || manualNormalized(text, "The photo analyzer returned nothing. Fill in the fields yourself."));
     const VISUAL = ["type", "color", "pattern", "style"];
     let attrs = n.photo_attributes && typeof n.photo_attributes === "object" ? n.photo_attributes : null;
     if (!attrs) {
@@ -318,18 +496,32 @@
         else if ((n.preferred_specifications || {})[k] != null) attrs[k] = n.preferred_specifications[k];
       });
     }
-    const followUps = (n.follow_up_questions || []).slice();
-    if (!Object.keys(attrs).length) {
+    const required = Object.assign({}, n.required_specifications || {});
+    const preferred = Object.assign({}, n.preferred_specifications || {});
+    const proposals = [];
+    Object.entries(attrs).forEach(([name, value]) => {
+      if (value == null || value === "") return;
+      proposals.push({ name, value, status: null });
+      if (name === "category") { if (n.category === value) n.category = null; }
+      else { delete required[name]; delete preferred[name]; }
+    });
+    const followUps = (n.follow_up_questions || []).filter((q) => !/confirm or edit all proposed visual attributes/i.test(String(q)));
+    if (!proposals.length) {
       followUps.unshift("The photo was received, but nothing could be proposed from it (analysis unavailable or the item was unclear). Fill in the fields yourself.");
     }
-    return Object.assign({}, n, { reference_photo: true, photo_attributes: attrs, follow_up_questions: followUps, original_text: n.original_text || text || "" });
+    delete n.photo_attributes;
+    return Object.assign(n, {
+      reference_photo: true, photo_proposals: proposals,
+      required_specifications: required, preferred_specifications: preferred,
+      follow_up_questions: followUps, original_text: n.original_text || text || "",
+    });
   }
 
   async function createRequestFrom(text, normalized) {
     const modes = cleanModes(normalized.modes);
     if (normalized.kind === "service" && !modes.includes("service")) modes.push("service");
     const body = {
-      original_text: text || (normalized.reference_photo ? PHOTO_ONLY_TEXT : text),
+      original_text: text,
       normalized,
       modes: serverModes(modes, null),
       budget_cents: nonNegInt(normalized.budget_cents),
@@ -348,7 +540,7 @@
       // the rejected values, and tell the user on the results page.
       const rejected = Object.keys(err.fields || {}).join(", ");
       const retry = {
-        original_text: text || (normalized.reference_photo ? PHOTO_ONLY_TEXT : text),
+        original_text: text,
         normalized: Object.assign({}, normalized, {
           budget_cents: null, max_deposit_cents: null, needed_by: null, use_start: null, use_end: null, area: null,
           follow_up_questions: (normalized.follow_up_questions || []).concat(
@@ -473,13 +665,15 @@
         use_end: request.use_end,
         area: request.area,
       };
-      const photoAttrs = n.reference_photo && n.photo_attributes && typeof n.photo_attributes === "object" ? n.photo_attributes : null;
-      if (photoAttrs && Object.keys(photoAttrs).length) {
+      // Only proposals the user ACCEPTED on the confirmation step are marked here.
+      const accepted = (n.photo_proposals || []).filter((p) => p && p.status === "accepted");
+      const photoAttrs = accepted.length ? Object.fromEntries(accepted.map((p) => [p.name, p.value])) : null;
+      if (photoAttrs) {
         interpBody.append(C.notice("info", C.el("span", {},
-          C.el("strong", { text: "A reference photo was analyzed. " }),
-          "Fields marked \"from photo, please confirm\" are visual proposals (category, type, color, pattern, style), not facts. Size, price, condition, and dates are never read from a photo. The photo itself is private and was not stored.")));
+          C.el("strong", { text: "Reference photo. " }),
+          "Fields marked \"from photo (accepted)\" were proposed from your photo and confirmed by you. They are preferences you can still edit. The photo itself is private and was not stored.")));
       }
-      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs };
+      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs, photoLabel: "from photo (accepted)", photoVariant: "neutral" };
 
       const form = C.el("form", { id: "interp-form", novalidate: true });
       const editor = buildInterpretationForm(form, values, meta);
@@ -930,10 +1124,10 @@
 
     const modesErr = C.el("p", { className: "field__error", id: "modes-error", role: "alert" });
     const modesGroup = C.el("fieldset", {},
-      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : null),
+      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("required", "info") : null),
       C.el("p", { className: "field__hint", id: "modes-hint", text: meta.modesUnknown
         ? "The interpreter did not say. Buy and borrow are selected as a search preference; confirm or narrow it."
-        : "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person (tutoring, proofreading, moving help)." }),
+        : (meta.requireModes ? "Required. " : "") + "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person (tutoring, proofreading, moving help)." }),
       C.el("div", { className: "choices" },
         choice("modes", "borrow", "Borrow an item", (values.modes || []).includes("borrow")),
         choice("modes", "sale", "Buy an item", (values.modes || []).includes("sale")),
@@ -948,13 +1142,14 @@
       F.category.control.value = values.category;
     }
     const photoAttrs = meta.photoAttributes || {};
-    const photoBadge = () => C.badge("from photo, please confirm", "warn");
+    const photoLabel = meta.photoLabel || "from photo (accepted)";
+    const photoBadge = () => C.badge(photoLabel, meta.photoVariant || "neutral");
     if (!values.category) markLabel(F.category, unknownBadge());
     else if (photoAttrs.category && photoAttrs.category === values.category) markLabel(F.category, photoBadge());
 
     const flagged = new Set(Object.keys(photoAttrs).filter((k) => k !== "category"));
-    const requiredSpecs = kvEditor("Required specifications", "Must match exactly, e.g. jacket_size = 40R. Unknown required details become “needs confirmation”, never a confirmed match.", values.required_specifications || {}, { flagged, flagLabel: "from photo, please confirm" });
-    const preferredSpecs = kvEditor("Preferred specifications", "Nice to have, e.g. color = navy. Used for ranking only.", values.preferred_specifications || {}, { flagged, flagLabel: "from photo, please confirm" });
+    const requiredSpecs = kvEditor("Required specifications", "Must match exactly, e.g. jacket_size = 40R. Unknown required details become “needs confirmation”, never a confirmed match.", values.required_specifications || {}, { flagged, flagLabel: photoLabel, flagVariant: meta.photoVariant || "neutral" });
+    const preferredSpecs = kvEditor("Preferred specifications", "Nice to have, e.g. color = navy. Used for ranking only.", values.preferred_specifications || {}, { flagged, flagLabel: photoLabel, flagVariant: meta.photoVariant || "neutral" });
     F.required_specifications = requiredSpecs;
     F.preferred_specifications = preferredSpecs;
 
@@ -1933,7 +2128,7 @@
       const v = C.el("input", { type: "text", placeholder: "value (e.g. 40R)", "aria-label": title + " attribute value", maxlength: 120 });
       if (key != null) k.value = key;
       if (value != null) v.value = typeof value === "object" ? JSON.stringify(value) : String(value);
-      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "please confirm", "warn") : null;
+      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "please confirm", opts.flagVariant || "warn") : null;
       if (flag) v.setAttribute("aria-description", opts.flagLabel || "please confirm");
       const row = C.el("div", { className: "kv-row" + (flag ? " kv-row--flag" : "") }, k, v, flag,
         C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this " + title.toLowerCase() + " row" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
@@ -1948,6 +2143,12 @@
     return {
       root,
       control: rows,
+      add(key, value) {
+        // Fill the first empty row if there is one, else append.
+        const empty = Array.from(rows.querySelectorAll(".kv-row")).find((r) => { const [k, v] = r.querySelectorAll("input"); return !k.value && !v.value; });
+        if (empty && key != null) { const [k, v] = empty.querySelectorAll("input"); k.value = key; v.value = String(value); return empty; }
+        return addRow(key, value);
+      },
       value() {
         const out = {};
         rows.querySelectorAll(".kv-row").forEach((row) => {

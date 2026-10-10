@@ -704,3 +704,18 @@ input[type="range"].range:focus-visible { box-shadow: var(--focus); }
 .photo-preview--row img { width: 96px; height: 72px; border-radius: var(--r-sm); flex: none; }
 .kv-row--flag { grid-template-columns: 1fr 1fr auto auto; }
 @media (max-width: 560px) { .kv-row--flag { grid-template-columns: 1fr 1fr; } .kv-row--flag .badge, .kv-row--flag .btn { grid-column: span 1; } }
+
+/* ------------------------------------------- confirmation step + proposals */
+.field__todo { font-size: .9rem; color: var(--sun-ink); font-weight: 600; margin: var(--space-1) 0 0; display: flex; gap: 6px; align-items: flex-start; }
+.field__todo:empty { display: none; }
+.field__todo::before { content: "·"; flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--sun); color: var(--sun-ink); font-size: 1rem; line-height: 1; display: inline-grid; place-items: center; }
+.confirm-summary { margin: var(--space-3) 0; font-weight: 600; color: var(--sun-ink); }
+.confirm-summary--ready { color: var(--leaf-900); }
+.proposals { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-2); }
+.proposal { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2) var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--r-md); border: 1px dashed #b98900; background: var(--sun-100); }
+.proposal__attr { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.proposal__status { grid-column: 1 / -1; font-size: .9rem; }
+.proposal--accepted { border-style: solid; border-color: var(--leaf-500); background: var(--leaf-100); }
+.proposal--dismissed { border-style: solid; border-color: var(--line-strong); background: #f3f6f8; }
+.proposal--dismissed .proposal__attr { text-decoration: line-through; color: var(--ink-muted); }
+@media (max-width: 480px) { .proposal { grid-template-columns: 1fr; } }
