@@ -4,8 +4,9 @@
 
 `normalize_request(text, now, timezone)` preserves the NormalizedRequest contract.
 It calls the installed `google-genai` SDK server-side, using `GEMINI_API_KEY` from
-the environment. The default model is `gemini-3.8-flash`; `GEMINI_MODEL` can override
-it. HTTP timeout is 20 seconds. No credentials or SDK error content are logged or
+the environment. The default primary is `gemini-3.5-flash-lite`; `GEMINI_MODEL` can override
+it. Attempts use ten-second HTTP timeouts with SDK retries disabled, within a
+shared 32-second scheduling budget (at most three models). No credentials or SDK error content are logged or
 returned. The function does not load `.env` itself; application startup or the
 caller supplies the environment.
 
@@ -129,3 +130,58 @@ Matching increment validation: `python -m pytest -q tests/test_matching.py` pass
 36 tests. Full suite: 109 passed, 2 failed, both the unchanged Person 1 stub tests
 identified above. The owned integration test proves requester-only matching access,
 real listing hydration, own-listing exclusion, confirmed matches and size rejection.
+
+## Bounded model fallback and live verification
+
+Authenticated SDK model discovery listed generateContent support for
+`gemini-3.5-flash-lite`, `gemini-3.5-flash` and `gemini-3.6-flash`. Each passed a
+live response_json_schema probe returning {"ok": true}. These form the default
+fallback order, in that order. An explicit GEMINI_MODEL goes first, followed by
+these defaults, deduplicated (including the models/ prefix) and capped at three.
+An explicit unsupported model is not silently replaced on a non-retryable error.
+
+Only SDK APIError status 429 or 503 advances to another model. Authentication,
+validation, malformed JSON, other HTTP errors and timeouts stop immediately and
+preserve the manual fallback. All exhausted attempts also yield the same fallback.
+There is no backoff or hidden SDK retry. Gemini rejected eight-second deadlines;
+the supported ten-second minimum is used. No next attempt starts with less than
+ten seconds left in the shared 32-second scheduling budget. Transport overhead
+may add a small amount to the wall-clock time; this is not a process-level timer.
+Successful extraction logs only the validated model identifier at INFO level via
+server.intelligence.normalize. Neither request text nor credentials/errors are logged.
+The public NormalizedRequest keys are unchanged.
+
+Mocked Person 2 suite: 71 passed (normalization, matching, pricing test files).
+Added primary success and secret-free log checks, 503/429 fallback, exhaustion,
+non-retryable HTTP/validation stops, configured model ordering, three-model limit,
+disabled SDK retries and shared deadline checks.
+
+Final smoke command: `PYTHONPATH=. .venv/bin/python -u /tmp/p2_api_smoke.py`.
+The temporary diagnostic runner loads .env, uses the existing Flask test client,
+applies migrations, seeds demo data, and calls the endpoints as sandbox Alice.
+Both flows returned normalize 200 (source gemini), create 201, matches 200; both
+used gemini-3.5-flash-lite. All returned IDs were verified against seeded DB rows.
+
+Case A normalized: modes [borrow], category formalwear, required jacket_size 40R,
+preferred color navy, budget 2000; deposit limit, all dates and area null;
+ambiguous_dates empty. Follow-ups: trouser size, pickup area, deposit maximum,
+start and return dates. Observed confirmed navy suit: mode/category/size/color
+match, rental fee 1500 within 2000, proposed deposit 20000 with no deposit cap.
+Needs_confirmation empty. Charcoal suit rejected for 46L versus 40R; preferred
+color did not match. Normalization 1.060s; total API flow 1.077s.
+
+Case B normalized: modes [borrow], category formalwear, required color navy,
+jacket_size 40R and type suit; preferred specs empty; budget 2000, deposit limit
+8000; needed_by/use_start/use_end/area null. Ambiguous date next Tuesday proposed
+2026-10-13T04:00:00Z with confirmation required. Follow-ups: trouser size, pickup
+area, start and return dates, confirmation of the proposed Tuesday timestamp.
+Observed confirmed empty. Navy suit needs_confirmation for missing structured
+specification type and "deposit negotiation required: proposed deposit 20000 cents
+exceeds maximum 8000 cents." Charcoal suit rejected for color and size mismatches;
+it also has unknown type and a 12000-cent deposit above 8000. Availability was not
+checked because the extracted date remained a proposal, not a needed_by constraint.
+Normalization 1.983s; total API flow 1.993s. Combined flow time: 3.070s.
+
+Remaining demo data gap: seeded suits do not provide structured type or explicit
+availability bounds. Gemini's required/preferred classification also varied between
+cases; editable interpretation remains necessary. No shared files were changed.

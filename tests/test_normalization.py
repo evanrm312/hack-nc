@@ -21,6 +21,7 @@ def payload(**changes):
 @pytest.fixture
 def sdk(monkeypatch):
     monkeypatch.setenv('GEMINI_API_KEY', 'mock-secret')
+    monkeypatch.delenv('GEMINI_MODEL', raising=False)
     client = MagicMock()
     client.__enter__.return_value = client
     constructor = MagicMock(return_value=client)
@@ -56,7 +57,8 @@ def test_suit_and_sdk_contract(sdk):
     assert result['original_text'] == text
     assert any('deposit' in q for q in result['follow_up_questions'])
     assert constructor.call_args.kwargs['api_key'] == 'mock-secret'
-    assert constructor.call_args.kwargs['http_options'].timeout == 20000
+    assert constructor.call_args.kwargs['http_options'].timeout == module.ATTEMPT_TIMEOUT_MS
+    assert constructor.call_args.kwargs['http_options'].retry_options.attempts == 1
     call = client.models.generate_content.call_args.kwargs
     assert call['config'].response_json_schema == module.Extraction.model_json_schema()
     assert call['config'].response_mime_type == 'application/json'
@@ -117,3 +119,63 @@ def test_missing_key_skips_sdk(sdk, monkeypatch):
     monkeypatch.delenv('GEMINI_API_KEY')
     assert_manual(normalize())
     sdk[0].assert_not_called()
+
+
+def api_error(code):
+    cls = module.errors.ServerError if code >= 500 else module.errors.ClientError
+    return cls(code, {'error': {'code': code, 'message': 'mock-secret'}})
+
+
+def test_primary_succeeds_and_logs_only_model(sdk, caplog):
+    sdk[2](payload())
+    with caplog.at_level('INFO', logger=module.__name__):
+        assert normalize()['source'] == 'gemini'
+    calls = sdk[1].models.generate_content.call_args_list
+    assert [call.kwargs['model'] for call in calls] == [module.DEFAULT_MODELS[0]]
+    assert module.DEFAULT_MODELS[0] in caplog.text
+    assert 'mock-secret' not in caplog.text
+    assert 'I need an item' not in caplog.text
+
+
+@pytest.mark.parametrize('code', [503, 429])
+def test_retryable_primary_falls_back(sdk, code):
+    sdk[1].models.generate_content.side_effect = [api_error(code), SimpleNamespace(text=json.dumps(payload()))]
+    assert normalize()['source'] == 'gemini'
+    assert [call.kwargs['model'] for call in sdk[1].models.generate_content.call_args_list] == list(module.DEFAULT_MODELS[:2])
+
+
+def test_all_models_fail_manual(sdk):
+    sdk[1].models.generate_content.side_effect = [api_error(503), api_error(429), api_error(503)]
+    assert_manual(normalize())
+    assert sdk[1].models.generate_content.call_count == 3
+
+
+@pytest.mark.parametrize('code', [400, 401, 403, 404, 504])
+def test_non_retryable_does_not_cycle(sdk, code):
+    sdk[1].models.generate_content.side_effect = api_error(code)
+    assert_manual(normalize())
+    assert sdk[1].models.generate_content.call_count == 1
+
+
+def test_invalid_output_does_not_cycle(sdk):
+    sdk[2](payload(budget_dollars='-1'))
+    assert_manual(normalize())
+    assert sdk[1].models.generate_content.call_count == 1
+
+
+def test_preferred_model_order_and_three_model_limit(sdk, monkeypatch):
+    monkeypatch.setenv('GEMINI_MODEL', 'models/gemini-3.8-flash')
+    sdk[1].models.generate_content.side_effect = api_error(503)
+    assert_manual(normalize())
+    assert [call.kwargs['model'] for call in sdk[1].models.generate_content.call_args_list] == ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
+    monkeypatch.setenv('GEMINI_MODEL', 'gemini-3.7-flash')
+    assert module._model_order() == ['gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
+
+
+def test_total_deadline_prevents_more_calls(sdk, monkeypatch):
+    monkeypatch.setattr(module.time, 'monotonic', MagicMock(side_effect=[0, 0, 33]))
+    sdk[1].models.generate_content.side_effect = api_error(503)
+    assert_manual(normalize())
+    assert sdk[1].models.generate_content.call_count == 1
+    options = sdk[1].models.generate_content.call_args.kwargs['config'].http_options
+    assert options.timeout == module.ATTEMPT_TIMEOUT_MS
