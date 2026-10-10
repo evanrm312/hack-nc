@@ -61,11 +61,12 @@ customized. No database reset or new migration is needed for these JSON fields.
 The seeded navy suit is available from `2026-10-12T12:00:00Z` through
 `2026-10-16T22:00:00Z` (Monday 8 a.m. through Friday 6 p.m. in New York).
 For the dated interview demo, confirm this editable request and submit it to
-`POST /api/requests` as a different sandbox user from the demo lender:
+`POST /api/requests` as a different user from the demo lender. This is example
+A, with an $80 maximum deposit:
 
 ```json
 {
-  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40.",
   "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}},
   "modes": ["borrow"],
   "budget_cents": 4000,
@@ -78,11 +79,16 @@ For the dated interview demo, confirm this editable request and submit it to
 }
 ```
 
+Example B submits the **same request body**, changing only
+`"max_deposit_cents": 20000` ($200). The original text, normalized fields,
+mode, rental budget, dates, pickup window, and area stay identical.
+
 `GET /api/requests/{id}/matches` places the navy suit in
-`needs_confirmation`: type, size, budget, and dates fit, while its proposed
-$200 deposit exceeds the $80 limit. The charcoal 46L suit is rejected. The
-lower deposit requires negotiation and explicit lender acknowledgment; the
-match result does not change the owner's proposal.
+`needs_confirmation` for example A: type, size, rental budget, and dates fit,
+while its proposed $200 deposit exceeds the $80 limit. It places the navy suit
+in `confirmed` for example B, where the deposit fits. The charcoal 46L suit is
+rejected in both. A lower deposit still requires negotiation and explicit lender
+acknowledgment; matching does not change the owner's proposal.
 
 After changing a model (Person 1 only):
 

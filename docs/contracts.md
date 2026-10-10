@@ -96,7 +96,7 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 {
   "id": "9b3f…",
   "requester_id": "77aa…",
-  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40.",
   "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}, "follow_up_questions": []},
   "modes": ["borrow"],
   "budget_cents": 4000,
@@ -399,6 +399,10 @@ values and unaffordable proposed collateral appear in `needs_confirmation`.
 The example listing covers the requested dates. It remains in
 `needs_confirmation` solely because its proposed $200 deposit exceeds the
 requester's $80 maximum; the lender and borrower must negotiate an agreement.
+For the second demo request, keep every field above the same except
+`max_deposit_cents: 20000`. The navy suit moves to `confirmed`, with
+`unknown_required: []` and no deposit shortcoming. The charcoal 46L suit is
+rejected in both cases.
 
 ### `POST /api/requests/{id}/publish` (requester only)
 
