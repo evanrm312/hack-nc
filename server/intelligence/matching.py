@@ -1,7 +1,7 @@
 """Deterministic compatibility checks against supplied inventory only."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def _same(left, right):
@@ -38,7 +38,7 @@ def _candidate(request, listing, mode):
         rejected.append('Listing is unavailable or already reserved.')
     if mode is None:
         if not request.get('modes'):
-            uncertain('modes', 'Requested buy/borrow mode needs confirmation.')
+            uncertain('modes', 'Requested mode needs confirmation.')
         else:
             rejected.append('Listing does not support any requested mode.')
     else:
@@ -71,8 +71,9 @@ def _candidate(request, listing, mode):
 
     cost = None
     if mode:
-        cost_field = 'sale_price_cents' if mode == 'sale' else 'rental_fee_cents'
-        label = 'Sale price' if mode == 'sale' else 'Rental fee'
+        cost_field = ('sale_price_cents' if mode == 'sale' else
+                      'service_price_cents' if mode == 'service' else 'rental_fee_cents')
+        label = 'Sale price' if mode == 'sale' else 'Service price' if mode == 'service' else 'Rental fee'
         cost = listing.get(cost_field)
         budget = request.get('budget_cents')
         if not _money(cost):
@@ -95,25 +96,54 @@ def _candidate(request, listing, mode):
                     shortcomings.append(f'deposit negotiation required: proposed deposit {deposit} cents exceeds maximum {maximum} cents.')
                     unknown.append('deposit_agreement')
 
-        try:
-            availability = listing.get('availability') or {}
-            start = _date(availability.get('available_from'))
-            end = _date(availability.get('available_until'))
-            needed = _date(request.get('needed_by'))
-            use_start = _date(request.get('use_start')) if mode == 'borrow' else None
-            use_end = _date(request.get('use_end')) if mode == 'borrow' else None
-            points = [d for d in (needed, use_start, use_end) if d is not None]
-            if (start and end and start > end) or (use_start and use_end and use_start >= use_end):
-                rejected.append('Invalid availability or requested date interval.')
-            elif any((start and point < start) or (end and point > end) for point in points):
-                rejected.append('Listing is unavailable for the requested dates.')
-            elif points:
-                if start is None or end is None:
-                    uncertain('availability', 'Availability for requested dates needs confirmation; listing date bounds are unknown.')
-                else:
-                    reasons.append('Listing availability covers the requested dates.')
-        except (ValueError, TypeError, AttributeError):
-            uncertain('availability', 'Invalid or timezone-less dates need confirmation.')
+        if mode == 'service':
+            duration = listing.get('service_duration_minutes')
+            requested_duration = request.get('service_duration_minutes')
+            if type(duration) is not int or duration <= 0:
+                uncertain('service_duration_minutes', 'Service duration needs confirmation.')
+            elif requested_duration is not None and (type(requested_duration) is not int or
+                                                      requested_duration > duration):
+                rejected.append('Service duration is shorter than requested.')
+            try:
+                windows = [(_date(window['start']), _date(window['end']))
+                           for window in (listing.get('service_available_windows') or [])]
+                wanted = [(_date(window['start']), _date(window['end']))
+                          for window in (request.get('service_time_windows') or [])]
+                deadline = _date(request.get('needed_by'))
+                if not windows or any(start >= end for start, end in windows):
+                    uncertain('service_available_windows', 'Service availability needs confirmation.')
+                elif type(duration) is int and duration > 0:
+                    span = timedelta(minutes=duration)
+                    fits = any(max(start, want_start) + span <= min(
+                        end, want_end, deadline or end)
+                        for start, end in windows
+                        for want_start, want_end in (wanted or [(start, end)]))
+                    if not fits:
+                        rejected.append('No service time window fits the requested time or deadline.')
+                    else:
+                        reasons.append('Service time window fits the requested time.')
+            except (ValueError, TypeError, AttributeError, KeyError):
+                uncertain('service_available_windows', 'Service time windows need confirmation.')
+        else:
+            try:
+                availability = listing.get('availability') or {}
+                start = _date(availability.get('available_from'))
+                end = _date(availability.get('available_until'))
+                needed = _date(request.get('needed_by'))
+                use_start = _date(request.get('use_start')) if mode == 'borrow' else None
+                use_end = _date(request.get('use_end')) if mode == 'borrow' else None
+                points = [d for d in (needed, use_start, use_end) if d is not None]
+                if (start and end and start > end) or (use_start and use_end and use_start >= use_end):
+                    rejected.append('Invalid availability or requested date interval.')
+                elif any((start and point < start) or (end and point > end) for point in points):
+                    rejected.append('Listing is unavailable for the requested dates.')
+                elif points:
+                    if start is None or end is None:
+                        uncertain('availability', 'Availability for requested dates needs confirmation; listing date bounds are unknown.')
+                    else:
+                        reasons.append('Listing availability covers the requested dates.')
+            except (ValueError, TypeError, AttributeError):
+                uncertain('availability', 'Invalid or timezone-less dates need confirmation.')
 
     shortcomings.extend(rejected)
     bucket = 'rejected' if rejected else 'needs_confirmation' if unknown else 'confirmed'
@@ -135,7 +165,7 @@ def match_listings(request: dict, listings: list[dict]) -> dict:
     ranked = {bucket: [] for bucket in ('confirmed', 'needs_confirmation', 'rejected')}
     priority = dict(confirmed=0, needs_confirmation=1, rejected=2)
     for listing in listings:
-        modes = [mode for mode in ('sale', 'borrow')
+        modes = [mode for mode in ('sale', 'borrow', 'service')
                  if mode in (constraints.get('modes') or []) and mode in (listing.get('allowed_modes') or [])]
         candidates = [_candidate(constraints, listing, mode) for mode in modes or [None]]
         bucket, entry, key = min(candidates, key=lambda candidate: (priority[candidate[0]], candidate[2]))
