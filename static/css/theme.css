@@ -1,0 +1,91 @@
+/* Person 3 owns this file (branch p3-marketplace-ui).
+   Shared Frutiger Aero theme: tokens, base layout, and the six shared
+   components (button, field, card, dialog, badge, offer summary).
+   Person 1 added only a minimal readable baseline so pages render. */
+
+:root {
+  --sky: #7fd0ff;
+  --leaf: #58c36b;
+  --ink: #10304a;
+  --surface: rgba(255, 255, 255, 0.92);
+  --radius: 14px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--sky), #e9f7ff 60%, #f3fff3);
+  min-height: 100vh;
+}
+
+main.shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 6px 18px rgba(16, 48, 74, 0.12);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: var(--leaf);
+  color: white;
+}
+
+.badge--warn { background: #e0a200; color: var(--ink); }
+
+button, .button {
+  font: inherit;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 48, 74, 0.25);
+  background: white;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font: inherit;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(16, 48, 74, 0.35);
+  width: 100%;
+  max-width: 420px;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.simulated-notice {
+  font-size: 0.9rem;
+  border-left: 4px solid #e0a200;
+  padding: 6px 10px;
+  background: #fff8e1;
+}
+
+pre.json {
+  background: #f4f8fb;
+  padding: 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
