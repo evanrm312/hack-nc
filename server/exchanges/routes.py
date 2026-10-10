@@ -1,10 +1,10 @@
-"""Private, persisted negotiations. Pickup and return remain later milestones."""
+"""Private, persisted negotiation, evidence, pickup, and return."""
 
 from __future__ import annotations
 
 from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import or_, update
 
 from ..auth import current_profile, require_verified_user
@@ -19,7 +19,7 @@ from ..models import (
     OfferRevision,
     Profile,
 )
-from ..reservation import reserve_listing
+from ..reservation import mark_listing_sold, release_listing, reserve_listing
 from ..storage import authorize_private_read, get_storage
 from ..validation import FieldErrors, datetime_utc, json_body, string
 from .offers import (
@@ -28,6 +28,10 @@ from .offers import (
     same_terms,
     terms_from_offer,
     validate_terms,
+)
+from .lifecycle import (
+    PICKUP_STAGES, acknowledge_and_confirm, confirmations_for, ensure_photos_open,
+    invalid_transition, require_pickup_photos, require_return_photos,
 )
 
 bp = Blueprint("exchanges", __name__, url_prefix="/api/exchanges")
@@ -93,6 +97,7 @@ def _available(listing: Listing) -> None:
 def _private_response(response):
     # Authenticated messages, precise meeting times, and evidence must not be cached.
     response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 
@@ -179,6 +184,8 @@ def get_exchange(exchange_id: str):
         "offers": [offer.to_dict() for offer in offers],
         "simulation_notice": SIMULATION_NOTICE,
         "deposit_status": {"state": state, "label": SIMULATION_NOTICE},
+        "confirmations": confirmations_for(exchange, "handoff") + confirmations_for(exchange, "return"),
+        "max_upload_bytes": current_app.config["MAX_UPLOAD_BYTES"],
         "participants": {
             "owner": db.session.get(Profile, exchange.owner_id).to_public_dict(),
             "requester": db.session.get(Profile, exchange.requester_id).to_public_dict(),
@@ -301,7 +308,18 @@ def get_evidence_file(exchange_id: str, evidence_id: str):
     evidence = db.session.get(Evidence, evidence_id)
     if evidence is None or evidence.exchange_id != exchange.id:
         raise not_found("evidence")
-    return get_storage().send("private", evidence.private_storage_path, evidence.content_type)
+    response = get_storage().send("private", evidence.private_storage_path, evidence.content_type)
+    if request.args.get("preview") == "1":
+        # The shared browser API handles JSON. This authenticated representation
+        # supplies a small inline preview without adding a public storage URL or
+        # changing Person 1's API helper. The default endpoint still serves bytes.
+        from .images import private_preview
+        response.direct_passthrough = False
+        try:
+            return jsonify({"data_url": private_preview(response.get_data())})
+        finally:
+            response.close()
+    return response
 
 
 def _later_milestone(exchange_id: str, action: str):
@@ -311,20 +329,120 @@ def _later_milestone(exchange_id: str, action: str):
 
 @bp.post("/<exchange_id>/evidence")
 @require_verified_user
+@_transaction
 def upload_evidence(exchange_id: str):
-    return _later_milestone(exchange_id, "Condition uploads")
+    exchange = _participant(exchange_id, lock=True)
+    user_id = current_profile().id
+    stage = request.form.get("stage")
+    if stage not in (*PICKUP_STAGES, "pre_return", "post_return"):
+        raise validation_error({"stage": "must be pre_handoff, handoff, pre_return, or post_return"})
+    if stage == "pre_return" and user_id != exchange.requester_id:
+        raise forbidden("Only the borrower can upload before-return evidence")
+    if stage == "post_return" and user_id != exchange.owner_id:
+        raise forbidden("Only the owner can upload after-return evidence")
+    expected = "reserved" if stage in PICKUP_STAGES else "on_loan" if stage == "pre_return" else "return_pending"
+    if exchange.status != expected or (stage not in PICKUP_STAGES and exchange.mode != "borrow"):
+        raise invalid_transition()
+    ensure_photos_open(exchange, stage)
+    photo = request.files.get("photo")
+    if photo is None:
+        raise validation_error({"photo": "a photo file is required"})
+    from .images import validated_image_stream
+    stream = validated_image_stream(photo.stream, current_app.config["MAX_UPLOAD_BYTES"])
+    storage = get_storage()
+    stored = storage.save("private", stream, current_app.config["MAX_UPLOAD_BYTES"])
+    try:
+        evidence = Evidence(
+            exchange_id=exchange.id, uploader_id=user_id, stage=stage,
+            private_storage_path=stored.path, content_type=stored.content_type,
+        )
+        db.session.add(evidence)
+        exchange.updated_at = utcnow()
+        db.session.commit()
+    except Exception:
+        storage.delete("private", stored.path)
+        raise
+    return jsonify({"evidence": evidence.to_dict()}), 201
 
 
 @bp.post("/<exchange_id>/handoff")
 @require_verified_user
+@_transaction
 def confirm_handoff(exchange_id: str):
-    return _later_milestone(exchange_id, "Pickup confirmation")
+    exchange = _participant(exchange_id, lock=True)
+    user_id = current_profile().id
+    if exchange.status != "reserved":
+        if exchange.status in ("on_loan", "return_pending", "completed") and any(
+            record["participant_id"] == user_id for record in confirmations_for(exchange, "handoff")
+        ):
+            db.session.commit()
+            return jsonify({"exchange": exchange.to_dict()})
+        raise invalid_transition()
+    body = json_body()
+    if body.get("confirm") is not True or body.get("accept_condition") is not True:
+        raise validation_error({"confirm": "confirm must be true", "accept_condition": "accept_condition must be true"})
+    photos = require_pickup_photos(exchange)
+    acknowledge_and_confirm(photos, user_id)
+    if len(confirmations_for(exchange, "handoff")) == 2:
+        if exchange.mode == "sale":
+            if not mark_listing_sold(db.session, exchange.listing_id, exchange.id):
+                raise ApiError(409, "reservation_conflict", "This exchange no longer holds the item reservation")
+            exchange.status = "completed"
+        else:
+            exchange.status = "on_loan"
+    exchange.updated_at = utcnow()
+    db.session.commit()
+    return jsonify({"exchange": exchange.to_dict()})
 
 
 @bp.post("/<exchange_id>/return")
 @require_verified_user
+@_transaction
 def confirm_return(exchange_id: str):
-    return _later_milestone(exchange_id, "Return confirmation")
+    exchange = _participant(exchange_id, lock=True)
+    user_id = current_profile().id
+    body = json_body()
+    action = body.get("action")
+    if exchange.mode != "borrow":
+        raise invalid_transition()
+    if action not in ("initiate", "accept", "issue"):
+        raise validation_error({"action": "must be initiate, accept, or issue"})
+    if action == "initiate":
+        if user_id != exchange.requester_id:
+            raise forbidden("Only the borrower can initiate return")
+        if exchange.status not in ("on_loan", "return_pending", "completed"):
+            raise invalid_transition()
+        require_return_photos(exchange, before_only=True)
+        if exchange.status == "on_loan":
+            exchange.status = "return_pending"
+    elif action == "issue":
+        errors = FieldErrors()
+        reason = string(body.get("reason"), "reason", errors, required=True, max_len=2000)
+        errors.raise_if_any()
+        if exchange.status == "disputed" and exchange.dispute_reason == reason:
+            db.session.commit()
+            return jsonify({"exchange": exchange.to_dict()})
+        if exchange.status != "return_pending":
+            raise invalid_transition()
+        exchange.dispute_reason = reason
+        exchange.status = "disputed"
+    else:
+        if exchange.status == "completed" and any(
+            record["participant_id"] == user_id for record in confirmations_for(exchange, "return")
+        ):
+            db.session.commit()
+            return jsonify({"exchange": exchange.to_dict()})
+        if exchange.status != "return_pending":
+            raise invalid_transition()
+        photos = require_return_photos(exchange)
+        acknowledge_and_confirm(photos, user_id)
+        if len(confirmations_for(exchange, "return")) == 2:
+            if not release_listing(db.session, exchange.listing_id, exchange.id):
+                raise ApiError(409, "reservation_conflict", "This exchange no longer holds the item reservation")
+            exchange.status = "completed"
+    exchange.updated_at = utcnow()
+    db.session.commit()
+    return jsonify({"exchange": exchange.to_dict()})
 
 
 @bp.post("/<exchange_id>/review")

@@ -18,7 +18,62 @@
     <section class="card" id="reservation-notice" hidden>
       <h2>Item reserved</h2>
       <p>Both participants accepted the same offer revision. The item is reserved for this exchange.</p>
-      <p>Pickup confirmation and condition photos are a separate upcoming milestone.</p>
+      <p>Upload pickup photos, review the condition and accessories, then each participant confirms the handoff below.</p>
+    </section>
+    <section class="card" id="evidence-card">
+      <h2>Private condition photos</h2>
+      <p class="exchange-help">Only the two participants can upload or view these photos. Use JPEG, PNG, or WebP. Finish uploading before either participant confirms this stage.</p>
+      <form id="evidence-form">
+        <fieldset id="evidence-fields">
+          <div class="exchange-field"><label for="evidence-stage">Photo purpose</label><select id="evidence-stage" required></select></div>
+          <div class="exchange-field"><label for="evidence-photo">Condition photo</label><input id="evidence-photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="evidence-help"></div>
+          <p id="evidence-help" class="exchange-help"></p>
+          <img id="selected-photo" class="exchange-photo" alt="Selected condition photo preview" hidden>
+          <button type="submit" class="button" id="upload-evidence">Upload private photo</button>
+        </fieldset>
+      </form>
+      <p id="evidence-status" role="status"></p>
+      <p id="evidence-error" class="exchange-error" role="alert"></p>
+      <div id="evidence-list" class="exchange-photos"></div>
+    </section>
+    <section class="card" id="pickup-card" hidden>
+      <h2>Confirm pickup</h2>
+      <p>Compare the pickup photos and the agreed condition/accessories below. Confirm only after possession has changed.</p>
+      <p id="pickup-confirmations"></p>
+      <form id="pickup-form">
+        <fieldset id="pickup-fields">
+          <label class="exchange-check"><input type="checkbox" id="pickup-condition" required><span>I acknowledge the recorded condition and included accessories.</span></label>
+          <label class="exchange-check"><input type="checkbox" id="pickup-possession" required><span>I confirm the item has been handed over.</span></label>
+          <button type="submit" class="button" id="confirm-pickup">Confirm handoff</button>
+        </fieldset>
+      </form>
+      <p id="pickup-status" role="status"></p>
+      <p id="pickup-error" class="exchange-error" role="alert"></p>
+    </section>
+    <section class="card" id="return-card" hidden>
+      <h2>Return the borrowed item</h2>
+      <p id="return-help"></p>
+      <p id="return-confirmations"></p>
+      <button type="button" class="button" id="initiate-return" hidden>Initiate return</button>
+      <form id="return-form" hidden>
+        <fieldset id="return-fields">
+          <label class="exchange-check"><input type="checkbox" id="return-condition" required><span>I reviewed the before/after return photos and acknowledge the condition and accessories. I confirm the item has been returned.</span></label>
+          <button type="submit" class="button" id="confirm-return">Accept and confirm return</button>
+        </fieldset>
+      </form>
+      <form id="return-issue-form" hidden>
+        <fieldset id="return-issue-fields">
+          <div class="exchange-field"><label for="return-reason">Specific return issue</label><textarea id="return-reason" maxlength="2000" rows="2" required></textarea></div>
+          <button type="submit" id="contest-return">Contest return</button>
+        </fieldset>
+      </form>
+      <p id="return-status" role="status"></p>
+      <p id="return-error" class="exchange-error" role="alert"></p>
+    </section>
+    <section class="card" id="dispute-card" hidden>
+      <h2>Return disputed</h2>
+      <p id="dispute-reason"></p>
+      <p>The item remains reserved for manual review. A dispute never automatically triggers a charge. No real funds are reserved or charged.</p>
     </section>
     <div class="exchange-layout">
       <div>

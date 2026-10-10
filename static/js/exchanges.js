@@ -1,4 +1,4 @@
-// Person 4: exchange list, private messages, and negotiating -> reserved.
+// Person 4: private negotiations, condition evidence, pickup, and return.
 // All API access uses Person 1's shared helper; all user content is plain text.
 (function () {
   "use strict";
@@ -206,6 +206,7 @@
     let initialized = false, initializing = false;
     let displayedVersion = null;
     let historySignature = null;
+    let evidence = [], evidenceSignature = null, selectedPhotoUrl = null;
     const messages = new Map();
     let after = null;
     const spotName = (id) => spots.find((spot) => spot.id === id)?.label || (id ? "Meeting spot unavailable; needs confirmation" : "Not selected");
@@ -213,6 +214,100 @@
       const participants = Object.values(detail.participants);
       return participants.find((person) => person.id === id)?.display_name || "Participant";
     };
+    const stageLabels = {
+      pre_handoff: "Before pickup", handoff: "At pickup",
+      pre_return: "Before return (borrower)", post_return: "After return (owner)",
+    };
+    const confirmations = (stage) => (detail.confirmations || []).filter((entry) => entry.stage === stage);
+    function confirmationText(stage) {
+      return [detail.exchange.owner_id, detail.exchange.requester_id].map((id) => {
+        const entry = confirmations(stage).find((record) => record.participant_id === id);
+        return participantName(id) + ": " + (entry ? "confirmed " + api.formatTime(entry.confirmed_at) + " Eastern" : "awaiting confirmation");
+      }).join(" · ");
+    }
+    function renderWorkflow() {
+      const exchange = detail.exchange, owner = profile.id === exchange.owner_id;
+      const pickup = exchange.status === "reserved", returning = exchange.status === "return_pending";
+      const pickupConfirmed = confirmations("handoff").some((record) => record.participant_id === profile.id);
+      const returnConfirmed = confirmations("return").some((record) => record.participant_id === profile.id);
+      const purposes = [];
+      if (pickup && !confirmations("handoff").length) purposes.push("pre_handoff", "handoff");
+      if (exchange.mode === "borrow" && exchange.status === "on_loan" && !owner) purposes.push("pre_return");
+      if (returning && owner && !confirmations("return").length) purposes.push("post_return");
+      const previous = $("evidence-stage").value;
+      $("evidence-stage").replaceChildren();
+      purposes.forEach((stage) => {
+        const option = node("option", stageLabels[stage]); option.value = stage;
+        $("evidence-stage").append(option);
+      });
+      if (purposes.includes(previous)) $("evidence-stage").value = previous;
+      $("evidence-form").hidden = !purposes.length;
+      $("evidence-fields").disabled = busy || !purposes.length;
+      $("evidence-help").textContent = "Maximum photo size: " + ((detail.max_upload_bytes || 5 * 1024 * 1024) / (1024 * 1024)).toLocaleString("en-US") + " MB. Still photos up to 16 megapixels. The server checks the image content.";
+      $("pickup-card").hidden = !pickup;
+      $("pickup-confirmations").textContent = confirmationText("handoff");
+      const hasPickup = evidence.some((photo) => ["pre_handoff", "handoff"].includes(photo.stage));
+      $("pickup-fields").disabled = busy || pickupConfirmed || !hasPickup;
+      $("pickup-status").textContent = !hasPickup ? "Upload pickup condition evidence before confirming."
+        : pickupConfirmed ? "Your handoff confirmation is saved. Waiting for the other participant." : "";
+      const loan = exchange.mode === "borrow";
+      $("return-card").hidden = !loan || !["on_loan", "return_pending", "completed"].includes(exchange.status);
+      $("return-confirmations").textContent = confirmationText("return");
+      $("initiate-return").hidden = owner || exchange.status !== "on_loan";
+      const hasBefore = evidence.some((photo) => photo.stage === "pre_return" && photo.uploader_id === exchange.requester_id);
+      const hasAfter = evidence.some((photo) => photo.stage === "post_return" && photo.uploader_id === exchange.owner_id);
+      $("initiate-return").disabled = busy || !hasBefore;
+      $("return-form").hidden = !returning;
+      $("return-fields").disabled = busy || returnConfirmed || !hasBefore || !hasAfter;
+      $("return-issue-form").hidden = !returning;
+      $("return-issue-fields").disabled = busy;
+      $("return-help").textContent = exchange.status === "completed"
+        ? "Both participants confirmed the return. The loan is completed and the item is available again."
+        : returning ? "The owner uploads photos after receiving the item. Both participants review the before/after photos and confirm return, or raise a specific issue."
+          : owner ? "The borrower uploads before-return photos and initiates return."
+            : "Upload before-return photos, then initiate return. This starts the return process; it does not confirm receipt.";
+      $("return-status").textContent = returning && (!hasBefore || !hasAfter)
+        ? "Both before-return borrower photos and after-return owner photos are required before confirmation."
+        : returning && returnConfirmed ? "Your return confirmation is saved. Waiting for the other participant." : "";
+      $("dispute-card").hidden = exchange.status !== "disputed";
+      $("dispute-reason").textContent = exchange.dispute_reason || "";
+    }
+    function renderEvidence() {
+      const signature = JSON.stringify(evidence);
+      if (signature === evidenceSignature) return;
+      evidenceSignature = signature;
+      const container = $("evidence-list");
+      container.replaceChildren();
+      if (!evidence.length) container.append(node("p", "No private condition photos yet."));
+      evidence.forEach((photo) => {
+        const figure = node("figure");
+        const caption = node("figcaption", stageLabels[photo.stage] + " · " + participantName(photo.uploader_id)
+          + " · " + api.formatTime(photo.created_at) + " Eastern");
+        const preview = node("img", undefined, "exchange-photo");
+        preview.alt = stageLabels[photo.stage] + " condition evidence";
+        preview.hidden = true;
+        const status = node("p", "Loading private preview…", "exchange-help");
+        status.setAttribute("role", "status");
+        const retry = node("button", "Retry preview"); retry.type = "button"; retry.hidden = true;
+        const acknowledged = Object.keys(photo.acknowledged_by || {}).map(participantName);
+        figure.append(preview, caption, node("p", acknowledged.length ? "Acknowledged by " + acknowledged.join(", ") : "Awaiting condition acknowledgment", "exchange-help"), status, retry);
+        container.append(figure);
+        async function loadPreview() {
+          retry.hidden = true; status.textContent = "Loading private preview…";
+          try {
+            const result = await api.get(photo.url + "?preview=1");
+            if (!sessionIsCurrent() || !figure.isConnected) return;
+            preview.src = result.data_url; preview.hidden = false; status.textContent = "";
+          } catch (error) {
+            if (!sessionIsCurrent() || !figure.isConnected) return;
+            status.textContent = errorText(error); retry.hidden = false;
+            if ([401, 403].includes(error.status)) pageError(error);
+          }
+        }
+        retry.addEventListener("click", loadPreview);
+        loadPreview();
+      });
+    }
     function moneyRows(offer) {
       if (detail.exchange.mode === "sale") return [["Sale price", api.formatCents(offer.sale_price_cents)]];
       const percentage = offer.agreed_item_value_cents
@@ -326,6 +421,8 @@
         $("draft-status").textContent = "The current offer changed while you were editing. Use current terms to review the latest revision before proposing again.";
       }
       updateAcceptance();
+      renderWorkflow();
+      renderEvidence();
       const signature = JSON.stringify(detail.offers);
       if (signature !== historySignature) {
         const history = $("offer-history");
@@ -378,11 +475,13 @@
       refreshing = true;
       $("refresh-room").disabled = true;
       try {
-        const [latest, conversation] = await Promise.all([
+        const [latest, conversation, photos] = await Promise.all([
           api.get(base), api.get(base + "/messages" + (after ? "?after=" + encodeURIComponent(after) : "")),
+          api.get(base + "/evidence"),
         ]);
         if (!sessionIsCurrent()) return;
         detail = latest;
+        evidence = photos.evidence;
         render();
         renderMessages(conversation.messages);
         $("page-error").textContent = "";
@@ -403,6 +502,7 @@
       $("offer-fields").disabled = true;
       $("message-fields").disabled = true;
       $("accept-offer").disabled = true;
+      renderWorkflow();
       try { await work(); }
       catch (error) {
         if (!sessionIsCurrent()) return;
@@ -477,6 +577,57 @@
         renderMessages([result.message]);
       });
     });
+    function clearSelectedPhoto() {
+      if (selectedPhotoUrl) URL.revokeObjectURL(selectedPhotoUrl);
+      selectedPhotoUrl = null;
+      $("selected-photo").removeAttribute("src"); $("selected-photo").hidden = true;
+    }
+    $("evidence-photo").addEventListener("change", () => {
+      clearSelectedPhoto(); $("evidence-error").textContent = ""; $("evidence-status").textContent = "";
+      const file = $("evidence-photo").files[0];
+      if (file) {
+        selectedPhotoUrl = URL.createObjectURL(file);
+        $("selected-photo").src = selectedPhotoUrl; $("selected-photo").hidden = false;
+      }
+    });
+    $("selected-photo").addEventListener("error", () => {
+      clearSelectedPhoto(); $("evidence-error").textContent = "This file cannot be previewed as an image. Choose a valid JPEG, PNG, or WebP photo.";
+    });
+    window.addEventListener("pagehide", clearSelectedPhoto);
+    $("evidence-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const file = $("evidence-photo").files[0], stage = $("evidence-stage").value;
+      action("evidence-error", async () => {
+        if (!file || !stage) throw new Error("Choose a photo and an available purpose.");
+        if (file.size > detail.max_upload_bytes) throw new Error("This photo exceeds the maximum file size.");
+        const form = new FormData(); form.append("photo", file); form.append("stage", stage);
+        $("evidence-status").textContent = "Uploading and checking your private photo…";
+        try {
+          await api.post(base + "/evidence", form);
+          if (!sessionIsCurrent()) return;
+          $("evidence-photo").value = ""; clearSelectedPhoto();
+          $("evidence-status").textContent = "Private photo uploaded.";
+        } catch (error) { $("evidence-status").textContent = "Upload failed. Choose a valid photo or retry."; throw error; }
+      });
+    });
+    $("pickup-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      action("pickup-error", () => api.post(base + "/handoff", {
+        confirm: $("pickup-possession").checked, accept_condition: $("pickup-condition").checked,
+      }));
+    });
+    $("initiate-return").addEventListener("click", () => action("return-error", () => api.post(base + "/return", { action: "initiate" })));
+    $("return-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      action("return-error", async () => {
+        if (!$("return-condition").checked) throw new Error("Review and acknowledge the return condition before confirming.");
+        await api.post(base + "/return", { action: "accept" });
+      });
+    });
+    $("return-issue-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      action("return-error", () => api.post(base + "/return", { action: "issue", reason: $("return-reason").value }));
+    });
     async function loadInitial() {
       if (initializing) return;
       initializing = true;
@@ -484,11 +635,13 @@
       $("page-error").textContent = "";
       $("page-status").textContent = "Loading your private exchange…";
       try {
-        const [me, latest, meetingData, conversation] = await Promise.all([
+        const [me, latest, meetingData, conversation, photos] = await Promise.all([
           api.get("/api/me"), api.get(base), api.get("/api/meeting-spots"), api.get(base + "/messages"),
+          api.get(base + "/evidence"),
         ]);
         if (!sessionIsCurrent()) return;
         profile = me.profile; detail = latest; spots = meetingData.meeting_spots;
+        evidence = photos.evidence;
         listing = (await api.get("/api/listings/" + encodeURIComponent(detail.exchange.listing_id))).listing;
         if (!sessionIsCurrent()) return;
         ["pickup-spot", "return-spot"].forEach((id) => {

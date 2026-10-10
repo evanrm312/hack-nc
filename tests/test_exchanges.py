@@ -1,4 +1,4 @@
-"""Person 4: private negotiations and atomic mutual acceptance."""
+"""Person 4: private negotiations, evidence, pickup, and return."""
 
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -367,8 +367,10 @@ def test_edit_racing_accept_cannot_reserve_stale_terms(app, client, alice, bob, 
 
 def test_later_milestones_never_silently_complete_or_charge(client, alice, bob, spot):
     exchange = ready_exchange(client, alice, bob, spot)
-    for suffix in ("handoff", "return", "review", "dispute", "cancel", "evidence"):
+    for suffix in ("review", "dispute", "cancel"):
         assert client.post(f"/api/exchanges/{exchange['id']}/{suffix}", json={}, headers=bob).status_code == 501
+    for suffix in ("handoff", "return", "evidence"):
+        assert client.post(f"/api/exchanges/{exchange['id']}/{suffix}", json={}, headers=bob).status_code in (400, 409)
     assert db.session.get(Exchange, exchange["id"]).status == "negotiating"
 
 
@@ -397,3 +399,320 @@ def test_preview_uses_isolated_labeled_data_and_does_not_duplicate_inventory(tmp
         assert all(listing["status"] == "available" for listing in listings)
         assert client.get("/api/exchanges", headers=alice).get_json() == {"exchanges": []}
         assert b"Sandbox preview" in client.get("/exchanges").data
+
+
+def image_bytes():
+    """A real, decodable 2x2 PNG; no image library needed by the fixtures."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\x00\xff\x00" * 2))
+            + chunk(b"IEND", b""))
+
+
+def photo_upload(client, exchange_id, headers, stage="pre_handoff", data=None):
+    return client.post(f"/api/exchanges/{exchange_id}/evidence", headers=headers, data={
+        "stage": stage, "photo": (BytesIO(image_bytes() if data is None else data), "misleading.txt", "text/plain"),
+    })
+
+
+def reserved_exchange(client, alice, bob, spot, mode="borrow"):
+    exchange = ready_exchange(client, alice, bob, spot, mode=mode)
+    assert accept(client, exchange["id"], alice).status_code == 200
+    assert accept(client, exchange["id"], bob).status_code == 200
+    return exchange
+
+
+def handoff(client, exchange_id, headers, **body):
+    return client.post(f"/api/exchanges/{exchange_id}/handoff", headers=headers,
+                       json={"confirm": True, "accept_condition": True, **body})
+
+
+def return_action(client, exchange_id, headers, action, **body):
+    return client.post(f"/api/exchanges/{exchange_id}/return", headers=headers,
+                       json={"action": action, **body})
+
+
+def active_loan(client, alice, bob, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], alice).status_code == 201
+    assert handoff(client, exchange["id"], alice).status_code == 200
+    assert handoff(client, exchange["id"], bob).get_json()["exchange"]["status"] == "on_loan"
+    return exchange
+
+
+def pending_return(client, alice, bob, spot):
+    exchange = active_loan(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], bob, "pre_return").status_code == 201
+    assert return_action(client, exchange["id"], bob, "initiate").status_code == 200
+    return exchange
+
+
+def test_uploaded_photos_are_private_persisted_and_content_detected(client, alice, bob, third_party, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    response = photo_upload(client, exchange["id"], alice)
+    assert response.status_code == 201, response.get_json()
+    photo = response.get_json()["evidence"]
+    assert photo["content_type"] == "image/png"
+    assert photo["exchange_id"] == exchange["id"] and photo["uploader_id"] == exchange["owner_id"]
+    assert photo["stage"] == "pre_handoff" and photo["created_at"].endswith("Z")
+    assert "private_storage_path" not in photo
+    for headers in (alice, bob):
+        result = client.get(photo["url"], headers=headers)
+        assert result.data == image_bytes()
+        assert result.headers["Content-Type"].startswith("image/png")
+        assert result.headers["Cache-Control"] == "private, no-store"
+        preview = client.get(photo["url"] + "?preview=1", headers=headers)
+        assert preview.status_code == 200 and preview.get_json()["data_url"].startswith("data:image/")
+    for suffix in ("", "?preview=1"):
+        assert client.get(photo["url"] + suffix).status_code == 401
+        assert client.get(photo["url"] + suffix, headers=third_party).status_code == 403
+    assert photo_upload(client, exchange["id"], third_party).status_code == 403
+    stored = db.session.get(Evidence, photo["id"])
+    assert client.get("/media/public/" + stored.private_storage_path).status_code == 404
+    other = ready_exchange(client, alice, bob, spot)
+    assert client.get(f"/api/exchanges/{other['id']}/evidence/{photo['id']}?preview=1", headers=bob).status_code == 404
+
+
+@pytest.mark.parametrize("data,code", [
+    (b"", "validation_error"), (b"<svg><script>bad()</script></svg>", "unsupported_image"),
+    (b"\x89PNG\r\n\x1a\nnot-an-image", "unsupported_image"),
+    (b"\xff\xd8\xffnot-a-jpeg", "unsupported_image"),
+    (b"RIFF\x00\x00\x00\x00WEBPnot-webp", "unsupported_image"),
+])
+def test_invalid_image_content_leaves_no_evidence(app, client, alice, bob, spot, data, code):
+    from pathlib import Path
+
+    exchange = reserved_exchange(client, alice, bob, spot)
+    response = photo_upload(client, exchange["id"], bob, data=data)
+    assert response.status_code == 400, response.get_json()
+    assert response.get_json()["error"]["code"] == code
+    assert client.get(f"/api/exchanges/{exchange['id']}/evidence", headers=bob).get_json()["evidence"] == []
+    assert not list(Path(app.config["UPLOAD_DIR"], "private").rglob("*.*"))
+
+
+def test_missing_file_stage_and_oversized_photo(client, app, alice, bob, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    base = f"/api/exchanges/{exchange['id']}/evidence"
+    assert client.post(base, headers=bob, data={"stage": "pre_handoff"}).status_code == 400
+    assert photo_upload(client, exchange["id"], bob, "invented").status_code == 400
+    response = photo_upload(client, exchange["id"], bob, data=b"x" * (app.config["MAX_UPLOAD_BYTES"] + 1))
+    assert response.status_code == 413 and response.get_json()["error"]["code"] == "payload_too_large"
+    assert client.get(base, headers=bob).get_json()["evidence"] == []
+
+
+@pytest.mark.parametrize("mode,expected,listing_status", [("sale", "completed", "sold"), ("borrow", "on_loan", "reserved")])
+def test_pickup_requires_evidence_and_mutual_persisted_confirmations(client, alice, bob, spot, mode, expected, listing_status):
+    exchange = reserved_exchange(client, alice, bob, spot, mode=mode)
+    base = f"/api/exchanges/{exchange['id']}"
+    assert handoff(client, exchange["id"], alice).get_json()["error"]["code"] == "missing_evidence"
+    assert photo_upload(client, exchange["id"], bob, "handoff").status_code == 201
+    first = handoff(client, exchange["id"], alice)
+    assert first.status_code == 200 and first.get_json()["exchange"]["status"] == "reserved"
+    saved = client.get(base, headers=bob).get_json()["confirmations"]
+    assert len(saved) == 1 and saved[0]["condition_acknowledged_at"] and saved[0]["confirmed_at"]
+    assert saved[0]["participant_id"] == exchange["owner_id"] and saved[0]["stage"] == "handoff"
+    assert handoff(client, exchange["id"], alice).status_code == 200
+    assert client.get(base, headers=alice).get_json()["confirmations"] == saved
+    assert photo_upload(client, exchange["id"], alice).status_code == 409  # freeze the reviewed evidence
+    assert handoff(client, exchange["id"], bob).get_json()["exchange"]["status"] == expected
+    final = client.get(base, headers=bob).get_json()["confirmations"]
+    assert len(final) == 2
+    for headers in (alice, bob):
+        assert handoff(client, exchange["id"], headers).status_code == 200
+    assert client.get(base, headers=bob).get_json()["confirmations"] == final
+    photos = client.get(base + "/evidence", headers=bob).get_json()["evidence"]
+    assert set(photos[0]["acknowledged_by"]) == {exchange["owner_id"], exchange["requester_id"]}
+    assert db.session.get(Listing, exchange["listing_id"]).status == listing_status
+
+
+@pytest.mark.parametrize("body", [{"confirm": False}, {"confirm": "true"}, {"accept_condition": False}, {"accept_condition": 1}])
+def test_pickup_requires_explicit_true_booleans(client, alice, bob, spot, body):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], alice).status_code == 201
+    assert handoff(client, exchange["id"], alice, **body).status_code == 400
+    assert client.get(f"/api/exchanges/{exchange['id']}", headers=bob).get_json()["confirmations"] == []
+
+
+def test_return_requires_role_specific_photos_and_both_confirmations(client, alice, bob, spot):
+    exchange = active_loan(client, alice, bob, spot)
+    base = f"/api/exchanges/{exchange['id']}"
+    assert return_action(client, exchange["id"], alice, "initiate").status_code == 403
+    assert return_action(client, exchange["id"], bob, "initiate").get_json()["error"]["code"] == "missing_evidence"
+    assert photo_upload(client, exchange["id"], alice, "pre_return").status_code == 403
+    assert photo_upload(client, exchange["id"], bob, "post_return").status_code == 403
+    assert photo_upload(client, exchange["id"], alice, "post_return").status_code == 409
+    assert return_action(client, exchange["id"], bob, "accept").status_code == 409
+    assert photo_upload(client, exchange["id"], bob, "pre_return").status_code == 201
+    for _ in range(2):
+        assert return_action(client, exchange["id"], bob, "initiate").get_json()["exchange"]["status"] == "return_pending"
+    for headers in (alice, bob):
+        assert return_action(client, exchange["id"], headers, "accept").get_json()["error"]["code"] == "missing_evidence"
+    assert photo_upload(client, exchange["id"], bob, "pre_return").status_code == 409
+    assert photo_upload(client, exchange["id"], alice, "post_return").status_code == 201
+    assert return_action(client, exchange["id"], bob, "accept").get_json()["exchange"]["status"] == "return_pending"
+    saved = client.get(base, headers=alice).get_json()["confirmations"]
+    assert return_action(client, exchange["id"], bob, "accept").status_code == 200
+    assert client.get(base, headers=alice).get_json()["confirmations"] == saved
+    assert db.session.get(Listing, exchange["listing_id"]).status == "reserved"
+    assert photo_upload(client, exchange["id"], alice, "post_return").status_code == 409
+    assert return_action(client, exchange["id"], alice, "accept").get_json()["exchange"]["status"] == "completed"
+    item = db.session.get(Listing, exchange["listing_id"])
+    assert item.status == "available" and item.active_exchange_id is None
+    detail = client.get(base, headers=alice).get_json()
+    assert detail["deposit_status"]["state"] == "simulated_released"
+    final = detail["confirmations"]
+    for headers in (alice, bob):
+        assert return_action(client, exchange["id"], headers, "accept").status_code == 200
+    assert return_action(client, exchange["id"], bob, "initiate").status_code == 200
+    assert client.get(base, headers=alice).get_json()["confirmations"] == final
+
+
+@pytest.mark.parametrize("issuer", ["owner", "borrower"])
+def test_contested_return_stays_reserved_and_never_completes(client, alice, bob, spot, issuer):
+    exchange = pending_return(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], alice, "post_return").status_code == 201
+    assert return_action(client, exchange["id"], bob, "accept").status_code == 200
+    headers = alice if issuer == "owner" else bob
+    assert return_action(client, exchange["id"], headers, "issue", reason=" ").status_code == 400
+    result = return_action(client, exchange["id"], headers, "issue", reason="Garment bag is missing")
+    assert result.get_json()["exchange"]["status"] == "disputed"
+    assert return_action(client, exchange["id"], headers, "issue", reason="Garment bag is missing").status_code == 200
+    for participant in (alice, bob):
+        assert return_action(client, exchange["id"], participant, "accept").status_code == 409
+        assert return_action(client, exchange["id"], participant, "initiate").status_code in (403, 409)
+        assert handoff(client, exchange["id"], participant).status_code == 409
+    item = db.session.get(Listing, exchange["listing_id"])
+    assert item.status == "reserved" and item.active_exchange_id == exchange["id"]
+    detail = client.get(f"/api/exchanges/{exchange['id']}", headers=bob).get_json()
+    assert detail["exchange"]["dispute_reason"] == "Garment bag is missing"
+    assert detail["deposit_status"]["state"] == "simulated_held"
+    assert "no real funds" in detail["deposit_status"]["label"]
+
+
+@pytest.mark.parametrize("status", ["negotiating", "cancelled", "completed", "disputed"])
+def test_stage_actions_reject_invalid_states(client, alice, bob, spot, status):
+    exchange = ready_exchange(client, alice, bob, spot)
+    db.session.get(Exchange, exchange["id"]).status = status
+    db.session.commit()
+    assert handoff(client, exchange["id"], bob).status_code == 409
+    for action in ("initiate", "accept", "issue"):
+        assert return_action(client, exchange["id"], bob, action, reason="Missing bag").status_code == 409
+    for stage in ("pre_handoff", "handoff", "pre_return", "post_return"):
+        assert photo_upload(client, exchange["id"], bob, stage).status_code in (403, 409)
+
+
+def test_sale_cannot_start_a_return(client, alice, bob, spot):
+    exchange = reserved_exchange(client, alice, bob, spot, mode="sale")
+    for action in ("initiate", "accept", "issue"):
+        assert return_action(client, exchange["id"], bob, action, reason="Issue").status_code == 409
+    assert photo_upload(client, exchange["id"], bob, "pre_return").status_code == 409
+
+
+def test_evidence_and_confirmation_survive_a_new_app_instance(app, client, alice, bob, spot):
+    from server.app import create_app
+
+    exchange = reserved_exchange(client, alice, bob, spot)
+    photo = photo_upload(client, exchange["id"], alice).get_json()["evidence"]
+    assert handoff(client, exchange["id"], alice).status_code == 200
+    base = f"/api/exchanges/{exchange['id']}"
+    saved = client.get(base, headers=bob).get_json()["confirmations"]
+    db.session.remove()
+    db.engine.dispose()
+    restarted = create_app(dict(app.config))
+    with restarted.app_context():
+        second = restarted.test_client()
+        assert second.get(base, headers=bob).get_json()["confirmations"] == saved
+        assert second.get(photo["url"], headers=bob).data == image_bytes()
+        assert handoff(second, exchange["id"], bob).get_json()["exchange"]["status"] == "on_loan"
+        assert photo_upload(second, exchange["id"], bob, "pre_return").status_code == 201
+        assert return_action(second, exchange["id"], bob, "initiate").status_code == 200
+        assert photo_upload(second, exchange["id"], alice, "post_return").status_code == 201
+        assert return_action(second, exchange["id"], alice, "accept").status_code == 200
+        saved = second.get(base, headers=bob).get_json()["confirmations"]
+        db.session.remove()
+        db.engine.dispose()
+    restarted_again = create_app(dict(app.config))
+    with restarted_again.app_context():
+        third = restarted_again.test_client()
+        assert third.get(base, headers=bob).get_json()["exchange"]["status"] == "return_pending"
+        assert third.get(base, headers=bob).get_json()["confirmations"] == saved
+        assert return_action(third, exchange["id"], bob, "accept").get_json()["exchange"]["status"] == "completed"
+        assert db.session.get(Listing, exchange["listing_id"]).status == "available"
+        db.session.remove()
+
+
+@pytest.mark.parametrize("format_name,mime", [("JPEG", "image/jpeg"), ("PNG", "image/png"), ("WEBP", "image/webp")])
+def test_real_supported_image_formats_decode(client, alice, bob, spot, format_name, mime):
+    from PIL import Image
+
+    output = BytesIO()
+    with Image.new("RGB", (3, 3), "green") as image:
+        image.save(output, format=format_name)
+    exchange = reserved_exchange(client, alice, bob, spot)
+    response = photo_upload(client, exchange["id"], alice, data=output.getvalue())
+    assert response.status_code == 201, response.get_json()
+    assert response.get_json()["evidence"]["content_type"] == mime
+
+
+def test_decoded_dimensions_are_bounded_without_allocating_a_large_image(client, alice, bob, spot):
+    import struct
+    import zlib
+
+    data = image_bytes()
+    header = b"IHDR" + struct.pack(">IIBBBBB", 4001, 4001, 8, 2, 0, 0, 0)
+    data = data[:12] + header + struct.pack(">I", zlib.crc32(header)) + data[33:]
+    exchange = reserved_exchange(client, alice, bob, spot)
+    response = photo_upload(client, exchange["id"], bob, data=data)
+    assert response.status_code == 400
+    assert "16 megapixels" in response.get_json()["error"]["message"]
+
+
+def test_completion_rolls_back_if_atomic_release_fails(client, alice, bob, spot, monkeypatch):
+    exchange = pending_return(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], alice, "post_return").status_code == 201
+    assert return_action(client, exchange["id"], bob, "accept").status_code == 200
+    monkeypatch.setattr("server.exchanges.routes.release_listing", lambda *args: False)
+    response = return_action(client, exchange["id"], alice, "accept")
+    assert response.status_code == 409 and response.get_json()["error"]["code"] == "reservation_conflict"
+    detail = client.get(f"/api/exchanges/{exchange['id']}", headers=bob).get_json()
+    assert detail["exchange"]["status"] == "return_pending"
+    returned = [record for record in detail["confirmations"] if record["stage"] == "return"]
+    assert [record["participant_id"] for record in returned] == [exchange["requester_id"]]
+
+
+def test_old_return_retry_cannot_release_a_new_reservation(client, alice, bob, spot):
+    exchange = pending_return(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], alice, "post_return").status_code == 201
+    for headers in (alice, bob):
+        assert return_action(client, exchange["id"], headers, "accept").status_code == 200
+    newer = ready_exchange(client, alice, bob, spot, listing_id=exchange["listing_id"])
+    for headers in (alice, bob):
+        assert accept(client, newer["id"], headers).status_code == 200
+        assert return_action(client, exchange["id"], headers, "accept").status_code == 200
+    item = db.session.get(Listing, exchange["listing_id"])
+    assert item.status == "reserved" and item.active_exchange_id == newer["id"]
+
+
+def test_simultaneous_pickup_confirmations_are_persisted(app, client, alice, bob, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], alice).status_code == 201
+    db.session.remove()
+    barrier = Barrier(2)
+
+    def confirm(headers):
+        with app.test_client() as separate:
+            barrier.wait(timeout=5)
+            return handoff(separate, exchange["id"], headers).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(confirm, headers) for headers in (alice, bob)]
+        assert [future.result(timeout=15) for future in futures] == [200, 200]
+    detail = client.get(f"/api/exchanges/{exchange['id']}", headers=bob).get_json()
+    assert detail["exchange"]["status"] == "on_loan"
+    assert len(detail["confirmations"]) == 2

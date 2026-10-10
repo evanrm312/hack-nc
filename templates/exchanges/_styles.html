@@ -25,6 +25,9 @@
   .exchange-check { display: flex; align-items: start; gap: 8px; margin-top: 12px; }
   .exchange-check input { margin-top: 4px; }
   .exchange-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .exchange-photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .exchange-photos figure { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .exchange-photo { display: block; width: 100%; max-width: 280px; max-height: 220px; object-fit: contain; border-radius: var(--radius); margin: 8px 0; }
   @media (max-width: 700px) {
     .exchange-layout { grid-template-columns: minmax(0, 1fr); }
     .exchange-fields { grid-template-columns: minmax(0, 1fr); }
