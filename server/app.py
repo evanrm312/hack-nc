@@ -58,12 +58,13 @@ def create_app(overrides: dict | None = None) -> Flask:
 
 def _register_cli(app: Flask) -> None:
     @app.cli.command("seed-demo")
-    def seed_demo():
+    @click.option("--allow-supabase-postgres-dev", is_flag=True, help="Explicitly seed the dedicated Supabase development database named postgres; requires APP_ENV=development.")
+    def seed_demo(allow_supabase_postgres_dev: bool):
         """Insert meeting spots, a labeled demo lender, demo inventory, and fixture price ranges."""
         from .seed import seed_demo_data, validate_demo_seed_target
 
         try:
-            validate_demo_seed_target(app.config)
+            validate_demo_seed_target(app.config, allow_supabase_postgres_dev=allow_supabase_postgres_dev)
         except ValueError as exc:
             raise click.ClickException(str(exc)) from exc
 

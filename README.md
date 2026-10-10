@@ -51,8 +51,24 @@ flask --app server.app seed-demo      # meeting spots + labeled demo inventory +
 database ending in `_dev`. It is idempotent. Run migrations before seeding and
 never seed a shared database.
 
-To update an already-seeded **development** database, run `flask --app server.app
-seed-demo` again. It adds the missing `type: "suit"` to both labeled suit rows
+For a **dedicated Supabase development project** whose database is named
+`postgres`, use its Session pooler URL with the `postgresql+psycopg` driver
+and the pooler's project-qualified username in `DATABASE_URL`. Percent-encode
+reserved characters in the database password. After confirming
+`APP_ENV=development` and that no teammates or users rely on the database, run:
+
+```bash
+flask --app server.app db upgrade
+flask --app server.app seed-demo --allow-supabase-postgres-dev
+```
+
+The flag is required on each seed invocation, accepts only a Supabase session
+pooler database named `postgres`, and is rejected in production. It inserts or
+updates only labeled demo rows and does not delete other data.
+
+To update an already-seeded **development** database, repeat the applicable
+`seed-demo` command above (including the flag for Supabase `postgres`). It adds
+the missing `type: "suit"` to both labeled suit rows
 and availability bounds to the existing navy suit row in place. Their IDs,
 other specifications, pickup notes, other listings, and user data remain intact.
 An explicitly set type or date bound is left alone; review that listing if it was

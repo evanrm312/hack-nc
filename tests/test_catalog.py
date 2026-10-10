@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from server.app import create_app
 from server.db import db
 from server.models import Listing
-from server.seed import DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE
+from server.seed import DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE, validate_demo_seed_target
 from tests.conftest import LISTING_BODY, auth
 
 
@@ -75,6 +75,26 @@ def test_demo_seed_requires_dev_target_and_is_idempotent(tmp_path):
     refused = other_app.test_cli_runner().invoke(args=["seed-demo"])
     assert refused.exit_code != 0
     assert "dedicated development database" in refused.output
+
+
+def test_supabase_postgres_seed_requires_explicit_dev_opt_in():
+    target = "postgresql+psycopg://postgres.project:password@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
+    config = {"APP_ENV": "development", "SQLALCHEMY_DATABASE_URI": target, "SUPABASE_URL": "https://project.supabase.co"}
+    with pytest.raises(ValueError, match="dedicated development database"):
+        validate_demo_seed_target(config)
+    validate_demo_seed_target(config, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="APP_ENV=development"):
+        validate_demo_seed_target({**config, "APP_ENV": "production"}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace("/postgres", "/shared")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace(".pooler.supabase.com", ".example.com")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace("postgres.project", "postgres")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace(":5432/", ":6543/")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SUPABASE_URL": "https://different.supabase.co"}, allow_supabase_postgres_dev=True)
 
 
 def test_seeded_suit_matches_dated_interview_request(tmp_path):
