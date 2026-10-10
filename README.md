@@ -85,9 +85,9 @@ pytest -q            # or: python -m pytest -q
 `pytest.ini` puts the project root on the import path. Each test gets a fresh SQLite file, sandbox auth, and a temp upload folder
 (`tests/conftest.py`). Person 1 tests cover auth, listings and ownership,
 requests and sanitized views, reservation atomicity, storage validation, and
-the error shape. `tests/test_matching.py`, `test_normalization.py`,
-`test_pricing.py` (Person 2) and `test_exchanges.py`, `test_reviews.py`
-(Person 4) are empty stubs until those people fill them.
+the error shape. Person 2's normalization and matching tests use mocked Gemini
+responses and synthetic inventory; price appraisal and Person 4's
+exchange/review tests remain stubs.
 
 The migration and persistence tests apply the committed migration to a new
 temporary SQLite file. PostgreSQL validation uses a separate database whose
@@ -109,6 +109,13 @@ Browser session checks (Node.js, no package install):
 ```bash
 node tests/browser_auth.test.cjs
 ```
+
+`POST /api/requests/normalize` returns a validated Gemini proposal when
+`GEMINI_API_KEY` is configured, or an editable manual fallback with unknown
+fields preserved as unknown. `GET /api/requests/{id}/matches` uses deterministic
+checks against available catalog records and requires requester ownership.
+The automated tests mock Gemini; a live call requires an explicit configured
+development key and network access.
 
 ## Auth modes
 

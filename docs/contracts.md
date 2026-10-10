@@ -1,4 +1,4 @@
-# API contracts (frozen scaffold v1)
+# API contracts (v1)
 
 Maintained by Person 1. Propose changes here before changing code that other
 people consume. Every example below is what the scaffold actually returns.
@@ -160,8 +160,11 @@ No `original_text`, no `pickup_windows`, no `use_start`/`use_end`, no precise
 }
 ```
 
-`source` is `gemini` | `manual` | `stub`. Unknown stays `null`. The user edits
-this object before searching; the server stores whatever they confirm.
+`source` is `gemini` when validated Gemini output is available, otherwise
+`manual` with unknown scalar fields set to `null`, empty specification maps,
+and a follow-up explaining that the user must fill in the editable fields.
+The user edits this object before searching; the server stores whatever they
+confirm. Missing or invalid Gemini output never creates fixture data.
 
 ### Exchange
 
@@ -305,8 +308,12 @@ Multipart field `photo` (JPEG/PNG/WebP by magic bytes, ≤ `MAX_UPLOAD_BYTES`).
 ### `POST /api/requests/normalize` (verified)
 
 Body `{"text": "I need a navy suit…"}` →
-`200 {"normalized": NormalizedRequest, "fixture": true|false}`.
-Currently a stub (`source: "stub"`, everything null, one follow-up question).
+`200 {"normalized": NormalizedRequest, "fixture": false}`. Gemini results have
+`source: "gemini"` and are validated before return. Without a key or when the
+provider fails, the editable fallback has `source: "manual"`, unknown fields
+set to `null`, empty specification maps, and a follow-up question. The route
+requires a verified user; the proposed fields are not persisted until the
+user submits `POST /api/requests`.
 
 ### `GET /api/requests` (public)
 
@@ -334,16 +341,61 @@ Partial fields as create; `"status": "cancelled"` to cancel. `409 request_closed
 ```json
 {
   "request_id": "9b3f…",
-  "source": "stub",
-  "fixture": true,
+  "source": "deterministic",
+  "fixture": false,
   "confirmed": [],
-  "needs_confirmation": [{"listing_id": "4a0c…", "mode": null, "score": null, "reasons": [], "shortcomings": ["Matching is not implemented yet (stub); compatibility has not been checked."], "unknown_required": [], "listing": Listing}],
+  "needs_confirmation": [{
+    "listing_id": "4a0c…",
+    "mode": "borrow",
+    "score": 1.0006662225183212,
+    "reasons": [
+      "Listing supports requested mode: borrow.",
+      "Category matches: formalwear.",
+      "Required jacket_size matches: 40R.",
+      "Preferred color matches: navy.",
+      "Rental fee: 1500 cents, within budget 4000 cents.",
+      "Proposed deposit: 20000 cents (100% of 20000 cents item value), separate from rental fee."
+    ],
+    "shortcomings": [
+      "deposit negotiation required: proposed deposit 20000 cents exceeds maximum 8000 cents.",
+      "Availability for requested dates needs confirmation; listing date bounds are unknown."
+    ],
+    "unknown_required": ["deposit_agreement", "availability"],
+    "listing": {
+      "id": "4a0c…",
+      "owner_id": "0f1c…",
+      "owner": {"id": "0f1c…", "display_name": "Member 0f1c6b", "confirmed_email_domain": "unc.edu", "verification_source": "sandbox", "badge": "Sandbox identity (not verified)", "is_demo": true},
+      "title": "Navy suit 40R",
+      "category": "formalwear",
+      "description": "Two-piece, worn twice.",
+      "specifications": {"jacket_size": "40R", "color": "navy"},
+      "condition": "good",
+      "accessories": ["garment bag"],
+      "known_defects": [],
+      "allowed_modes": ["borrow", "sale"],
+      "sale_price_cents": 9000,
+      "rental_fee_cents": 1500,
+      "proposed_item_value_cents": 20000,
+      "collateral_percent": 100,
+      "availability": {"available_from": null, "available_until": null, "notes": "weekday afternoons"},
+      "meeting_spot_ids": ["7d2e…"],
+      "status": "available",
+      "active_exchange_id": null,
+      "public_photo_url": "/media/public/ab/ab12….png",
+      "created_at": "2026-10-10T19:01:00Z",
+      "updated_at": "2026-10-10T19:01:00Z"
+    }
+  }],
   "rejected": []
 }
 ```
 
 Every entry includes the full current `listing`; the route drops any id that
 is not a real available listing. Candidates exclude the requester's own listings.
+Matching uses the request's confirmed owner-view fields and the real catalog
+rows; known incompatibilities appear in `rejected`, while unknown required
+values and unaffordable proposed collateral appear in `needs_confirmation`.
+The example listing has no date bounds, so availability still needs confirmation.
 
 ### `POST /api/requests/{id}/publish` (requester only)
 

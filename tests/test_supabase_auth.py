@@ -64,6 +64,64 @@ def test_confirmed_unc_email_creates_private_profile(supabase_client, monkeypatc
     assert "alice@unc.edu" not in response.get_data(as_text=True).lower()
 
 
+def test_supabase_identity_owns_normalized_request_and_matches_real_catalog(supabase_client, monkeypatch):
+    users = {
+        "owner-token": {"id": "provider-owner", "email": "owner@unc.edu", "email_confirmed_at": "2026-01-01T00:00:00Z"},
+        "requester-token": {"id": "provider-requester", "email": "requester@unc.edu", "email_confirmed_at": "2026-01-01T00:00:00Z"},
+    }
+
+    def fake_urlopen(request, timeout):
+        token = request.get_header("Authorization").removeprefix("Bearer ")
+        return ProviderResponse(json.dumps(users[token]).encode())
+
+    monkeypatch.setattr("server.auth.identity.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    owner = {"Authorization": "Bearer owner-token"}
+    requester = {"Authorization": "Bearer requester-token"}
+
+    listing_response = supabase_client.post("/api/listings", json={
+        "title": "Navy suit 40R", "category": "formalwear", "allowed_modes": ["borrow"],
+        "specifications": {"jacket_size": "40R"}, "rental_fee_cents": 0,
+        "proposed_item_value_cents": 20000, "collateral_percent": 30,
+    }, headers=owner)
+    assert listing_response.status_code == 201
+    listing = listing_response.get_json()["listing"]
+
+    normalized_response = supabase_client.post("/api/requests/normalize", json={"text": "I need a 40R suit"}, headers=requester)
+    assert normalized_response.status_code == 200
+    normalized = normalized_response.get_json()["normalized"]
+    assert normalized_response.get_json()["fixture"] is False
+    assert normalized["source"] == "manual"
+    normalized["category"] = "formalwear"  # user confirms editable fallback fields
+    normalized["required_specifications"] = {"jacket_size": "40R"}
+
+    created = supabase_client.post("/api/requests", json={
+        "original_text": "I need a 40R suit", "normalized": normalized,
+        "modes": ["borrow"], "budget_cents": 1000, "max_deposit_cents": 6000,
+        "requester_id": listing["owner_id"],  # must never claim the listing owner's identity
+    }, headers=requester)
+    assert created.status_code == 201
+    need = created.get_json()["request"]
+    assert need["requester_id"] != listing["owner_id"]
+    url = f"/api/requests/{need['id']}"
+    assert supabase_client.get(url, headers=owner).status_code == 404
+    assert supabase_client.get(url + "/matches", headers=owner).status_code == 403
+    assert supabase_client.post(url + "/publish", headers=owner).status_code == 403
+
+    matches = supabase_client.get(url + "/matches", headers=requester)
+    assert matches.status_code == 200
+    result = matches.get_json()
+    assert result["source"] == "deterministic" and result["fixture"] is False
+    assert [entry["listing_id"] for entry in result["confirmed"]] == [listing["id"]]
+    assert result["confirmed"][0]["listing"]["title"] == listing["title"]
+
+    published = supabase_client.post(url + "/publish", headers=requester)
+    assert published.status_code == 200
+    public_view = supabase_client.get(url, headers=owner).get_json()["request"]
+    assert "original_text" not in public_view and "pickup_windows" not in public_view
+    assert "requester@unc.edu" not in str(public_view)
+
+
 @pytest.mark.parametrize("payload,code", [
     ({"id": "u1", "email": "a@unc.edu", "email_confirmed_at": None}, "email_not_confirmed"),
     ({"id": "u1", "email": "a@unc.edu.evil.com", "email_confirmed_at": "2026-01-01"}, "domain_not_allowed"),
