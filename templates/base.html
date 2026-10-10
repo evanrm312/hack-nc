@@ -1,34 +1,93 @@
 <!doctype html>
-{# Person 3 owns this file (branch p3-marketplace-ui). Person 1 left a minimal
-   shell so pages render. Keep the blocks (title, content, scripts) and the
-   api.js / auth.js includes; everything else is yours. #}
+{# Shared Frutiger Aero shell (Person 3). Every page extends this.
+   Blocks: title, page_id (sets <body data-page>), content, scripts.
+   Keep: #session-status and #nav-sign-in (read by static/js/auth.js),
+   window.CAMPUS_CONFIG, and the api.js -> auth.js -> components.js load order
+   so Person 4's exchanges.js can rely on window.api and window.components. #}
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#8fd6ff">
   <title>{% block title %}Campus Current{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
 </head>
-<body>
-  <main class="shell">
-    <header class="card">
-      <strong>Campus Current</strong>
-      <nav aria-label="Primary">
-        <a href="{{ url_for('pages.home') }}">Home</a> ·
-        <a href="{{ url_for('pages.requests_feed') }}">Public requests</a> ·
-        <a href="{{ url_for('pages.listing_form') }}">New listing</a> ·
-        <a href="{{ url_for('pages.my_exchanges') }}">My exchanges</a> ·
-        <a href="{{ url_for('pages.sign_in') }}" id="nav-sign-in">Sign in</a>
-      </nav>
-      <div id="session-status" aria-live="polite"></div>
+<body data-page="{% block page_id %}{% endblock %}">
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <div class="aero-bubbles" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <div class="shell">
+    <header class="aero-header">
+      <div class="aero-header__inner">
+        <a class="brand" href="{{ url_for('pages.home') }}">
+          <span class="brand__orb" aria-hidden="true"></span>
+          <span>Campus Current</span>
+          <span class="brand__tag">buy · borrow · UNC</span>
+        </a>
+
+        <button class="btn btn--icon nav-toggle" type="button" id="nav-toggle"
+                aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu">
+          <span class="bars" aria-hidden="true"></span>
+        </button>
+
+        <nav aria-label="Primary">
+          <ul class="nav" id="primary-nav">
+            <li><a href="{{ url_for('pages.home') }}">Home</a></li>
+            <li><a href="{{ url_for('pages.requests_feed') }}">Public requests</a></li>
+            <li><a href="{{ url_for('pages.listing_form') }}">New listing</a></li>
+            <li><a href="{{ url_for('pages.my_exchanges') }}">My exchanges</a></li>
+            <li><a href="{{ url_for('pages.sign_in') }}" id="nav-sign-in">Sign in</a></li>
+          </ul>
+        </nav>
+
+        <div class="session" id="session-status" aria-live="polite"></div>
+      </div>
     </header>
-    {% block content %}{% endblock %}
-  </main>
+
+    <main class="shell-main" id="main" tabindex="-1">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="aero-footer">
+      <div class="aero-footer__inner">
+        <span>Reuse what already exists on campus: short-term access, local handoffs.</span>
+        <span>Prototype. Payments and deposits are simulated and labeled as such.</span>
+      </div>
+    </footer>
+  </div>
+
   <script>
     window.CAMPUS_CONFIG = {{ public_config | tojson }};
   </script>
   <script src="{{ url_for('static', filename='js/api.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/components.js') }}"></script>
+  <script>
+    // Shell behavior: mobile nav toggle + current-page marker. Kept inline so it
+    // works on every page regardless of which page script loads afterwards.
+    (function () {
+      var toggle = document.getElementById("nav-toggle");
+      var nav = document.getElementById("primary-nav");
+      if (toggle && nav) {
+        toggle.addEventListener("click", function () {
+          var open = nav.getAttribute("data-open") === "true";
+          nav.setAttribute("data-open", open ? "false" : "true");
+          toggle.setAttribute("aria-expanded", open ? "false" : "true");
+          toggle.setAttribute("aria-label", open ? "Open menu" : "Close menu");
+        });
+      }
+      var here = window.location.pathname.replace(/\/$/, "") || "/";
+      nav && nav.querySelectorAll("a").forEach(function (a) {
+        var path = a.getAttribute("href").replace(/\/$/, "") || "/";
+        if (path === here || (path !== "/" && here.indexOf(path + "/") === 0)) a.setAttribute("aria-current", "page");
+      });
+    })();
+  </script>
+  <script src="{{ url_for('static', filename='js/marketplace.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
