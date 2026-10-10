@@ -191,9 +191,12 @@ development key and network access.
 variable takes precedence. Restart Flask after editing `.env`. For the shared
 Supabase Session pooler, use the URL copied from **Connect → Session pooler**,
 change only the scheme to `postgresql+psycopg://`, and percent-encode reserved
-password characters. A `password authentication failed` response from a
-read-only `SELECT 1` means the `DATABASE_URL` database password or its encoding
-still needs checking; do not run migrations until the connection succeeds.
+password characters. If a read-only `SELECT 1` fails, compare the application's
+effective driver, host, port, database, and username with a working PSQL command
+without logging the password or full URL. An authentication error alone does not
+identify whether the cause is a wrong secret, URL encoding, stale process
+configuration, or another connection setting. Run migrations only after the
+application connection succeeds.
 
 Browser storage is scoped to the exact origin. Start the magic-link flow and
 open its callback on the same scheme, hostname, and port (for example, use

@@ -448,14 +448,14 @@ All require a verified user and, once implemented, a participant check
 |---|---|---|---|---|
 | GET | `/api/exchanges` | — | `{"fixture": true, "exchanges": [Exchange]}` | `{"exchanges": [Exchange + listing summary]}` for the caller |
 | POST | `/api/exchanges` | `{"listing_id", "mode", "source_request_id"?}` | `501` | `201 {"exchange": Exchange, "current_offer": OfferRevision}` |
-| GET | `/api/exchanges/{id}` | — | `{"fixture": true, "simulation_notice", "exchange", "current_offer", "offers", "deposit_status", "participants"}` | same shape, real |
+| GET | `/api/exchanges/{id}` | — | `{"fixture": true, "simulation_notice", "exchange", "current_offer", "offers", "deposit_status", "participants"}` | real `exchange`, `current_offer`, `offers`, `simulation_notice`, `deposit_status`, `participants`, `confirmations`, and `max_upload_bytes` |
 | GET | `/api/exchanges/{id}/messages` | `?after=<iso>` | `{"fixture": true, "messages": [Message]}` | `{"messages": [Message]}` |
 | POST | `/api/exchanges/{id}/messages` | `{"body"}` | `501` | `201 {"message": Message}` |
 | POST | `/api/exchanges/{id}/offers` | OfferRevision terms (no `version`) | `501` | `201 {"offer": OfferRevision, "exchange": Exchange}`; new version resets acceptances |
 | POST | `/api/exchanges/{id}/accept` | `{"version": 2, "lower_deposit_acknowledged": true?}` | `501` | `200 {"exchange", "current_offer"}`; `409 stale_offer` if version ≠ current; `409 reservation_conflict` if the atomic reserve fails; repeat accept is idempotent |
 | GET | `/api/exchanges/{id}/evidence` | — | `{"fixture": true, "evidence": [Evidence]}` | `{"evidence": [Evidence]}` |
 | POST | `/api/exchanges/{id}/evidence` | multipart `photo`, field `stage` | `501` | `201 {"evidence": Evidence}` |
-| GET | `/api/exchanges/{id}/evidence/{evidence_id}` | — | `501` | image bytes, participants only |
+| GET | `/api/exchanges/{id}/evidence/{evidence_id}` | `?preview=1` optional | `501` | image bytes, or JSON `{"data_url": "data:image/jpeg;base64,..."}` for an authenticated preview; participants only |
 | POST | `/api/exchanges/{id}/handoff` | `{"confirm": true, "accept_condition": true}` | `501` | `200 {"exchange"}`; sale → `completed`, loan → `on_loan` after both confirm |
 | POST | `/api/exchanges/{id}/return` | `{"action": "initiate"|"accept"|"issue", "reason"?}` | `501` | `200 {"exchange"}`; `on_loan → return_pending → completed`, or `disputed` |
 | POST | `/api/exchanges/{id}/review` | Review fields | `501` | `201 {"review": Review}` |
@@ -464,6 +464,11 @@ All require a verified user and, once implemented, a participant check
 
 Deposit status values are simulated and labeled:
 `{"state": "simulated_pending"|"simulated_held"|"simulated_released", "label": "Simulated: no real funds are reserved or charged."}`.
+The planned real item detail includes `confirmations` with `stage`
+(`handoff` or `return`), `participant_id`, `condition_acknowledged_at`,
+`confirmed_at`, and `evidence_ids`. `max_upload_bytes` is the server's evidence
+upload limit. Evidence previews remain private and must use the authenticated
+API request; no public URL or storage path is returned.
 
 ### Exchange status rules (enforced in Python)
 
