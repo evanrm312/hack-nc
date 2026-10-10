@@ -27,16 +27,21 @@ user creates a listing; another user can read it; the other user's PATCH is
 
 ### P1-2 Deploy skeleton + Supabase auth/storage — Person 1, `p1-backend`
 
-Status: open. Acceptance: deployed URL serves `/healthz`; `AUTH_MODE=supabase`
+Status: in progress. Automated Supabase Auth adapter and browser lifecycle
+checks pass with mocked responses; production config rejects sandbox auth and
+development secrets. `SupabaseStorage` has mocked adapter checks; local storage
+remains available. Acceptance: deployed URL serves `/healthz`; `AUTH_MODE=supabase`
 magic-link sign-in works with a real `@unc.edu` address (configure SMTP or
 confirm Supabase default sender reaches team addresses); `DATABASE_URL` points
-at Postgres; `flask db upgrade` runs in the release step; records survive a
+at Postgres; `flask db upgrade` runs in a verified deployment step; records survive a
 restart. Implement `SupabaseStorage` or keep `local` with a persistent disk and
 say which.
 
 ### P2-1 normalize_request + match_listings — Person 2, `p2-intelligence`
 
-Status: open. Acceptance: `normalize_request` uses Gemini structured output
+Status: done; normalization and matching merged into `main` in `4e9083e`.
+The later bounded Gemini model fallback (`21d1212`) is included in Person 1's
+PR #2 as `8d872d4`. `normalize_request` uses Gemini structured output
 validated by Pydantic; unknowns stay null; ambiguous dates are flagged and
 resolved in America/New_York with confirmation; Gemini timeout returns an
 editable manual result, not fabricated values. `match_listings` is deterministic
@@ -52,7 +57,7 @@ Status: open. Acceptance: shared Frutiger Aero shell in `base.html` and
 `theme.css`; home request input calls `/api/requests/normalize` then shows the
 editable interpretation and creates the request; results page renders
 confirmed vs needs-confirmation matches with reasons from
-`/api/requests/{id}/matches` (stub returns labeled fixture data now), a genuine
+`/api/requests/{id}/matches` (deterministic matches from real listings), a genuine
 no-match state, and an explicit Publish Request button with the public preview;
 listing form posts to `/api/listings` and uploads a photo; public request feed.
 Keyboard focus, readable contrast, reduced motion, phone width. Reuse
@@ -78,12 +83,22 @@ separate tasks (P4-2, P4-3).
 
 ## Known blockers / limitations of the scaffold
 
-- Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen.
-- `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` but has not
-  been exercised against a real Supabase project.
-- `SupabaseStorage` is an interface only; `STORAGE_BACKEND=local` is the
-  working backend.
-- Gemini, matching, pricing: stubs with labeled fixture output.
+- Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen and
+  its migration/release behavior is unverified.
+- `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` and covered
+  by mocked provider tests, but has not been exercised against a real Supabase
+  project or a real confirmed UNC mailbox. Browser lifecycle checks use a
+  mocked Supabase client.
+- `SupabaseStorage` is implemented and mocked for upload, download, deletion,
+  bucket separation, and private-read gating. The current development Supabase
+  project responds that both configured buckets are missing, so live
+  upload/retrieval remains unverified. `STORAGE_BACKEND=local` remains available.
+- PostgreSQL migration/persistence validation requires a dedicated
+  `TEST_DATABASE_URL` ending in `_test`; none is configured in this environment.
+- Normalization and matching are implemented by Person 2. Price appraisal
+  remains a stub; live Gemini behavior was reported in Person 2's handoff and
+  has not been rechecked in this Person 1 integration run. The dated suit seed
+  gap identified in that handoff is addressed in PR #2.
 - Exchange endpoints: labeled fixture reads, `501` writes.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.

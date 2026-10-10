@@ -10,11 +10,37 @@ Creates (idempotently, keyed by stable auth_subject / labels):
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
+from sqlalchemy.engine import make_url
+
+from .config import PROJECT_ROOT
 from .db import db
 from .models import Listing, MeetingSpot, PriceReference, Profile
 
 DEMO_LENDER_SUBJECT = "sandbox:demo-lender"
+DEMO_SUIT_TITLE = "Navy suit, 40R (demo inventory)"
+DEMO_SUIT_AVAILABILITY = {
+    "available_from": "2026-10-12T12:00:00Z",
+    "available_until": "2026-10-16T22:00:00Z",
+}
+
+
+def validate_demo_seed_target(config) -> None:
+    """Refuse demo inserts outside an explicitly named development database."""
+    if config.get("APP_ENV") != "development":
+        raise ValueError("Demo seed requires APP_ENV=development")
+    url = make_url(config["SQLALCHEMY_DATABASE_URI"])
+    database = url.database or ""
+    if url.get_backend_name() == "postgresql" and database.endswith("_dev"):
+        return
+    if url.get_backend_name() == "sqlite" and database != ":memory:":
+        path = Path(database)
+        if path.resolve() == (PROJECT_ROOT / "var" / "dev.sqlite3").resolve():
+            return
+        if path.stem.endswith("_dev"):
+            return
+    raise ValueError("Demo seed requires a dedicated development database")
 
 MEETING_SPOTS = [
     ("Student Union main lobby", "Pit / Union", "Open 7am-midnight; staffed info desk."),
@@ -51,10 +77,10 @@ def seed_demo_data() -> list[str]:
 
     demo_listings = [
         {
-            "title": "Navy suit, 40R (demo inventory)",
+            "title": DEMO_SUIT_TITLE,
             "category": "formalwear",
             "description": "DEMO INVENTORY for the Campus Current prototype. Two-piece navy suit, 40R jacket, 33x32 trousers.",
-            "specifications": {"jacket_size": "40R", "trouser_waist": 33, "trouser_inseam": 32, "color": "navy"},
+            "specifications": {"type": "suit", "jacket_size": "40R", "trouser_waist": 33, "trouser_inseam": 32, "color": "navy"},
             "condition": "good",
             "accessories": ["garment bag"],
             "known_defects": [],
@@ -63,13 +89,13 @@ def seed_demo_data() -> list[str]:
             "rental_fee_cents": 1500,
             "proposed_item_value_cents": 20000,
             "collateral_percent": 100,
-            "availability": {"available_from": None, "available_until": None, "notes": "Most weekdays after 2pm"},
+            "availability": {**DEMO_SUIT_AVAILABILITY, "notes": "Most weekdays after 2pm for pickup"},
         },
         {
             "title": "Charcoal suit, 46L (demo inventory, intentionally incompatible)",
             "category": "formalwear",
             "description": "DEMO INVENTORY. Oversized 46L suit used to show a rejected match.",
-            "specifications": {"jacket_size": "46L", "trouser_waist": 40, "trouser_inseam": 34, "color": "charcoal"},
+            "specifications": {"type": "suit", "jacket_size": "46L", "trouser_waist": 40, "trouser_inseam": 34, "color": "charcoal"},
             "condition": "fair",
             "accessories": [],
             "known_defects": ["missing one cuff button"],
@@ -88,6 +114,21 @@ def seed_demo_data() -> list[str]:
         if exists is None:
             db.session.add(Listing(owner_id=lender.id, meeting_spot_ids=[s.id for s in spots[:2]], **spec))
             out.append(f"demo listing created: {spec['title']}")
+        else:
+            # Upgrade older demo rows in place. Never replace unrelated fields
+            # or overwrite an explicit type a developer may have customized.
+            specifications = dict(exists.specifications or {})
+            if "type" not in specifications:
+                specifications["type"] = "suit"
+                exists.specifications = specifications
+                out.append(f"demo suit type added: {spec['title']}")
+            if spec["title"] == DEMO_SUIT_TITLE:
+                availability = dict(exists.availability or {})
+                missing_bounds = [key for key in DEMO_SUIT_AVAILABILITY if availability.get(key) is None]
+                if missing_bounds:
+                    availability.update({key: DEMO_SUIT_AVAILABILITY[key] for key in missing_bounds})
+                    exists.availability = availability
+                    out.append("demo navy suit availability dates added")
 
     fixtures = [
         dict(

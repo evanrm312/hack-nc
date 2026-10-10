@@ -11,6 +11,8 @@
 
 (function () {
   const TOKEN_KEY = "campus_current_token";
+  let sessionProvider = null;
+  let invalidateSession = null;
 
   class ApiError extends Error {
     constructor(status, body) {
@@ -27,6 +29,7 @@
     try { return window.localStorage.getItem(TOKEN_KEY); } catch (_) { return null; }
   }
   function setToken(token) {
+    if (getToken() === token) return;
     try {
       if (token) window.localStorage.setItem(TOKEN_KEY, token);
       else window.localStorage.removeItem(TOKEN_KEY);
@@ -34,10 +37,37 @@
     document.dispatchEvent(new CustomEvent("campus:auth-changed"));
   }
 
+  function setSessionProvider(provider, invalidator) {
+    sessionProvider = provider;
+    invalidateSession = invalidator;
+  }
+
+  async function sessionToken() {
+    if (!sessionProvider) return getToken();
+    const token = await sessionProvider();
+    setToken(token || null);
+    return token || null;
+  }
+
+  function isAnonymousRead(method, path) {
+    if (method !== "GET") return false;
+    const route = path.split("?", 1)[0];
+    return route === "/api/health" || route === "/api/meeting-spots" ||
+      /^\/api\/listings(?:\/[^/]+)?$/.test(route) ||
+      /^\/api\/requests(?:\/[^/]+)?$/.test(route) ||
+      route.startsWith("/media/public/");
+  }
+
   async function request(method, path, options) {
     options = options || {};
     const headers = Object.assign({ Accept: "application/json" }, options.headers || {});
-    const token = getToken();
+    let token;
+    try { token = await sessionToken(); }
+    catch (error) {
+      if (!isAnonymousRead(method, path) || !(error instanceof ApiError) ||
+          !["auth_unavailable", "session_expired"].includes(error.code)) throw error;
+      token = null; // public browsing remains available when sign-in is down
+    }
     if (token) headers.Authorization = "Bearer " + token;
 
     let body = options.body;
@@ -52,7 +82,16 @@
     if (text) {
       try { data = JSON.parse(text); } catch (_) { data = null; }
     }
-    if (!response.ok) throw new ApiError(response.status, data);
+    if (!response.ok) {
+      const error = new ApiError(response.status, data);
+      if (response.status === 401 && token && error.code === "invalid_token") {
+        setToken(null);
+        if (invalidateSession) {
+          try { await invalidateSession(); } catch (_) { /* keep the API error */ }
+        }
+      }
+      throw error;
+    }
     return data;
   }
 
@@ -60,6 +99,8 @@
     ApiError,
     getToken,
     setToken,
+    setSessionProvider,
+    sessionToken,
     get: (path) => request("GET", path),
     post: (path, body) => request("POST", path, { body: body === undefined ? {} : body }),
     patch: (path, body) => request("PATCH", path, { body }),

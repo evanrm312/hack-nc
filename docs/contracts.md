@@ -1,4 +1,4 @@
-# API contracts (frozen scaffold v1)
+# API contracts (v1)
 
 Maintained by Person 1. Propose changes here before changing code that other
 people consume. Every example below is what the scaffold actually returns.
@@ -61,7 +61,7 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
   "title": "Navy suit 40R",
   "category": "formalwear",
   "description": "Two-piece, worn twice.",
-  "specifications": {"jacket_size": "40R", "color": "navy"},
+  "specifications": {"type": "suit", "jacket_size": "40R", "color": "navy"},
   "condition": "good",
   "accessories": ["garment bag"],
   "known_defects": [],
@@ -70,7 +70,7 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
   "rental_fee_cents": 1500,
   "proposed_item_value_cents": 20000,
   "collateral_percent": 100,
-  "availability": {"available_from": null, "available_until": null, "notes": "weekday afternoons"},
+  "availability": {"available_from": "2026-10-12T12:00:00Z", "available_until": "2026-10-16T22:00:00Z", "notes": "Most weekdays after 2pm for pickup"},
   "meeting_spot_ids": ["7d2e…"],
   "status": "available",
   "active_exchange_id": null,
@@ -95,14 +95,14 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 ```json
 {
   "id": "9b3f…",
-  "requester_id": "0f1c…",
-  "original_text": "I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow.",
-  "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}, "follow_up_questions": []},
-  "modes": ["borrow", "sale"],
+  "requester_id": "77aa…",
+  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+  "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}, "follow_up_questions": []},
+  "modes": ["borrow"],
   "budget_cents": 4000,
   "max_deposit_cents": 8000,
   "needed_by": "2026-10-14T13:00:00Z",
-  "use_start": "2026-10-13T16:00:00Z",
+  "use_start": "2026-10-13T18:00:00Z",
   "use_end": "2026-10-15T22:00:00Z",
   "pickup_windows": [{"start": "2026-10-13T18:00:00Z", "end": "2026-10-13T20:00:00Z"}],
   "area": "Central campus",
@@ -126,10 +126,10 @@ No `original_text`, no `pickup_windows`, no `use_start`/`use_end`, no precise
 ```json
 {
   "id": "9b3f…",
-  "requester": {"id": "0f1c…", "display_name": "Member 0f1c6b", "confirmed_email_domain": "unc.edu", "verification_source": "sandbox", "badge": "Sandbox identity (not verified)", "is_demo": true},
+  "requester": {"id": "77aa…", "display_name": "Member 77aa", "confirmed_email_domain": "unc.edu", "verification_source": "sandbox", "badge": "Sandbox identity (not verified)", "is_demo": true},
   "category": "formalwear",
-  "modes": ["borrow", "sale"],
-  "required_specifications": {"jacket_size": "40R"},
+  "modes": ["borrow"],
+  "required_specifications": {"type": "suit", "jacket_size": "40R"},
   "preferred_specifications": {"color": "navy"},
   "budget_cents": 4000,
   "needed_by_date": "2026-10-14",
@@ -146,7 +146,7 @@ No `original_text`, no `pickup_windows`, no `use_start`/`use_end`, no precise
   "source": "gemini",
   "modes": ["borrow"],
   "category": "formalwear",
-  "required_specifications": {"jacket_size": "40R"},
+  "required_specifications": {"type": "suit", "jacket_size": "40R"},
   "preferred_specifications": {"color": "navy"},
   "budget_cents": null,
   "max_deposit_cents": null,
@@ -160,8 +160,11 @@ No `original_text`, no `pickup_windows`, no `use_start`/`use_end`, no precise
 }
 ```
 
-`source` is `gemini` | `manual` | `stub`. Unknown stays `null`. The user edits
-this object before searching; the server stores whatever they confirm.
+`source` is `gemini` when validated Gemini output is available, otherwise
+`manual` with unknown scalar fields set to `null`, empty specification maps,
+and a follow-up explaining that the user must fill in the editable fields.
+The user edits this object before searching; the server stores whatever they
+confirm. Missing or invalid Gemini output never creates fixture data.
 
 ### Exchange
 
@@ -255,6 +258,11 @@ Each structured answer is `yes` | `no` | `not_applicable`. `(exchange_id, review
 
 ## Person 1 endpoints
 
+### `GET /api/health` (public)
+
+→ `200 {"status": "ok"}`. This checks HTTP availability only. The existing
+`GET /healthz` route remains available for the deployment check.
+
 ### `GET /api/me` (verified)
 
 → `200 {"profile": Profile}`; `401`/`403` per the auth codes above.
@@ -275,7 +283,7 @@ Body: any Listing fields except `id`, `owner_id`, `owner`, `status`,
 `category`, `allowed_modes`.
 
 ```json
-{"title": "Navy suit 40R", "category": "formalwear", "allowed_modes": ["borrow", "sale"], "sale_price_cents": 9000, "rental_fee_cents": 1500, "proposed_item_value_cents": 20000, "collateral_percent": 100, "specifications": {"jacket_size": "40R"}, "condition": "good", "meeting_spot_ids": ["7d2e…"]}
+{"title": "Navy suit 40R", "category": "formalwear", "allowed_modes": ["borrow", "sale"], "sale_price_cents": 9000, "rental_fee_cents": 1500, "proposed_item_value_cents": 20000, "collateral_percent": 100, "specifications": {"type": "suit", "jacket_size": "40R"}, "condition": "good", "meeting_spot_ids": ["7d2e…"]}
 ```
 
 → `201 {"listing": Listing}`; `400 validation_error` with per-field messages.
@@ -300,8 +308,12 @@ Multipart field `photo` (JPEG/PNG/WebP by magic bytes, ≤ `MAX_UPLOAD_BYTES`).
 ### `POST /api/requests/normalize` (verified)
 
 Body `{"text": "I need a navy suit…"}` →
-`200 {"normalized": NormalizedRequest, "fixture": true|false}`.
-Currently a stub (`source: "stub"`, everything null, one follow-up question).
+`200 {"normalized": NormalizedRequest, "fixture": false}`. Gemini results have
+`source: "gemini"` and are validated before return. Without a key or when the
+provider fails, the editable fallback has `source: "manual"`, unknown fields
+set to `null`, empty specification maps, and a follow-up question. The route
+requires a verified user; the proposed fields are not persisted until the
+user submits `POST /api/requests`.
 
 ### `GET /api/requests` (public)
 
@@ -329,16 +341,64 @@ Partial fields as create; `"status": "cancelled"` to cancel. `409 request_closed
 ```json
 {
   "request_id": "9b3f…",
-  "source": "stub",
-  "fixture": true,
+  "source": "deterministic",
+  "fixture": false,
   "confirmed": [],
-  "needs_confirmation": [{"listing_id": "4a0c…", "mode": null, "score": null, "reasons": [], "shortcomings": ["Matching is not implemented yet (stub); compatibility has not been checked."], "unknown_required": [], "listing": Listing}],
+  "needs_confirmation": [{
+    "listing_id": "4a0c…",
+    "mode": "borrow",
+    "score": 1.0006662225183212,
+    "reasons": [
+      "Listing supports requested mode: borrow.",
+      "Category matches: formalwear.",
+      "Required type matches: suit.",
+      "Required jacket_size matches: 40R.",
+      "Preferred color matches: navy.",
+      "Rental fee: 1500 cents, within budget 4000 cents.",
+      "Proposed deposit: 20000 cents (100% of 20000 cents item value), separate from rental fee.",
+      "Listing availability covers the requested dates."
+    ],
+    "shortcomings": [
+      "deposit negotiation required: proposed deposit 20000 cents exceeds maximum 8000 cents."
+    ],
+    "unknown_required": ["deposit_agreement"],
+    "listing": {
+      "id": "4a0c…",
+      "owner_id": "0f1c…",
+      "owner": {"id": "0f1c…", "display_name": "Member 0f1c6b", "confirmed_email_domain": "unc.edu", "verification_source": "sandbox", "badge": "Sandbox identity (not verified)", "is_demo": true},
+      "title": "Navy suit 40R",
+      "category": "formalwear",
+      "description": "Two-piece, worn twice.",
+      "specifications": {"type": "suit", "jacket_size": "40R", "color": "navy"},
+      "condition": "good",
+      "accessories": ["garment bag"],
+      "known_defects": [],
+      "allowed_modes": ["borrow", "sale"],
+      "sale_price_cents": 9000,
+      "rental_fee_cents": 1500,
+      "proposed_item_value_cents": 20000,
+      "collateral_percent": 100,
+      "availability": {"available_from": "2026-10-12T12:00:00Z", "available_until": "2026-10-16T22:00:00Z", "notes": "Most weekdays after 2pm for pickup"},
+      "meeting_spot_ids": ["7d2e…"],
+      "status": "available",
+      "active_exchange_id": null,
+      "public_photo_url": "/media/public/ab/ab12….png",
+      "created_at": "2026-10-10T19:01:00Z",
+      "updated_at": "2026-10-10T19:01:00Z"
+    }
+  }],
   "rejected": []
 }
 ```
 
 Every entry includes the full current `listing`; the route drops any id that
 is not a real available listing. Candidates exclude the requester's own listings.
+Matching uses the request's confirmed owner-view fields and the real catalog
+rows; known incompatibilities appear in `rejected`, while unknown required
+values and unaffordable proposed collateral appear in `needs_confirmation`.
+The example listing covers the requested dates. It remains in
+`needs_confirmation` solely because its proposed $200 deposit exceeds the
+requester's $80 maximum; the lender and borrower must negotiate an agreement.
 
 ### `POST /api/requests/{id}/publish` (requester only)
 
@@ -418,9 +478,17 @@ def evaluate_price(price_cents: int, reference: dict | None) -> dict:
   caller commits.
 - `server.storage.get_storage().save(scope, stream, max_bytes) -> StoredFile`,
   `.send(scope, path, content_type)`, `.delete(scope, path)`;
-  `authorize_private_read(viewer_id, participant_ids)`.
+  `authorize_private_read(viewer_id, participant_ids)`. `scope` is `public` for
+  listing photos and `private` for evidence; Supabase uses distinct buckets.
+  Call `authorize_private_read` after loading the evidence's exchange and its
+  participants, then `send("private", ...)` in the same Flask request. The
+  adapter refuses private `send` without that check and never returns a signed
+  evidence URL. The exchange route must still verify the requested evidence
+  belongs to the authorized exchange.
 - `server.validation.json_body()`, `FieldErrors`, `money_cents`, `percent`,
   `string`, `choice_list`, `datetime_utc`, `json_object`.
 - `server.errors.ApiError(status, code, message, fields)`.
 - Browser: `window.api.get/post/patch/upload`, `api.getToken/setToken`,
-  `api.formatCents`, `api.formatTime`; errors are `api.ApiError {status, code, fields}`.
+  `api.sessionToken()`, `api.formatCents`, `api.formatTime`; errors are
+  `api.ApiError {status, code, fields}`. API calls await the current Supabase
+  session on every page; `getToken()` is only a synchronous snapshot.
