@@ -79,14 +79,16 @@ empty list `{exchanges: []}`, missing exchange reads/writes `404`, and invalid
 create JSON `400 validation_error`. Existing Person 4 tests cover these routes'
 privacy/state rules. The shared test was not edited.
 
-Supabase storage remains Person 1's unimplemented backend. Local storage and
-labeled sandbox auth were used here. PostgreSQL and real Supabase sessions were
-not exercised. Person 2 matching/pricing and Person 3 marketplace work remain
+Latest `main` includes Person 1's Supabase storage adapter. The browser rehearsals
+used local storage and labeled sandbox auth; live PostgreSQL and Supabase sessions
+were not exercised. Person 2 matching/pricing and Person 3 marketplace work remain
 outside this task.
 
 ## Preview and manual rehearsal
 
-Use README setup. This session's temporary Pillow install works with:
+Use README setup. The preview explicitly selects `APP_ENV=development` so its
+sandbox remains compatible with the shared production configuration guard.
+This session's temporary Pillow install works with:
 
 ```bash
 PYTHONPATH=/tmp/campus-current-images .venv/bin/python -m server.exchanges.preview --port 5002 --data-dir /tmp/campus-current-p4-lifecycle-preview
@@ -135,8 +137,7 @@ The default preview data directory is `var/exchange-preview`.
 `tests/test_exchanges.py`; and this document.
 
 Pre-existing edits in `migrations/env.py`, `server/models/exchange.py`, and the
-untracked file named `ervation"` were preserved. No commit, push, deployment,
-or merge was performed.
+untracked file named `ervation"` were preserved.
 
 ## Checks actually run
 
@@ -164,3 +165,15 @@ or merge was performed.
   before the successful complete run.
 - Screenshots in `/tmp/campus-current-p4-lifecycle-artifacts/` were captured;
   the return-pending phone and disputed desktop views were visually inspected.
+
+## Pull request integration checks
+
+An isolated checkout combining `main` at `5523e45` with the Person 4 files and
+the preview development-setting fix was tested without changing the shared
+working files. With the temporary Pillow installation, the full Python suite
+reported **260 passed, 1 failed, 1 skipped**. The failure is the obsolete shared
+fixture/stub test described above. JavaScript syntax and Git whitespace checks
+passed. An actual browser check against the combined checkout verified offer
+revision updates, Alice's acceptance appearing for Bob after about five seconds,
+and both sessions reaching Reserved after mutual acceptance. It also reproduced
+the shared login across two normal tabs and reported no JavaScript page errors.

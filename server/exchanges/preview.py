@@ -20,6 +20,7 @@ from ..seed import seed_demo_data
 def create_preview_app(data_dir: Path):
     data_dir = data_dir.resolve()
     app = create_app({
+        "APP_ENV": "development",
         "AUTH_MODE": "sandbox",
         "SANDBOX_USERS": ["alice@unc.edu", "bob@unc.edu", "charlie@unc.edu"],
         "ALLOWED_EMAIL_DOMAIN": "unc.edu",
