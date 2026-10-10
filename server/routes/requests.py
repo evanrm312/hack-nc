@@ -1,6 +1,7 @@
 """Need requests.
 
-    POST  /api/requests/normalize        verified; calls Person 2 normalize_request (stub now)
+    POST  /api/requests/normalize        verified; calls Person 2 normalize_request
+    POST  /api/requests/normalize-photo  verified; proposes fields from a reference photo
     GET   /api/requests                  public feed of published requests (sanitized),
                                          or ?mine=1 for the caller's own (full)
     POST  /api/requests                  verified; requester = caller
@@ -17,7 +18,7 @@ from flask import Blueprint, current_app, jsonify, request
 from ..auth import current_profile, optional_user, require_verified_user
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
-from ..intelligence import match_listings, normalize_request
+from ..intelligence import ReferenceImageError, match_listings, normalize_reference_image, normalize_request
 from ..models import LISTING_MODES, Listing, NeedRequest
 from ..validation import FieldErrors, choice_list, datetime_utc, json_body, json_object, money_cents, string
 
@@ -97,6 +98,29 @@ def normalize():
     errors.raise_if_any()
     result = normalize_request(text, utcnow(), current_app.config["DISPLAY_TIMEZONE"])
     return jsonify({"normalized": result, "fixture": result.get("source") == "stub"})
+
+
+@bp.post("/api/requests/normalize-photo")
+@require_verified_user
+def normalize_photo():
+    errors = FieldErrors()
+    photo = request.files.get("photo")
+    if photo is None:
+        errors.add("photo", "required")
+    text = string(request.form.get("text"), "text", errors, max_len=4000)
+    errors.raise_if_any()
+
+    max_bytes = min(current_app.config["MAX_UPLOAD_BYTES"], 5 * 1024 * 1024)
+    image_bytes = photo.stream.read(max_bytes + 1)
+    if len(image_bytes) > max_bytes:
+        raise ApiError(413, "payload_too_large", "Reference image exceeds the upload limit")
+    try:
+        result = normalize_reference_image(
+            image_bytes, photo.mimetype, utcnow(), current_app.config["DISPLAY_TIMEZONE"], text
+        )
+    except ReferenceImageError as err:
+        raise ApiError(err.status, err.code, str(err)) from err
+    return jsonify({"normalized": result, "fixture": False})
 
 
 @bp.get("/api/requests")

@@ -315,6 +315,37 @@ set to `null`, empty specification maps, and a follow-up question. The route
 requires a verified user; the proposed fields are not persisted until the
 user submits `POST /api/requests`.
 
+### `POST /api/requests/normalize-photo` (verified)
+
+Send `multipart/form-data` with `photo` (required, nonempty JPEG, PNG, or WebP)
+and `text` (optional, at most 4000 characters). The declared MIME type must match
+the image signature. The server reads at most `min(MAX_UPLOAD_BYTES, 5 MiB) + 1`
+bytes and rejects a larger photo. For example:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/requests/normalize-photo \
+  -H 'Authorization: Bearer sandbox:alice@unc.edu' \
+  -F 'photo=@reference.png;type=image/png' \
+  -F 'text=I want to borrow something like this.'
+```
+
+→ `200 {"normalized": NormalizedRequest, "fixture": false}`. A validated Gemini
+proposal has `source: "gemini"`; provider or validation failure returns the
+editable all-unknown `source: "manual"` result with the supplied text. The
+response is a proposal only: the photo is not stored and no request or listing
+is created or changed. Missing `photo` or text over 4000 characters returns
+`400 validation_error` with `error.fields`; empty bytes return `400 invalid_image`;
+unsupported MIME or signature returns `400 unsupported_image`; an oversized
+photo returns `413 payload_too_large`. All errors use the shared API envelope.
+
+For image-only input, `normalized.original_text` is `""` and `modes` is `null`.
+Before `POST /api/requests`, the user must confirm or edit visual proposals,
+enter a nonempty `original_text` and select at least one mode, then supply the
+required request fields. Visual preferences affect ranking; they do not prove
+required compatibility. Submit the confirmed `normalized` object plus top-level
+`modes`, budget and deposit limits, dates, and area as appropriate. Matching
+continues through `GET /api/requests/{id}/matches`.
+
 ### `GET /api/requests` (public)
 
 → `200 {"requests": [NeedRequest public view], "view": "public"}` — only
