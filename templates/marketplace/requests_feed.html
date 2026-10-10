@@ -1,11 +1,38 @@
 {% extends "base.html" %}
-{# Person 3 owns templates/marketplace/. Stub created by Person 1. #}
+{# Public request feed: GET /api/requests (sanitized public view, open +
+   public only). Anyone can browse; "I have this" is a placeholder for
+   Person 4's exchange flow. Behavior in static/js/marketplace.js (page
+   "requests-feed"). #}
 {% block title %}Public requests · Campus Current{% endblock %}
+{% block page_id %}requests-feed{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Public requests</h1>
-  <p>Stub. Person 3 renders the sanitized public feed from
-     <code>GET /api/requests</code> (no precise schedules or contact details are
-     included in that response).</p>
+<section class="card" aria-labelledby="feed-heading">
+  <div class="section__head">
+    <h1 id="feed-heading" style="margin:0">People looking for an item</h1>
+    <a class="btn btn--sm btn--primary" href="{{ url_for('pages.home') }}">Post your own request</a>
+  </div>
+  <p class="lede">Open requests from UNC members. Only the item, buy or borrow, the day it is needed by,
+    and a campus area are shown. Exact times and contact details stay private.</p>
+
+  <form class="feed-filters" id="feed-filters" aria-label="Filter requests">
+    <div class="field" style="margin:0">
+      <label class="field__label" for="filter-mode"><span>Buy or borrow</span></label>
+      <select id="filter-mode" name="mode">
+        <option value="">Any</option>
+        <option value="borrow">Wants to borrow</option>
+        <option value="sale">Wants to buy</option>
+      </select>
+    </div>
+    <div class="field" style="margin:0">
+      <label class="field__label" for="filter-area"><span>Campus area</span></label>
+      <select id="filter-area" name="area">
+        <option value="">Any area</option>
+      </select>
+    </div>
+    <div class="feed-filters__count muted" id="feed-count" aria-live="polite"></div>
+  </form>
 </section>
+
+<div id="feed-auth" class="notice notice--info" role="status" hidden></div>
+<div id="feed" class="grid" aria-live="polite" aria-busy="true"></div>
 {% endblock %}

@@ -1,13 +1,37 @@
 {% extends "base.html" %}
-{# Person 3 owns templates/marketplace/. Stub created by Person 1. #}
+{# Listing form: POST /api/listings, then POST /api/listings/{id}/photo, then
+   redirect to /listings/{id}. Meeting spots from GET /api/meeting-spots.
+   Behavior in static/js/marketplace.js (page "listing-form"). #}
 {% block title %}New listing · Campus Current{% endblock %}
+{% block page_id %}listing-form{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>List an item</h1>
-  <p>Stub. Person 3 builds the listing form here: title, category, photo
-     (<code>POST /api/listings/{id}/photo</code>), specifications, known defects and
-     accessories, allowed modes, asking sale price and/or rental fee, proposed item
-     value, deposit percentage, availability, meeting spots
-     (<code>GET /api/meeting-spots</code>). Submit with <code>POST /api/listings</code>.</p>
+<section class="card card--hero" aria-labelledby="listing-form-heading">
+  <h1 id="listing-form-heading">List an item</h1>
+  <p class="lede">Offer something you already own for sale, to borrow, or both. Be specific about
+    size, model, condition, and what is included so matches are accurate.</p>
+
+  <div id="auth-gate" class="notice notice--info" role="status" hidden>
+    <div>
+      <strong>Sign in to post.</strong> Listing an item needs a confirmed @{{ public_config.allowed_email_domain }} email.
+      <a href="{{ url_for('pages.sign_in') }}">Sign in</a>.
+    </div>
+  </div>
+
+  <div class="simulated-notice" role="note">
+    <div><strong>Simulated money.</strong> Deposits and payments in this prototype are simulated.
+      No real funds are ever held, reserved, or charged. All amounts are entered in US dollars.</div>
+  </div>
+
+  <form id="listing-form" novalidate>
+    <div id="listing-fields"></div>
+    <div id="listing-error" class="notice notice--error" role="alert" hidden></div>
+    <div class="cluster cluster--between">
+      <div class="cluster">
+        <button type="submit" class="btn btn--leaf" id="listing-submit">Publish listing</button>
+        <a class="btn btn--ghost" href="{{ url_for('pages.home') }}">Cancel</a>
+      </div>
+      <span class="muted" id="listing-status" aria-live="polite"></span>
+    </div>
+  </form>
 </section>
 {% endblock %}
