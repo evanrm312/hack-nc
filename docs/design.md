@@ -169,8 +169,58 @@ components.isAuthError(err);        // 401/403
 ```
 
 `.skeleton` for placeholder blocks, `.spinner`, `.circulate` /
-`components.circulationMark(spin)` for the completed-exchange mark (static
+`components.circulationMark(spin)` for a tiny completed-exchange icon (static
 under reduced motion).
+
+## Circulation animation (completed exchange)
+
+`components.circulation()` is the small Frutiger Aero scene from the brief: a
+glossy bubble carries an item from person A (sky) to person B (leaf) along a
+dotted arc, pops with a ring, and the item settles with a shimmer and two
+sparkles. Plain CSS keyframes on inline SVG, 2.6 s, plays **once** (no loop).
+Under `prefers-reduced-motion: reduce` every keyframe is disabled and the
+still end state is shown (item already with person B, faint bubble, sparkles
+on). It is its own box and must never be placed behind text or form fields.
+
+Declarative (easiest; mounted automatically on load):
+
+```html
+<div data-circulation data-autoplay="true" data-replay="true" data-size="lg"
+     aria-label="Exchange completed: the item moved to its new user"></div>
+```
+
+Programmatic (Person 4's "exchange completed" screen):
+
+```js
+const scene = components.circulation({ label: "Exchange completed", autoplay: false, replayButton: false, size: "lg" });
+completedCard.prepend(scene.root);   // put it in its own row above the heading, not behind text
+scene.play();                        // call when the completed status arrives; safe to call again
+```
+
+Options: `label` (accessible name, the root is `role="img"`), `autoplay`
+(default true), `replayButton` (adds a small ghost "Replay" button; hidden
+under reduced motion), `size` (`"sm"` 140px, default 200px, `"lg"` 280px).
+`components.mountCirculations()` mounts any `[data-circulation]` added after
+load. On the home page it sits above the headline (`.hero-mark`), plays once
+on load, and has a Replay button.
+
+Testing reduced motion: Chrome DevTools → Rendering panel → "Emulate CSS
+media feature prefers-reduced-motion: reduce", or Windows Settings →
+Accessibility → Visual effects → Animation effects off, then reload.
+
+## Public request feed (implemented)
+
+`/requests` (page `requests-feed`): `GET /api/requests` already returns only
+`visibility=public` + `status=open` in the sanitized shape, so the page shows
+exactly those fields: category and specs, buy/borrow, `needed_by_date`
+(formatted as a plain date, never shifted by time zone), campus area, budget,
+requester display name and server badge, and the posting time in Eastern.
+Filters (buy/borrow, campus area built from the loaded data) are client-side.
+Signed-in users see a disabled placeholder **I have this** (Person 4 wires it
+to `POST /api/exchanges`); the requester sees "Your request" and a link to
+their results; anonymous visitors see "Sign in to respond". States: loading,
+"No open requests right now", "No requests match these filters" with a clear
+button, and an error with retry.
 
 ## Accessibility rules
 
@@ -215,7 +265,51 @@ under reduced motion).
    - **Needs confirmation before it counts**: a dashed yellow section
      (`.section--needs`, `.card--needs`) so these never read as confirmed;
    - **Excluded listings**: collapsed `<details>` with each shortcoming;
-   - empty state when nothing is confirmed, loading spinner, error state with
-     retry. Publishing a no-match request is the next milestone.
-5. Access: the results page needs the requester's token. 401 → sign-in
+   - loading spinner, error state with retry.
+5. No-match state (`.no-match`): shown only when both `confirmed` and
+   `needs_confirmation` are empty. It lists the stored requirements as chips
+   (`.chips`/`.chip`), summarizes the matcher's own exclusion reasons from
+   `rejected` (never invented), and offers an explicit **Publish Request**
+   button. Clicking opens a `components.dialog` preview with two
+   `.privacy-list` blocks: "Will be public" (who, category, required and
+   preferred details, buy/borrow, budget, needed-by date only, campus area,
+   mirroring the server's public view) and "Stays private" (original wording,
+   exact time, borrowing dates, pickup windows, deposit limit, contact).
+   "Publish now" calls `POST /api/requests/{id}/publish` once (a `publishing`
+   guard blocks repeat clicks), then shows a success notice with a link to
+   `/requests` and the exact `public_preview` the server returned. Errors stay
+   inside the dialog with both buttons re-enabled. An already-public request
+   shows the success state instead of the button.
+   Dev aid: `/results/{id}?preview=no-match` renders the no-match state with
+   real results hidden and a visible "Preview mode" notice, because the stub
+   matcher never returns an empty result.
+6. Access: the results page needs the requester's token. 401 → sign-in
    notice; 403/404 or a non-owner view → "This request is not available".
+
+## Listing form and detail (implemented)
+
+- `/listings/new` (page `listing-form`): title and category (required),
+  description, condition, photo (JPEG/PNG/WebP ≤ 5 MB, client preview),
+  specifications (key/value rows), accessories and known defects (one per
+  line), modes as pills (`sale`, `borrow`), and only the matching term groups
+  are shown. Sale: asking price (required). Borrow: rental fee (blank or 0 =
+  explicit free loan), agreed item value (required), deposit percent (number
+  input + `input.range` slider, default 100) with a live `.kv-list` showing
+  the deposit in dollars and percent and the amount not covered, plus a
+  warning when below full value; availability dates and notes. Meeting spots
+  are pills from `GET /api/meeting-spots` with loading/empty/error states.
+  Submit: client validation → `POST /api/listings` → `POST
+  /api/listings/{id}/photo` (if a file was chosen) → `/listings/{id}?created=1`
+  (or `?photo=failed` when only the upload failed). A `submitting` guard and
+  `aria-busy` block double submits; server `validation_error.fields` map back
+  onto inputs. A simulated-money notice sits above the form.
+- `/listings/{id}` (page `listing-detail`): `.detail-grid` with photo (or
+  "No photo provided"), badges (modes, status, demo account, "Your listing"),
+  title, condition, description, specifications, accessories, defects; a
+  Terms card listing sale price, rental fee, agreed item value, proposed
+  deposit (dollars and percent) and amount not covered on separate rows, plus
+  availability and the simulation notice; meeting spots resolved from
+  `/api/meeting-spots`; owner card with the server's badge text and a disabled
+  placeholder **Start exchange** button with a hint (Person 4 wires it to
+  `POST /api/exchanges`). States: loading, 404 "Listing not found", error with
+  retry.

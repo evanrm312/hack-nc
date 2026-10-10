@@ -437,6 +437,80 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  // ----------------------------------------------------- circulation scene
+  // circulation({label, autoplay, replayButton, size}) -> {root, play(), stop()}
+  // A short (2.6 s, plays once) CSS/SVG animation: a glossy bubble carries an
+  // item from one person to another and settles with a shimmer. Under
+  // prefers-reduced-motion the still end state is shown (CSS handles it).
+  // Any element with [data-circulation] is mounted automatically on load, so
+  // Person 4 can write <div data-circulation data-autoplay="true"></div> on
+  // the "exchange completed" screen, or call components.circulation() and
+  // append .root, then .play() when the completion arrives.
+  const CIRCULATION_SVG =
+    '<svg viewBox="0 0 200 84" xmlns="http://www.w3.org/2000/svg" focusable="false">' +
+    '<defs>' +
+    '<linearGradient id="circ-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd6ff"/><stop offset="1" stop-color="#0b6fb8"/></linearGradient>' +
+    '<linearGradient id="circ-leaf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9be4a5"/><stop offset="1" stop-color="#2e8b3f"/></linearGradient>' +
+    '<radialGradient id="circ-bubble" cx="0.35" cy="0.3" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/><stop offset="0.45" stop-color="#ffffff" stop-opacity="0.25"/><stop offset="1" stop-color="#8fd6ff" stop-opacity="0.55"/></radialGradient>' +
+    '<linearGradient id="circ-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
+    '</defs>' +
+    '<path class="circ__path" d="M34 46 C 70 10, 130 10, 166 46" fill="none" stroke="#bfe7ff" stroke-width="2" stroke-dasharray="4 5"/>' +
+    '<g class="circ__person circ__person--a"><circle cx="30" cy="40" r="9" fill="url(#circ-sky)"/><path d="M12 72 c0 -14 36 -14 36 0 z" fill="url(#circ-sky)"/><circle cx="27" cy="37" r="3" fill="#fff" opacity="0.8"/></g>' +
+    '<g class="circ__person circ__person--b"><circle cx="170" cy="40" r="9" fill="url(#circ-leaf)"/><path d="M152 72 c0 -14 36 -14 36 0 z" fill="url(#circ-leaf)"/><circle cx="167" cy="37" r="3" fill="#fff" opacity="0.8"/></g>' +
+    '<g class="circ__carrier">' +
+    '<circle class="circ__bubble" cx="34" cy="44" r="15" fill="url(#circ-bubble)" stroke="#fff" stroke-opacity="0.9" stroke-width="1.5"/>' +
+    '<g class="circ__item"><rect x="27" y="38" width="14" height="12" rx="2.5" fill="url(#circ-leaf)" stroke="#1d5f2a" stroke-width="1"/><path d="M27 43 h14" stroke="#e9f9ea" stroke-width="1.5"/><path d="M34 38 v12" stroke="#e9f9ea" stroke-width="1.5"/></g>' +
+    '<circle class="circ__ring" cx="34" cy="44" r="15" fill="none" stroke="#fff" stroke-width="2"/>' +
+    '</g>' +
+    '<rect class="circ__shine" x="148" y="24" width="18" height="52" fill="url(#circ-shine)" transform="skewX(-18)"/>' +
+    '<g class="circ__sparkle"><path d="M184 18 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="#fff"/><path d="M14 20 l1.5 3.5 3.5 1.5 -3.5 1.5 -1.5 3.5 -1.5 -3.5 -3.5 -1.5 3.5 -1.5 z" fill="#fff"/></g>' +
+    '</svg>';
+
+  function circulation(opts) {
+    opts = opts || {};
+    const label = opts.label || "An item passing from one person to another";
+    const root = el("div", { className: "circ" + (opts.size === "sm" ? " circ--sm" : opts.size === "lg" ? " circ--lg" : ""), role: "img", "aria-label": label });
+    // Static, trusted markup; gradient ids are made unique per instance so
+    // several scenes can share one page without duplicate ids.
+    const prefix = nextId("circ");
+    root.innerHTML = CIRCULATION_SVG.replace(/circ-(sky|leaf|bubble|shine)/g, prefix + "-$1");
+    const api = {
+      root,
+      play() {
+        root.classList.remove("circ--play");
+        void root.offsetWidth; // restart the CSS animations
+        root.classList.add("circ--play");
+      },
+      stop() { root.classList.remove("circ--play"); },
+    };
+    if (opts.replayButton) {
+      const btn = el("button", { className: "btn btn--ghost btn--sm circ__replay", type: "button", text: opts.replayLabel || "Replay" , onClick: api.play });
+      const wrap = el("div", { className: "circ-wrap" }, root, btn);
+      api.wrap = wrap;
+    }
+    // Deferred so the caller can attach the element first. setTimeout rather
+    // than requestAnimationFrame: rAF never fires in hidden/non-painting tabs.
+    if (opts.autoplay !== false) setTimeout(api.play, 0);
+    return api;
+  }
+
+  function mountCirculations() {
+    document.querySelectorAll("[data-circulation]").forEach((host) => {
+      if (host.dataset.mounted) return;
+      host.dataset.mounted = "true";
+      const c = circulation({
+        label: host.getAttribute("aria-label") || host.dataset.label,
+        autoplay: host.dataset.autoplay !== "false",
+        replayButton: host.dataset.replay === "true",
+        size: host.dataset.size,
+      });
+      host.removeAttribute("aria-label");
+      host.append(c.wrap || c.root);
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountCirculations);
+  else mountCirculations();
+
   // Circulation mark for completed exchanges (static under reduced motion via CSS).
   function circulationMark(spin) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -458,6 +532,6 @@
     state, notice, simulationNotice, toast,
     errorMessage, isAuthError,
     dollarsToCents, centsToDollars, localToIso, isoToLocal,
-    circulationMark,
+    circulation, mountCirculations, circulationMark,
   };
 })();
