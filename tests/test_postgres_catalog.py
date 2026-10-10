@@ -9,8 +9,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from server.app import create_app
-from server.db import db
-from server.models import Listing, Profile
+from tests.conftest import LISTING_BODY, auth
 
 
 def _isolated_postgres_target():
@@ -31,7 +30,7 @@ def _isolated_postgres_target():
     return target
 
 
-def test_postgres_migration_and_persistence():
+def test_postgres_migration_and_persistence(tmp_path):
     target = _isolated_postgres_target()
     schema = f"m2_test_{uuid4().hex}"
     admin_engine = create_engine(target)
@@ -47,27 +46,23 @@ def test_postgres_migration_and_persistence():
             "SQLALCHEMY_ENGINE_OPTIONS": {
                 "connect_args": {"options": f"-csearch_path={schema}"}
             },
+            "AUTH_MODE": "sandbox",
+            "SANDBOX_USERS": ["alice@unc.edu"],
+            "UPLOAD_DIR": str(tmp_path / "uploads"),
         }
         app = create_app(config)
         with app.app_context():
             upgrade()
-            owner = Profile(id="postgres-test-owner", display_name="PG test")
-            listing = Listing(
-                owner=owner,
-                title="PostgreSQL test listing",
-                category="Test",
-                mode="sale",
-                sale_price_cents=100,
-                status="active",
-            )
-            db.session.add(listing)
-            db.session.commit()
-            listing_id = listing.id
+        created = app.test_client().post(
+            "/api/listings", json=LISTING_BODY, headers=auth("alice@unc.edu")
+        )
+        assert created.status_code == 201, created.get_json()
+        listing_id = created.get_json()["listing"]["id"]
 
         fresh_app = create_app(config)
         response = fresh_app.test_client().get(f"/api/listings/{listing_id}")
         assert response.status_code == 200
-        assert response.get_json()["title"] == "PostgreSQL test listing"
+        assert response.get_json()["listing"]["title"] == LISTING_BODY["title"]
     finally:
         if schema_created:
             with admin_engine.begin() as connection:

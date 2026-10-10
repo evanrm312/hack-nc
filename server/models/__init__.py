@@ -1,5 +1,41 @@
-"""Shared persistence models."""
+"""Shared database models. Owned by Person 1.
 
-from server.models.catalog import Listing, Profile
+Propose schema changes to Person 1 rather than editing concurrently; every
+change here needs a migration under migrations/versions/.
+"""
 
-__all__ = ["Listing", "Profile"]
+from .exchange import (
+    EVIDENCE_STAGES,
+    EXCHANGE_MODES,
+    EXCHANGE_STATUSES,
+    Evidence,
+    Exchange,
+    Message,
+    OfferRevision,
+)
+from .listing import LISTING_MODES, LISTING_STATUSES, Listing
+from .meeting_spot import MeetingSpot
+from .need_request import REQUEST_STATUSES, REQUEST_VISIBILITIES, NeedRequest
+from .price_reference import PriceReference
+from .profile import Profile
+from .review import Review
+
+__all__ = [
+    "Profile",
+    "Listing",
+    "NeedRequest",
+    "Exchange",
+    "OfferRevision",
+    "Message",
+    "Evidence",
+    "Review",
+    "MeetingSpot",
+    "PriceReference",
+    "LISTING_MODES",
+    "LISTING_STATUSES",
+    "REQUEST_STATUSES",
+    "REQUEST_VISIBILITIES",
+    "EXCHANGE_MODES",
+    "EXCHANGE_STATUSES",
+    "EVIDENCE_STAGES",
+]

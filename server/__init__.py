@@ -1,1 +1,1 @@
-"""Campus Current backend package."""
+"""Campus Current Flask backend package."""

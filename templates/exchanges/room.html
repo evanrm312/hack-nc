@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{# Person 4 owns templates/exchanges/. Stub created by Person 1. #}
+{% block title %}Exchange · Campus Current{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Exchange room</h1>
+  <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
+  <p>Stub for exchange <code>{{ exchange_id }}</code>. Person 4 renders messages
+     (<code>GET/POST /api/exchanges/{id}/messages</code>, polled every few seconds),
+     the current offer revision with fee, agreed value, deposit, uncovered amount,
+     the lender's lower-deposit acknowledgment, meeting selection, and both
+     acceptances (<code>/offers</code>, <code>/accept</code>).</p>
+</section>
+{% endblock %}

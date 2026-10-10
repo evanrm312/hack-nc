@@ -1,73 +1,137 @@
 # Campus Current
 
-M2 provides a public, read-only listing catalog backed by Flask-SQLAlchemy. `GET /api/health` checks HTTP availability only; it does not check the database. Catalog requests return a JSON 503 when no database is configured or reachable.
+Campus exchange for UNC: describe what you need, find a compatible item to buy
+or borrow, agree terms, and coordinate a campus handoff. See `BUILD_BRIEF.md`
+for the plan, `AGENTS.md` for team rules, `docs/contracts.md` for the API, and
+`docs/tasks.md` for who is doing what.
 
-## Local setup
+Stack: Flask + SQLAlchemy + Flask-Migrate (Alembic), Jinja + vanilla JS,
+pytest. SQLite locally, PostgreSQL (Supabase) when deployed. Gemini is called
+only from Flask (Person 2).
 
-Run from the repository root with Python 3.14:
+## Setup
 
-```sh
+Built on Python 3.14; 3.11+ should work with the pinned requirements.
+
+PowerShell (Windows):
+
+```powershell
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+bash / macOS / Linux:
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
-Verified M2 versions: Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, SQLAlchemy 2.1.4, psycopg 3.3.6, and pytest 8.4.2.
+`requirements-dev.txt` also installs the pinned project environment for test
+work: `python -m pip install -r requirements-dev.txt`.
 
-Provision a **dedicated development PostgreSQL database** yourself, then set `DATABASE_URL` in your shell. `.env.example` shows the format and is not loaded automatically. Use a separate database for tests; never point `TEST_DATABASE_URL` at the application database.
+`.env` defaults to SQLite at `var/dev.sqlite3`, `AUTH_MODE=sandbox` with two
+seeded identities (`alice@unc.edu`, `bob@unc.edu`), and local file uploads under
+`var/uploads/`. It sets `APP_ENV=development` for the optional demo seed.
+Nothing in `.env` is committed.
 
-```sh
-export DATABASE_URL='postgresql+psycopg://app_user:replace-me@localhost:5432/campus_current_dev'
+## Database
+
+```bash
+flask --app server.app db upgrade     # apply migrations (creates var/dev.sqlite3)
+flask --app server.app seed-demo      # meeting spots + labeled demo inventory + fixture price ranges
 ```
 
-Replace the placeholders with the credentials for your development database. No Supabase, Gemini, or SMTP credentials are needed for M2.
+`seed-demo` refuses nondevelopment mode and databases other than the local
+`var/dev.sqlite3`, another explicitly named `*_dev` SQLite file, or a PostgreSQL
+database ending in `_dev`. It is idempotent. Run migrations before seeding and
+never seed a shared database.
 
-## Apply the migration
+After changing a model (Person 1 only):
 
-After setting `DATABASE_URL`, run:
-
-```sh
-python -m flask --app server.app:create_app db upgrade
+```bash
+flask --app server.app db migrate -m "describe change"
+flask --app server.app db upgrade
 ```
-
-This applies the committed Profile and Listing migration. Run it deliberately when the schema changes; the app never migrates or creates tables on a request. Do not run it against a shared database without coordinating with the team.
-
-## Optional demo seed
-
-The seed command is explicit and idempotent. It runs only with `APP_ENV=development` and a database name ending in `_dev`. It inserts one fictional profile and one listing, each visibly labeled `DEMO`.
-
-```sh
-APP_ENV=development python -m flask --app server.app:create_app seed-demo
-```
-
-Run the migration first. Never use the seed command on a shared database.
 
 ## Run
 
-```sh
-python -m flask --app server.app:create_app run --debug
+```bash
+flask --app server.app run --debug
 ```
 
-```sh
-curl http://127.0.0.1:5000/api/health
+Open http://127.0.0.1:5000/sign-in, pick a sandbox identity, and the header
+shows the labeled profile. `GET /healthz` reports `{"ok": true, "auth_mode": "..."}`.
+`GET /api/health` returns `{"status": "ok"}` for HTTP availability; neither
+endpoint establishes database readiness.
+
+Quick API check from a second terminal:
+
+```bash
+curl -H "Authorization: Bearer sandbox:alice@unc.edu" http://127.0.0.1:5000/api/me
 curl http://127.0.0.1:5000/api/listings
 ```
 
-The `--debug` server is for local development only. The catalog returns only active listings. See [docs/contracts.md](docs/contracts.md) for exact responses and pagination.
-
 ## Test
 
-The default suite uses a new temporary SQLite database for each catalog test and applies the committed migration to it. It never uses `DATABASE_URL` for cleanup.
-
-```sh
-python -m pytest -q
+```bash
+pytest -q            # or: python -m pytest -q
 ```
 
-For PostgreSQL integration, provision a separate database whose name ends in `_test`, set `TEST_DATABASE_URL`, then run:
+`pytest.ini` puts the project root on the import path. Each test gets a fresh SQLite file, sandbox auth, and a temp upload folder
+(`tests/conftest.py`). Person 1 tests cover auth, listings and ownership,
+requests and sanitized views, reservation atomicity, storage validation, and
+the error shape. `tests/test_matching.py`, `test_normalization.py`,
+`test_pricing.py` (Person 2) and `test_exchanges.py`, `test_reviews.py`
+(Person 4) are empty stubs until those people fill them.
 
-```sh
-export TEST_DATABASE_URL='postgresql+psycopg://test_user:replace-me@localhost:5432/campus_current_test'
+The migration and persistence tests apply the committed migration to a new
+temporary SQLite file. PostgreSQL validation uses a separate database whose
+name ends in `_test`; the test refuses the live `DATABASE_URL` and creates a
+unique test schema. Set `TEST_DATABASE_URL` only to that isolated target:
+
+```bash
+export TEST_DATABASE_URL='postgresql+psycopg://test_user:PASSWORD@localhost:5432/campus_current_test'
 python -m pytest -q tests/test_postgres_catalog.py
 ```
 
-The PostgreSQL test refuses a target matching `DATABASE_URL` and uses a uniquely named test schema. It skips when `TEST_DATABASE_URL` is absent. SQLite results alone do not verify PostgreSQL migration behavior.
+The PostgreSQL test skips when `TEST_DATABASE_URL` is unset. Never point it at
+the application database.
+
+## Auth modes
+
+- `AUTH_MODE=sandbox` (default locally): bearer token `sandbox:<email>` for an
+  email in `SANDBOX_USERS`. No real verification; profiles are labeled
+  "Sandbox identity (not verified)" and `is_demo=true`. Never use this on a
+  public deployment.
+- `AUTH_MODE=supabase`: the browser signs in with a Supabase magic link
+  (`static/js/auth.js`); Flask verifies every request's access token against
+  Supabase Auth and requires `email_confirmed_at` plus an exact `@unc.edu`
+  domain. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (public) and
+  `DATABASE_URL` to the Supabase Postgres URL. The service-role key stays
+  backend-only.
+
+## Deploy (skeleton)
+
+`Procfile` runs `flask db upgrade` on release and `gunicorn wsgi:app` for web.
+Set `DATABASE_URL`, `SECRET_KEY`, `AUTH_MODE=supabase`, the Supabase keys, and
+`GEMINI_API_KEY` as environment variables on the host. Not yet deployed; see
+`docs/tasks.md` P1-2.
+
+## Layout
+
+```
+server/            Flask app, config, db, models, auth, storage, reservation, routes
+server/intelligence/  Person 2: normalize_request, match_listings, evaluate_price
+server/exchanges/  Person 4: exchange workflow (stubs now)
+migrations/        Alembic migrations (Person 1)
+templates/, static/  Jinja pages and browser code (base/marketplace: Person 3; exchanges: Person 4; auth: Person 1)
+tests/             pytest
+docs/              contracts, tasks, ai-behavior, design, demo
+fixtures/matching/ Person 2 test fixtures
+var/               local SQLite DB and uploads (ignored by git)
+```

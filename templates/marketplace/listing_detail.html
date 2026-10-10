@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{# Person 3 owns templates/marketplace/. Stub created by Person 1. #}
+{% block title %}Listing · Campus Current{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Listing detail</h1>
+  <p>Stub for listing <code>{{ listing_id }}</code>. Person 3 renders
+     <code>GET /api/listings/{id}</code>: photo, specifications, condition, known
+     defects, modes and asking terms, owner badge, and the "Start exchange" action
+     that Person 4 wires to <code>POST /api/exchanges</code>.</p>
+</section>
+{% endblock %}
