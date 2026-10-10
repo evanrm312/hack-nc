@@ -1,14 +1,60 @@
 """Validated, editable Gemini request proposals."""
 from __future__ import annotations
 import json
+import logging
 import os
+import re
+import time
 from datetime import datetime, timezone as utc
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
 from google import genai
+from google.genai import errors
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
+DEFAULT_MODELS = ('gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash')
+ATTEMPT_TIMEOUT_MS = 10000
+TOTAL_TIMEOUT_SECONDS = 32
+
+
+def _model_order():
+    preferred = os.environ.get('GEMINI_MODEL', '').strip().removeprefix('models/')
+    if preferred and not re.fullmatch(r'gemini-[a-z0-9.-]+', preferred):
+        raise ValueError('Invalid Gemini model identifier')
+    return list(dict.fromkeys(([preferred] if preferred else []) + list(DEFAULT_MODELS)))[:3]
+
+
+def _extract(text, local_now, timezone, key):
+    deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
+    # Disable SDK retries: each model gets one attempt within the shared budget.
+    with genai.Client(api_key=key, http_options=types.HttpOptions(
+            timeout=ATTEMPT_TIMEOUT_MS,
+            retry_options=types.HttpRetryOptions(attempts=1))) as client:
+        for model in _model_order():
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            # Gemini rejects deadlines shorter than ten seconds.
+            if remaining_ms < ATTEMPT_TIMEOUT_MS:
+                break
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=json.dumps(dict(request=text, now=local_now.isoformat(), timezone=timezone)),
+                    config=types.GenerateContentConfig(system_instruction=INSTRUCTION,
+                        response_mime_type='application/json',
+                        response_json_schema=Extraction.model_json_schema(), temperature=0,
+                        http_options=types.HttpOptions(timeout=min(ATTEMPT_TIMEOUT_MS, remaining_ms))))
+            except errors.APIError as error:
+                if error.code not in (429, 503):
+                    raise
+                continue
+            # Invalid structured output is non-retryable, including malformed JSON.
+            extracted = Extraction.model_validate_json(response.text)
+            logger.info('Gemini normalization succeeded model=%s', model)
+            return extracted
+    raise RuntimeError('Gemini model attempts exhausted')
 
 
 def utc_date(value):
@@ -119,14 +165,7 @@ def normalize_request(text: str, now: datetime, timezone: str) -> dict:
         if not key or not text.strip() or now.utcoffset() is None:
             return manual(text)
         local_now = now.astimezone(ZoneInfo(timezone))
-        with genai.Client(api_key=key, http_options=types.HttpOptions(timeout=20000)) as client:
-            response = client.models.generate_content(
-                model=os.environ.get('GEMINI_MODEL', 'gemini-3.8-flash'),
-                contents=json.dumps(dict(request=text, now=local_now.isoformat(), timezone=timezone)),
-                config=types.GenerateContentConfig(system_instruction=INSTRUCTION,
-                    response_mime_type='application/json',
-                    response_json_schema=Extraction.model_json_schema(), temperature=0))
-        extracted = Extraction.model_validate_json(response.text)
+        extracted = _extract(text, local_now, timezone, key)
         result = extracted.model_dump(exclude={'budget_dollars', 'max_deposit_dollars'})
         for field in ('budget', 'max_deposit'):
             amount = getattr(extracted, field + '_dollars')
