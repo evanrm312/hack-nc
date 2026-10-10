@@ -32,6 +32,20 @@
                     placeholder="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit."></textarea>
           <p class="field__error" id="request-text-error" role="alert"></p>
         </div>
+        <div class="field photo-field">
+          <label class="field__label" for="request-photo"><span>Add a reference photo</span><span class="field__optional">optional</span></label>
+          <p class="field__hint" id="request-photo-hint">A picture of the kind of item you mean, for example a suit you like. JPEG, PNG, or WebP.
+            Only broad visual details (category, type, color, pattern, style) are proposed, never size, price, or condition. The photo is private, is not stored, and never appears on public cards.</p>
+          <input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="request-photo-hint request-photo-error">
+          <div class="photo-preview photo-preview--row" id="request-photo-preview" hidden>
+            <img alt="Preview of your reference photo">
+            <div class="cluster">
+              <span class="muted" id="request-photo-name"></span>
+              <button type="button" class="btn btn--sm" id="request-photo-remove">Remove photo</button>
+            </div>
+          </div>
+          <p class="field__error" id="request-photo-error" role="alert"></p>
+        </div>
         <div class="cluster example-chips" aria-label="Example requests">
           <span class="muted">Try:</span>
           <button type="button" class="btn btn--sm" data-example="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit.">Interview suit</button>

@@ -174,34 +174,106 @@
     });
     textarea.addEventListener("input", () => { textError.textContent = ""; textarea.removeAttribute("aria-invalid"); });
 
+    // ---- optional reference photo (validated here; sent only with the request)
+    const photoInput = $("request-photo");
+    const photoPreview = $("request-photo-preview");
+    const photoError = $("request-photo-error");
+    const photoLimit = Math.min(Number((window.CAMPUS_CONFIG || {}).max_upload_bytes) || Infinity, 5 * 1024 * 1024);
+    let photoFile = null;
+    function setPhotoError(message) {
+      photoError.textContent = message || "";
+      if (message) photoInput.setAttribute("aria-invalid", "true"); else photoInput.removeAttribute("aria-invalid");
+    }
+    function clearPhoto(focusInput) {
+      photoFile = null;
+      photoInput.value = "";
+      const img = photoPreview.querySelector("img");
+      if (img.src) { URL.revokeObjectURL(img.src); img.removeAttribute("src"); }
+      photoPreview.hidden = true;
+      setPhotoError("");
+      if (focusInput) photoInput.focus();
+    }
+    photoInput.addEventListener("change", () => {
+      const file = photoInput.files[0];
+      if (!file) { clearPhoto(false); return; }
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { clearPhoto(false); setPhotoError("Choose a JPEG, PNG, or WebP image."); return; }
+      if (file.size > photoLimit) { clearPhoto(false); setPhotoError("That photo is over " + Math.round(photoLimit / (1024 * 1024)) + " MB."); return; }
+      photoFile = file;
+      setPhotoError("");
+      photoPreview.querySelector("img").src = URL.createObjectURL(file);
+      $("request-photo-name").textContent = file.name + " (" + (file.size / 1024).toFixed(0) + " KB)";
+      photoPreview.hidden = false;
+    });
+    $("request-photo-remove").addEventListener("click", () => clearPhoto(true));
+
+    let submitting = false;
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (submitting) return;
       showNotice(formError, null);
       const text = textarea.value.trim();
-      if (!text) {
-        textError.textContent = "Describe what you need first.";
+      if (!text && !photoFile) {
+        textError.textContent = "Describe what you need, or add a reference photo.";
         textarea.setAttribute("aria-invalid", "true");
         textarea.focus();
         return;
       }
-      C.setBusy(submit, true, "Interpreting your request");
-      status.textContent = "Interpreting…";
+      if (photoError.textContent) { photoInput.focus(); return; }
+      submitting = true;
+      C.setBusy(submit, true, photoFile ? "Analyzing your photo" : "Interpreting your request");
+      status.textContent = photoFile ? "Analyzing photo…" : "Interpreting…";
 
-      // Step 1: interpret. A non-auth failure falls back to a manual
-      // interpretation (all unknown) so the user still gets an editable form.
-      let normalized;
-      try {
-        const result = await api.post("/api/requests/normalize", { text });
-        normalized = result.normalized || manualNormalized(text, "The interpreter returned nothing. Fill in the fields yourself.");
-      } catch (err) {
-        if (C.isAuthError(err)) {
-          if (err.status === 401) api.setToken(null);
-          status.textContent = "";
-          C.setBusy(submit, false);
-          showNotice(formError, authMessage(err));
-          return;
+      // Step 1: interpret. Photo first (if any), then text, then the manual
+      // all-unknown form. Nothing is ever guessed on the client.
+      let normalized = null;
+      let photoNote = null;
+      if (photoFile) {
+        const fd = new FormData();
+        fd.append("photo", photoFile);            // assumed multipart field names: photo, text
+        if (text) fd.append("text", text);
+        try {
+          const result = await api.post("/api/requests/normalize-photo", fd);
+          normalized = markPhotoProposals(result.normalized, text);
+        } catch (err) {
+          if (C.isAuthError(err)) {
+            if (err.status === 401) api.setToken(null);
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            showNotice(formError, authMessage(err));
+            return;
+          }
+          if (err instanceof api.ApiError && (err.code === "unsupported_image" || err.code === "payload_too_large" || err.code === "invalid_image")) {
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            setPhotoError(err.message || "That photo could not be used.");
+            photoInput.focus();
+            return;
+          }
+          const missing = err instanceof api.ApiError && (err.status === 404 || err.status === 405 || err.status === 501);
+          photoNote = missing
+            ? "Photo analysis is not available on the server yet, so the photo was not used."
+            : "The photo could not be analyzed (" + C.errorMessage(err) + "), so it was not used.";
+          if (!text) {
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            showNotice(formError, photoNote + " Add a short description to continue.");
+            textarea.focus();
+            return;
+          }
         }
-        normalized = manualNormalized(text, "The interpreter could not be reached (" + C.errorMessage(err) + "). Nothing was guessed; fill in the fields yourself.");
+      }
+      if (!normalized) {
+        status.textContent = "Interpreting…";
+        try {
+          const result = await api.post("/api/requests/normalize", { text });
+          normalized = result.normalized || manualNormalized(text, "The interpreter returned nothing. Fill in the fields yourself.");
+        } catch (err) {
+          if (C.isAuthError(err)) {
+            if (err.status === 401) api.setToken(null);
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            showNotice(formError, authMessage(err));
+            return;
+          }
+          normalized = manualNormalized(text, "The interpreter could not be reached (" + C.errorMessage(err) + "). Nothing was guessed; fill in the fields yourself.");
+        }
+        if (photoNote) normalized.follow_up_questions = [photoNote].concat(normalized.follow_up_questions || []);
       }
 
       // Step 2: save the request and go to results, where every field is editable.
@@ -212,6 +284,7 @@
       } catch (err) {
         status.textContent = "";
         C.setBusy(submit, false);
+        submitting = false;
         if (C.isAuthError(err)) {
           if (err.status === 401) api.setToken(null);
           showNotice(formError, authMessage(err));
@@ -224,11 +297,39 @@
     loadListings();
   }
 
+  // Photo-only requests have no wording; the server requires original_text,
+  // so a plain, honest placeholder is stored and shown as such.
+  const PHOTO_ONLY_TEXT = "(No written description; a reference photo was analyzed.)";
+
+  // Tag which fields a photo proposal could have filled, so the form can show
+  // "from photo, please confirm". Prefers the server's photo_attributes when
+  // present (assumed optional response field); otherwise derives from the
+  // vision whitelist (category, type, color, pattern, style). Over-marking is
+  // harmless: every mark only asks the user to confirm.
+  function markPhotoProposals(normalized, text) {
+    const n = normalized || manualNormalized(text, "The photo analyzer returned nothing. Fill in the fields yourself.");
+    const VISUAL = ["type", "color", "pattern", "style"];
+    let attrs = n.photo_attributes && typeof n.photo_attributes === "object" ? n.photo_attributes : null;
+    if (!attrs) {
+      attrs = {};
+      if (n.category) attrs.category = n.category;
+      VISUAL.forEach((k) => {
+        if ((n.required_specifications || {})[k] != null) attrs[k] = n.required_specifications[k];
+        else if ((n.preferred_specifications || {})[k] != null) attrs[k] = n.preferred_specifications[k];
+      });
+    }
+    const followUps = (n.follow_up_questions || []).slice();
+    if (!Object.keys(attrs).length) {
+      followUps.unshift("The photo was received, but nothing could be proposed from it (analysis unavailable or the item was unclear). Fill in the fields yourself.");
+    }
+    return Object.assign({}, n, { reference_photo: true, photo_attributes: attrs, follow_up_questions: followUps, original_text: n.original_text || text || "" });
+  }
+
   async function createRequestFrom(text, normalized) {
     const modes = cleanModes(normalized.modes);
     if (normalized.kind === "service" && !modes.includes("service")) modes.push("service");
     const body = {
-      original_text: text,
+      original_text: text || (normalized.reference_photo ? PHOTO_ONLY_TEXT : text),
       normalized,
       modes: serverModes(modes, null),
       budget_cents: nonNegInt(normalized.budget_cents),
@@ -247,7 +348,7 @@
       // the rejected values, and tell the user on the results page.
       const rejected = Object.keys(err.fields || {}).join(", ");
       const retry = {
-        original_text: text,
+        original_text: text || (normalized.reference_photo ? PHOTO_ONLY_TEXT : text),
         normalized: Object.assign({}, normalized, {
           budget_cents: null, max_deposit_cents: null, needed_by: null, use_start: null, use_end: null, area: null,
           follow_up_questions: (normalized.follow_up_questions || []).concat(
@@ -372,7 +473,13 @@
         use_end: request.use_end,
         area: request.area,
       };
-      const meta = { modesUnknown: !modesKnown, ambiguous };
+      const photoAttrs = n.reference_photo && n.photo_attributes && typeof n.photo_attributes === "object" ? n.photo_attributes : null;
+      if (photoAttrs && Object.keys(photoAttrs).length) {
+        interpBody.append(C.notice("info", C.el("span", {},
+          C.el("strong", { text: "A reference photo was analyzed. " }),
+          "Fields marked \"from photo, please confirm\" are visual proposals (category, type, color, pattern, style), not facts. Size, price, condition, and dates are never read from a photo. The photo itself is private and was not stored.")));
+      }
+      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs };
 
       const form = C.el("form", { id: "interp-form", novalidate: true });
       const editor = buildInterpretationForm(form, values, meta);
@@ -840,10 +947,14 @@
       F.category.control.append(C.el("option", { value: values.category, text: values.category }));
       F.category.control.value = values.category;
     }
+    const photoAttrs = meta.photoAttributes || {};
+    const photoBadge = () => C.badge("from photo, please confirm", "warn");
     if (!values.category) markLabel(F.category, unknownBadge());
+    else if (photoAttrs.category && photoAttrs.category === values.category) markLabel(F.category, photoBadge());
 
-    const requiredSpecs = kvEditor("Required specifications", "Must match exactly, e.g. jacket_size = 40R. Unknown required details become “needs confirmation”, never a confirmed match.", values.required_specifications || {});
-    const preferredSpecs = kvEditor("Preferred specifications", "Nice to have, e.g. color = navy. Used for ranking only.", values.preferred_specifications || {});
+    const flagged = new Set(Object.keys(photoAttrs).filter((k) => k !== "category"));
+    const requiredSpecs = kvEditor("Required specifications", "Must match exactly, e.g. jacket_size = 40R. Unknown required details become “needs confirmation”, never a confirmed match.", values.required_specifications || {}, { flagged, flagLabel: "from photo, please confirm" });
+    const preferredSpecs = kvEditor("Preferred specifications", "Nice to have, e.g. color = navy. Used for ranking only.", values.preferred_specifications || {}, { flagged, flagLabel: "from photo, please confirm" });
     F.required_specifications = requiredSpecs;
     F.preferred_specifications = preferredSpecs;
 
@@ -1822,7 +1933,9 @@
       const v = C.el("input", { type: "text", placeholder: "value (e.g. 40R)", "aria-label": title + " attribute value", maxlength: 120 });
       if (key != null) k.value = key;
       if (value != null) v.value = typeof value === "object" ? JSON.stringify(value) : String(value);
-      const row = C.el("div", { className: "kv-row" }, k, v,
+      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "please confirm", "warn") : null;
+      if (flag) v.setAttribute("aria-description", opts.flagLabel || "please confirm");
+      const row = C.el("div", { className: "kv-row" + (flag ? " kv-row--flag" : "") }, k, v, flag,
         C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this " + title.toLowerCase() + " row" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
       rows.append(row);
       return row;

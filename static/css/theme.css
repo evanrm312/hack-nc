@@ -697,3 +697,10 @@ input[type="range"].range:focus-visible { box-shadow: var(--focus); }
 .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
 .tab { min-height: 38px; padding: 6px 14px; border-radius: var(--r-pill); }
 .tab--selected { color: var(--sky-900); border-color: var(--sky-500); background: linear-gradient(180deg, #fff, var(--sky-100)); box-shadow: var(--shadow-inset), inset 0 0 0 1px var(--sky-200); }
+
+/* --------------------------------------------------------- reference photo */
+.photo-field { margin-top: calc(-1 * var(--space-2)); }
+.photo-preview--row { display: flex; align-items: center; gap: var(--space-3); width: auto; aspect-ratio: auto; padding: var(--space-2); }
+.photo-preview--row img { width: 96px; height: 72px; border-radius: var(--r-sm); flex: none; }
+.kv-row--flag { grid-template-columns: 1fr 1fr auto auto; }
+@media (max-width: 560px) { .kv-row--flag { grid-template-columns: 1fr 1fr; } .kv-row--flag .badge, .kv-row--flag .btn { grid-column: span 1; } }

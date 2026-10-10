@@ -227,6 +227,37 @@ Testing reduced motion: Chrome DevTools → Rendering panel → "Emulate CSS
 media feature prefers-reduced-motion: reduce", or Windows Settings →
 Accessibility → Visual effects → Animation effects off, then reload.
 
+## Reference photo in the request flow (endpoint pending)
+
+The home request box has an optional "Add a reference photo" file control.
+Client validation: JPEG/PNG/WebP by MIME type; size limit is
+`min(CAMPUS_CONFIG.max_upload_bytes, 5 MiB)` (the config key is not exposed
+yet, so 5 MiB applies); a small preview with a Remove button. Text alone works
+exactly as before.
+
+Assumed endpoint (per `docs/ai-behavior.md`, Person 1 to confirm):
+`POST /api/requests/normalize-photo`, verified user, **multipart** with
+fields `photo` (file, required) and `text` (optional). Sent through
+`api.post(path, FormData)`. Response `200 {"normalized": NormalizedRequest,
+"fixture": false}`; errors use the shared envelope with `unsupported_image`
+(400), `invalid_image` (400), `payload_too_large` (413). Optional assumed
+response extra: `normalized.photo_attributes` (`{category?, type?, color?,
+pattern?, style?}`); when absent the client derives it from the vision
+whitelist.
+
+Flow: photo present → photo endpoint (loading state "Analyzing photo…",
+double-submit guard) → the result is tagged `reference_photo: true` and
+`photo_attributes` and saved like any interpretation. On the results page a
+notice explains the photo was analyzed, and the category select plus any
+type/color/pattern/style rows carry a "from photo, please confirm" badge.
+Unknowns stay unknown. If the endpoint is missing (404/405/501) or fails, a
+note says the photo was not used and the normal text interpretation (or the
+manual form) is used instead; photo-only input then asks for a description.
+Photo-only requests store the placeholder original text "(No written
+description; a reference photo was analyzed.)" because the server requires
+`original_text`. The photo is never stored, never sent anywhere else, and
+never appears on request cards or the public feed.
+
 ## Services (pending backend; sample data)
 
 A third listing kind. Person 1 is adding the backend; the UI runs on the
