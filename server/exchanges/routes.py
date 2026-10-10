@@ -94,6 +94,12 @@ def _available(listing: Listing) -> None:
         raise ApiError(409, "reservation_conflict", "This item is no longer available")
 
 
+def _is_service(exchange_id: str) -> bool:
+    """Route by persisted mode; the selected handler enforces participant access."""
+    exchange = db.session.get(Exchange, exchange_id)
+    return exchange is not None and exchange.mode == "service"
+
+
 @bp.after_request
 def _private_response(response):
     # Authenticated messages, precise meeting times, and evidence must not be cached.
@@ -173,7 +179,7 @@ def create_exchange():
 @bp.get("/<exchange_id>")
 @require_verified_user
 def get_exchange(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.detail(exchange_id)
     exchange = _participant(exchange_id)
     offers = db.session.scalars(
@@ -203,7 +209,7 @@ def get_exchange(exchange_id: str):
 @bp.get("/<exchange_id>/messages")
 @require_verified_user
 def list_messages(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.messages(exchange_id)
     exchange = _participant(exchange_id)
     query = db.select(Message).where(Message.exchange_id == exchange.id)
@@ -222,7 +228,7 @@ def list_messages(exchange_id: str):
 @require_verified_user
 @_transaction
 def post_message(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.post_message(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     errors = FieldErrors()
@@ -238,7 +244,7 @@ def post_message(exchange_id: str):
 @require_verified_user
 @_transaction
 def post_offer(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.offer(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     _negotiating(exchange)
@@ -269,7 +275,7 @@ def post_offer(exchange_id: str):
 @require_verified_user
 @_transaction
 def accept_offer(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.accept(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     body = json_body()
@@ -309,7 +315,7 @@ def accept_offer(exchange_id: str):
 @require_verified_user
 @_transaction
 def complete_service(exchange_id: str):
-    if service.load_service(exchange_id) is None:
+    if not _is_service(exchange_id):
         _participant(exchange_id)
         raise invalid_transition()
     return service.complete(exchange_id)
@@ -484,7 +490,7 @@ def post_review(exchange_id: str):
 @bp.post("/<exchange_id>/cancel")
 @require_verified_user
 def cancel_exchange(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.cancel(exchange_id)
     return _later_milestone(exchange_id, "Cancellation")
 
@@ -492,6 +498,6 @@ def cancel_exchange(exchange_id: str):
 @bp.post("/<exchange_id>/dispute")
 @require_verified_user
 def dispute_exchange(exchange_id: str):
-    if service.load_service(exchange_id) is not None:
+    if _is_service(exchange_id):
         return service.dispute(exchange_id)
     return _later_milestone(exchange_id, "Disputes")
