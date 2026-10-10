@@ -50,9 +50,9 @@ fields manually. There is no guessed partial success.
 
 ## Scope and verification
 
-This increment implements normalization only. Matching and pricing remain existing
-stubs. No fair-price blocking, inventory, transaction, reputation, payment or
-collateral policy is introduced.
+Normalization and deterministic matching are implemented. Price appraisal remains
+a stub; matching only filters against the stated purchase/rental budget. No
+fair-price bounds, lowball protection, reputation privileges or payments are added.
 
 Mocked tests cover SDK configuration, suit fields, required/preferred separation,
 zero and fractional-dollar conversion, separate deposits, null preservation,
@@ -73,3 +73,59 @@ The real Gemini smoke test succeeded after loading `.env` with python-dotenv
 required jacket_size 40R and type suit, preferred color navy, budget_cents 2000.
 Deposit, dates and area remained null, with follow-ups. No API key was printed or
 written to project files. Never commit credentials.
+
+## Deterministic listing matching
+
+`match_listings(request, listings)` accepts NeedRequest owner-view dictionaries and
+real listing dictionaries, returning the unchanged MatchEntry contract with
+`source="deterministic"`. Owner-view fields override normalized fields, including
+explicit nulls. No Gemini calls or input mutations occur. Titles/descriptions never
+supply compatibility facts or instructions. Explanations reference structured fields
+and provided IDs only.
+
+Known category or required-specification mismatches, unsupported modes, unavailable
+status/reservations, out-of-range dates, and prices exceeding budget are rejected.
+String comparison trims outer whitespace and ignores case; it does not guess size
+conversions, synonyms or missing attributes. Missing category or required specs go
+to needs_confirmation with field names in unknown_required. Preferred differences
+only affect ranking and shortcomings.
+
+Sale uses sale_price_cents; borrowing uses rental_fee_cents. Null fees are unknown,
+never assumed free. Explicit zero is accepted against a zero budget. An absent
+budget imposes no price cap. Deposit is calculated separately as
+`(proposed_item_value_cents * collateral_percent + 99) // 100`, rounding fractional
+cents up so affordability is not understated. Unknown value/percentage needs
+confirmation. Above max_deposit_cents yields needs_confirmation with the exact phrase
+"deposit negotiation required" and unknown_required deposit_agreement, per the
+current Person 2 assignment. It does not reject or automatically discount collateral.
+A missing maximum imposes no deposit cap. Matching never supplies lender consent or
+creates an agreement; lower-deposit acknowledgment still belongs to offer acceptance.
+
+Offset-aware dates are compared as instants. Borrowing checks needed_by, use_start
+and use_end against available_from/available_until; sale checks only needed_by.
+Known boundaries are inclusive. Missing bounds for requested dates or malformed/
+naive dates need confirmation; known conflicts reject. Invalid reversed intervals
+reject. Availability notes do not establish date compatibility. When no dates are
+requested, there is no date constraint. Pickup-window/area compatibility is not
+ranked because this increment has no structured listing data mapping for it.
+
+Each listing returns once, using the best supported requested mode: confirmed
+before needs_confirmation before rejected. Within each bucket, fewer unresolved
+fields rank first, then more matched preferences, then lower known sale/rental cost,
+then mode and listing ID for deterministic ties. Score is matched preference count
+plus `1 / (cost_cents + 1)` (zero cost component for unknown cost); rejected scores
+are null. All buckets carry useful reasons, shortcomings and unknown_required.
+
+Tests include the requested suit, size/category/mode failures, sale/rental budgets,
+deposit negotiation, missing specs, dates/status, free loans and preference ranking,
+plus cents rounding, nulls, offsets, alternative modes, prompt-like listing text,
+input preservation and existing-route integration/access checks. Person 1's existing
+normalize/matches stub tests need updating for source gemini/manual/deterministic
+and fixture=false. The matching route already calls and hydrates the implementation;
+no route change is needed. Person 1 should update the stale contract/task stub
+examples and document deposit negotiation as a needs_confirmation outcome.
+
+Matching increment validation: `python -m pytest -q tests/test_matching.py` passed
+36 tests. Full suite: 109 passed, 2 failed, both the unchanged Person 1 stub tests
+identified above. The owned integration test proves requester-only matching access,
+real listing hydration, own-listing exclusion, confirmed matches and size rejection.
