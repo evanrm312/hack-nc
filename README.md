@@ -51,6 +51,39 @@ flask --app server.app seed-demo      # meeting spots + labeled demo inventory +
 database ending in `_dev`. It is idempotent. Run migrations before seeding and
 never seed a shared database.
 
+To update an already-seeded **development** database, run `flask --app server.app
+seed-demo` again. It adds the missing `type: "suit"` to both labeled suit rows
+and availability bounds to the existing navy suit row in place. Their IDs,
+other specifications, pickup notes, other listings, and user data remain intact.
+An explicitly set type or date bound is left alone; review that listing if it was
+customized. No database reset or new migration is needed for these JSON fields.
+
+The seeded navy suit is available from `2026-10-12T12:00:00Z` through
+`2026-10-16T22:00:00Z` (Monday 8 a.m. through Friday 6 p.m. in New York).
+For the dated interview demo, confirm this editable request and submit it to
+`POST /api/requests` as a different sandbox user from the demo lender:
+
+```json
+{
+  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+  "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}},
+  "modes": ["borrow"],
+  "budget_cents": 4000,
+  "max_deposit_cents": 8000,
+  "needed_by": "2026-10-14T13:00:00Z",
+  "use_start": "2026-10-13T18:00:00Z",
+  "use_end": "2026-10-15T22:00:00Z",
+  "pickup_windows": [{"start": "2026-10-13T18:00:00Z", "end": "2026-10-13T20:00:00Z"}],
+  "area": "Central campus"
+}
+```
+
+`GET /api/requests/{id}/matches` places the navy suit in
+`needs_confirmation`: type, size, budget, and dates fit, while its proposed
+$200 deposit exceeds the $80 limit. The charcoal 46L suit is rejected. The
+lower deposit requires negotiation and explicit lender acknowledgment; the
+match result does not change the owner's proposal.
+
 After changing a model (Person 1 only):
 
 ```bash

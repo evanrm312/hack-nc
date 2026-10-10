@@ -39,7 +39,9 @@ say which.
 
 ### P2-1 normalize_request + match_listings — Person 2, `p2-intelligence`
 
-Status: done; merged into `main` in `4e9083e`. `normalize_request` uses Gemini structured output
+Status: done; normalization and matching merged into `main` in `4e9083e`.
+The later bounded Gemini model fallback (`21d1212`) is included in Person 1's
+PR #2 as `8d872d4`. `normalize_request` uses Gemini structured output
 validated by Pydantic; unknowns stay null; ambiguous dates are flagged and
 resolved in America/New_York with confirmation; Gemini timeout returns an
 editable manual result, not fabricated values. `match_listings` is deterministic
@@ -95,7 +97,8 @@ separate tasks (P4-2, P4-3).
   `TEST_DATABASE_URL` ending in `_test`; none is configured in this environment.
 - Normalization and matching are implemented by Person 2. Price appraisal
   remains a stub; live Gemini behavior was reported in Person 2's handoff and
-  has not been rechecked in this Person 1 integration run.
+  has not been rechecked in this Person 1 integration run. The dated suit seed
+  gap identified in that handoff is addressed in PR #2.
 - Exchange endpoints: labeled fixture reads, `501` writes.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.
