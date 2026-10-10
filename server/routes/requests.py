@@ -19,8 +19,8 @@ from ..auth import current_profile, optional_user, require_verified_user
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..intelligence import ReferenceImageError, match_listings, normalize_reference_image, normalize_request
-from ..models import LISTING_MODES, Listing, NeedRequest
-from ..validation import FieldErrors, choice_list, datetime_utc, json_body, json_object, money_cents, string
+from ..models import LISTING_MODES, SERVICE_CATEGORIES, Listing, NeedRequest
+from ..validation import FieldErrors, choice_list, datetime_utc, json_body, json_object, money_cents, string, time_windows
 
 bp = Blueprint("requests", __name__)
 
@@ -80,10 +80,39 @@ def _apply_request_fields(need: NeedRequest, body: dict, *, creating: bool) -> N
             need.pickup_windows = cleaned
     if present("area"):
         need.area = string(body.get("area"), "area", errors, max_len=80)
+    if present("service_duration_minutes"):
+        duration = body.get("service_duration_minutes")
+        if duration is None:
+            need.service_duration_minutes = None
+        elif isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= 1440:
+            errors.add("service_duration_minutes", "must be an integer from 1 to 1440")
+        else:
+            need.service_duration_minutes = duration
+    if present("service_time_windows"):
+        need.service_time_windows = time_windows(body.get("service_time_windows"),
+                                                 "service_time_windows", errors) or []
 
     errors.raise_if_any()
 
     cross = FieldErrors()
+    if "service" in (need.modes or []):
+        if need.modes != ["service"]:
+            cross.add("modes", "service cannot be combined with sale or borrow")
+        if (need.normalized or {}).get("category") not in SERVICE_CATEGORIES:
+            cross.add("normalized.category", f"must be one of: {', '.join(SERVICE_CATEGORIES)}")
+        if need.max_deposit_cents is not None:
+            cross.add("max_deposit_cents", "not applicable to services")
+        if (need.normalized or {}).get("max_deposit_cents") is not None:
+            cross.add("normalized.max_deposit_cents", "not applicable to services")
+        for field in ("deposit_cents", "agreed_item_value_cents", "collateral_percent",
+                      "condition", "condition_snapshot"):
+            if field in body:
+                cross.add(field, "not applicable to services")
+        for field in ("use_start", "use_end", "pickup_windows"):
+            if field in body and body[field] not in (None, []):
+                cross.add(field, "not applicable to services")
+    elif need.service_duration_minutes is not None or need.service_time_windows:
+        cross.add("service_duration_minutes", "service fields require service mode")
     if need.use_start and need.use_end and need.use_end <= need.use_start:
         cross.add("use_end", "must be after use_start")
     cross.raise_if_any()

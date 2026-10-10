@@ -11,12 +11,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from flask import Blueprint, current_app, jsonify, request
 
 from ..auth import current_profile, require_verified_user
 from ..db import db
 from ..errors import ApiError, forbidden, not_found, validation_error
-from ..models import LISTING_MODES, LISTING_STATUSES, Listing, MeetingSpot
+from ..models import LISTING_MODES, LISTING_STATUSES, SERVICE_CATEGORIES, Listing, MeetingSpot
 from ..storage import get_storage
 from ..validation import (
     FieldErrors,
@@ -27,6 +29,7 @@ from ..validation import (
     percent,
     string,
     string_list,
+    time_windows,
 )
 
 bp = Blueprint("catalog", __name__)
@@ -59,6 +62,53 @@ def _apply_listing_fields(listing: Listing, body: dict, *, creating: bool) -> No
         listing.category = string(body.get("category"), "category", errors, required=True, max_len=60) or ""
     if present("description"):
         listing.description = string(body.get("description"), "description", errors, max_len=4000)
+    modes = (choice_list(body.get("allowed_modes"), "allowed_modes", errors,
+                         LISTING_MODES, required=True) if present("allowed_modes")
+             else listing.allowed_modes)
+    if "service" in (modes or []):
+        if modes != ["service"]:
+            errors.add("allowed_modes", "service cannot be combined with sale or borrow")
+        if not creating and "service" not in (listing.allowed_modes or []):
+            errors.add("allowed_modes", "listing kind cannot be changed")
+        if listing.category not in SERVICE_CATEGORIES:
+            errors.add("category", f"must be one of: {', '.join(SERVICE_CATEGORIES)}")
+        if not listing.description:
+            errors.add("description", "required for a service")
+        for field in ("specifications", "condition", "accessories", "known_defects",
+                      "sale_price_cents", "rental_fee_cents", "proposed_item_value_cents",
+                      "agreed_item_value_cents", "deposit_cents", "collateral_percent",
+                      "condition_snapshot", "availability", "meeting_spot_ids"):
+            if field in body:
+                errors.add(field, "not applicable to services")
+        if present("service_price_cents"):
+            listing.service_price_cents = money_cents(body.get("service_price_cents"),
+                                                       "service_price_cents", errors, required=True)
+        if present("service_duration_minutes"):
+            duration = body.get("service_duration_minutes")
+            if isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= 1440:
+                errors.add("service_duration_minutes", "must be an integer from 1 to 1440")
+            else:
+                listing.service_duration_minutes = duration
+        if present("service_available_windows"):
+            listing.service_available_windows = time_windows(
+                body.get("service_available_windows"), "service_available_windows", errors,
+                required=True)
+        if (listing.service_duration_minutes and listing.service_available_windows
+                and not any(
+                    datetime.fromisoformat(window["start"].replace("Z", "+00:00"))
+                    + timedelta(minutes=listing.service_duration_minutes)
+                    <= datetime.fromisoformat(window["end"].replace("Z", "+00:00"))
+                    for window in listing.service_available_windows
+                )):
+            errors.add("service_available_windows", "at least one window must fit the duration")
+        listing.allowed_modes = ["service"]
+        errors.raise_if_any()
+        return
+    if "service" in (listing.allowed_modes or []):
+        errors.add("allowed_modes", "listing kind cannot be changed")
+    for field in ("service_price_cents", "service_duration_minutes", "service_available_windows"):
+        if field in body and body[field] not in (None, []):
+            errors.add(field, "only allowed for services")
     if present("specifications"):
         listing.specifications = json_object(body.get("specifications"), "specifications", errors) or {}
     if present("condition"):
@@ -71,9 +121,7 @@ def _apply_listing_fields(listing: Listing, body: dict, *, creating: bool) -> No
     if present("known_defects"):
         listing.known_defects = string_list(body.get("known_defects"), "known_defects", errors) or []
     if present("allowed_modes"):
-        listing.allowed_modes = (
-            choice_list(body.get("allowed_modes"), "allowed_modes", errors, LISTING_MODES, required=True) or []
-        )
+        listing.allowed_modes = modes or []
     if present("sale_price_cents"):
         listing.sale_price_cents = money_cents(body.get("sale_price_cents"), "sale_price_cents", errors)
     if present("rental_fee_cents"):

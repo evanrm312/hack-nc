@@ -14,7 +14,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import db, iso_utc, new_id, utcnow
 
-LISTING_MODES = ("sale", "borrow")
+LISTING_MODES = ("sale", "borrow", "service")
+SERVICE_CATEGORIES = ("tutoring", "proofreading", "moving help")
 LISTING_STATUSES = ("available", "reserved", "sold", "withdrawn")
 
 
@@ -37,6 +38,9 @@ class Listing(db.Model):
     rental_fee_cents: Mapped[int | None] = mapped_column(Integer)
     proposed_item_value_cents: Mapped[int | None] = mapped_column(Integer)
     collateral_percent: Mapped[int | None] = mapped_column(Integer)  # 0-100, default 100 for loans
+    service_price_cents: Mapped[int | None] = mapped_column(Integer)
+    service_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    service_available_windows: Mapped[list | None] = mapped_column(JSON)
 
     # {"available_from": iso|null, "available_until": iso|null, "notes": str|null}
     availability: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
@@ -55,7 +59,7 @@ class Listing(db.Model):
 
     def to_dict(self) -> dict:
         """Public listing shape (docs/contracts.md -> Listing)."""
-        return {
+        result = {
             "id": self.id,
             "owner_id": self.owner_id,
             "owner": self.owner.to_public_dict() if self.owner else None,
@@ -79,3 +83,14 @@ class Listing(db.Model):
             "created_at": iso_utc(self.created_at),
             "updated_at": iso_utc(self.updated_at),
         }
+        if "service" in (self.allowed_modes or []):
+            for key in ("specifications", "condition", "accessories", "known_defects",
+                        "sale_price_cents", "rental_fee_cents", "proposed_item_value_cents",
+                        "collateral_percent", "availability", "meeting_spot_ids"):
+                result.pop(key)
+            result.update(
+                service_price_cents=self.service_price_cents,
+                service_duration_minutes=self.service_duration_minutes,
+                service_available_windows=self.service_available_windows or [],
+            )
+        return result
