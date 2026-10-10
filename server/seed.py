@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sqlalchemy.engine import make_url
 
@@ -26,14 +27,29 @@ DEMO_SUIT_AVAILABILITY = {
 }
 
 
-def validate_demo_seed_target(config) -> None:
-    """Refuse demo inserts outside an explicitly named development database."""
+def validate_demo_seed_target(config, *, allow_supabase_postgres_dev: bool = False) -> None:
+    """Refuse demo inserts outside a named development target or explicit opt-in."""
     if config.get("APP_ENV") != "development":
         raise ValueError("Demo seed requires APP_ENV=development")
     url = make_url(config["SQLALCHEMY_DATABASE_URI"])
     database = url.database or ""
     if url.get_backend_name() == "postgresql" and database.endswith("_dev"):
         return
+    if allow_supabase_postgres_dev:
+        supabase_host = urlparse(config.get("SUPABASE_URL") or "").hostname or ""
+        project_ref = supabase_host.removesuffix(".supabase.co") if supabase_host.endswith(".supabase.co") else ""
+        if (
+            url.drivername == "postgresql+psycopg"
+            and database == "postgres"
+            and url.host
+            and url.host.endswith(".pooler.supabase.com")
+            and url.port == 5432
+            and project_ref
+            and "." not in project_ref
+            and url.username == "postgres." + project_ref
+        ):
+            return
+        raise ValueError("Supabase development seed opt-in requires the configured project's session pooler PostgreSQL URL ending in /postgres")
     if url.get_backend_name() == "sqlite" and database != ":memory:":
         path = Path(database)
         if path.resolve() == (PROJECT_ROOT / "var" / "dev.sqlite3").resolve():

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from server.app import create_app
 from server.db import db
 from server.models import Listing
-from server.seed import DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE
+from server.seed import DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE, validate_demo_seed_target
 from tests.conftest import LISTING_BODY, auth
 
 
@@ -77,6 +77,26 @@ def test_demo_seed_requires_dev_target_and_is_idempotent(tmp_path):
     assert "dedicated development database" in refused.output
 
 
+def test_supabase_postgres_seed_requires_explicit_dev_opt_in():
+    target = "postgresql+psycopg://postgres.project:password@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
+    config = {"APP_ENV": "development", "SQLALCHEMY_DATABASE_URI": target, "SUPABASE_URL": "https://project.supabase.co"}
+    with pytest.raises(ValueError, match="dedicated development database"):
+        validate_demo_seed_target(config)
+    validate_demo_seed_target(config, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="APP_ENV=development"):
+        validate_demo_seed_target({**config, "APP_ENV": "production"}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace("/postgres", "/shared")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace(".pooler.supabase.com", ".example.com")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace("postgres.project", "postgres")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SQLALCHEMY_DATABASE_URI": target.replace(":5432/", ":6543/")}, allow_supabase_postgres_dev=True)
+    with pytest.raises(ValueError, match="session pooler"):
+        validate_demo_seed_target({**config, "SUPABASE_URL": "https://different.supabase.co"}, allow_supabase_postgres_dev=True)
+
+
 def test_seeded_suit_matches_dated_interview_request(tmp_path):
     app, _ = _migrated_app(tmp_path, "interview_dev.sqlite")
     assert app.test_cli_runner().invoke(args=["seed-demo"]).exit_code == 0
@@ -89,29 +109,42 @@ def test_seeded_suit_matches_dated_interview_request(tmp_path):
     assert charcoal["specifications"]["type"] == "suit"
     assert {key: suit["availability"][key] for key in DEMO_SUIT_AVAILABILITY} == DEMO_SUIT_AVAILABILITY
 
-    created = client.post("/api/requests", json={
-        "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+    request_body = {
+        "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40.",
         "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}},
         "modes": ["borrow"],
         "budget_cents": 4000,
-        "max_deposit_cents": 8000,
         "needed_by": "2026-10-14T13:00:00Z",
         "use_start": "2026-10-13T18:00:00Z",
         "use_end": "2026-10-15T22:00:00Z",
         "pickup_windows": [{"start": "2026-10-13T18:00:00Z", "end": "2026-10-13T20:00:00Z"}],
         "area": "Central campus",
-    }, headers=auth("alice@unc.edu"))
-    assert created.status_code == 201, created.get_json()
-    request_id = created.get_json()["request"]["id"]
-    response = client.get(f"/api/requests/{request_id}/matches", headers=auth("alice@unc.edu"))
-    assert response.status_code == 200
-    matches = response.get_json()
-    assert matches["confirmed"] == []
-    assert [entry["listing_id"] for entry in matches["needs_confirmation"]] == [suit["id"]]
-    entry = matches["needs_confirmation"][0]
+    }
+
+    def matches_for(max_deposit_cents):
+        created = client.post("/api/requests", json={**request_body, "max_deposit_cents": max_deposit_cents}, headers=auth("alice@unc.edu"))
+        assert created.status_code == 201, created.get_json()
+        need = created.get_json()["request"]
+        assert need["max_deposit_cents"] == max_deposit_cents
+        assert all(need[key] == value for key, value in request_body.items())
+        response = client.get(f"/api/requests/{need['id']}/matches", headers=auth("alice@unc.edu"))
+        assert response.status_code == 200
+        return response.get_json()
+
+    affordable_80 = matches_for(8000)
+    affordable_200 = matches_for(20000)
+    assert affordable_80["confirmed"] == []
+    assert [entry["listing_id"] for entry in affordable_80["needs_confirmation"]] == [suit["id"]]
+    entry = affordable_80["needs_confirmation"][0]
     assert entry["unknown_required"] == ["deposit_agreement"]
     assert any("Required type matches: suit." == reason for reason in entry["reasons"])
     assert any("Required jacket_size matches: 40R." == reason for reason in entry["reasons"])
     assert "Listing availability covers the requested dates." in entry["reasons"]
     assert any("deposit negotiation required" in shortcoming for shortcoming in entry["shortcomings"])
-    assert [entry["listing_id"] for entry in matches["rejected"]] == [charcoal["id"]]
+    assert [entry["listing_id"] for entry in affordable_80["rejected"]] == [charcoal["id"]]
+
+    assert [entry["listing_id"] for entry in affordable_200["confirmed"]] == [suit["id"]]
+    assert affordable_200["needs_confirmation"] == []
+    assert affordable_200["confirmed"][0]["unknown_required"] == []
+    assert not any("deposit negotiation" in shortcoming for shortcoming in affordable_200["confirmed"][0]["shortcomings"])
+    assert [entry["listing_id"] for entry in affordable_200["rejected"]] == [charcoal["id"]]

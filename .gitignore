@@ -12,6 +12,7 @@ htmlcov/
 .env
 .env.*
 !.env.example
+.aws
 instance/
 var/
 uploads/
