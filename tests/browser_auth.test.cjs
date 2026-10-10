@@ -19,6 +19,7 @@ function harness({ signInPage = false } = {}) {
   let sessionError = null;
   let signOutCalls = 0;
   let apiFailure = null;
+  let apiFailureStatus = 401;
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, {
       hidden: true, textContent: '', value: '',
@@ -58,7 +59,7 @@ function harness({ signInPage = false } = {}) {
       requests.push({ url, options });
       const failure = apiFailure;
       const body = failure || { profile: { display_name: 'Member', badge: 'UNC email verified', verification_source: 'supabase' } };
-      return { ok: !failure, status: failure ? 401 : 200, text: async () => JSON.stringify(body) };
+      return { ok: !failure, status: failure ? apiFailureStatus : 200, text: async () => JSON.stringify(body) };
     },
   };
   vm.createContext(context);
@@ -71,7 +72,7 @@ function harness({ signInPage = false } = {}) {
     api: context.window.api, element, requests,
     setSession(value) { session = value; authCallback?.('TOKEN_REFRESHED', value); },
     setSessionError(value) { sessionError = value; },
-    setApiFailure(value) { apiFailure = value; },
+    setApiFailure(value, status = 401) { apiFailure = value; apiFailureStatus = status; },
     signOutCalls: () => signOutCalls,
   };
 }
@@ -117,4 +118,18 @@ test('public browsing remains available when session refresh fails', async () =>
   await h.api.get('/api/listings?limit=10');
   assert.equal(h.requests.at(-1).options.headers.Authorization, undefined);
   await assert.rejects(h.api.get('/api/me'), (err) => err.code === 'session_expired');
+});
+
+test('database failure on /api/me does not make a saved session look signed out', async () => {
+  const h = harness({ signInPage: true });
+  h.setApiFailure({ error: { code: 'internal_error', message: 'Internal server error', fields: {} } }, 500);
+  h.setSession({ access_token: 'saved-session' });
+  await assert.rejects(h.api.get('/api/me'), (err) => err.status === 500);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.requests.at(-1).options.headers.Authorization, 'Bearer saved-session');
+  assert.equal(h.api.getToken(), 'saved-session');
+  assert.equal(h.element('nav-sign-in').textContent, 'Account');
+  assert.equal(h.element('sign-out').hidden, false);
+  assert.match(h.element('session-status').textContent, /Session saved/);
+  assert.equal(h.signOutCalls(), 0);
 });

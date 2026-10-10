@@ -51,8 +51,24 @@ flask --app server.app seed-demo      # meeting spots + labeled demo inventory +
 database ending in `_dev`. It is idempotent. Run migrations before seeding and
 never seed a shared database.
 
-To update an already-seeded **development** database, run `flask --app server.app
-seed-demo` again. It adds the missing `type: "suit"` to both labeled suit rows
+For a **dedicated Supabase development project** whose database is named
+`postgres`, use its Session pooler URL with the `postgresql+psycopg` driver
+and the pooler's project-qualified username in `DATABASE_URL`. Percent-encode
+reserved characters in the database password. After confirming
+`APP_ENV=development` and that no teammates or users rely on the database, run:
+
+```bash
+flask --app server.app db upgrade
+flask --app server.app seed-demo --allow-supabase-postgres-dev
+```
+
+The flag is required on each seed invocation, accepts only a Supabase session
+pooler database named `postgres`, and is rejected in production. It inserts or
+updates only labeled demo rows and does not delete other data.
+
+To update an already-seeded **development** database, repeat the applicable
+`seed-demo` command above (including the flag for Supabase `postgres`). It adds
+the missing `type: "suit"` to both labeled suit rows
 and availability bounds to the existing navy suit row in place. Their IDs,
 other specifications, pickup notes, other listings, and user data remain intact.
 An explicitly set type or date bound is left alone; review that listing if it was
@@ -61,11 +77,12 @@ customized. No database reset or new migration is needed for these JSON fields.
 The seeded navy suit is available from `2026-10-12T12:00:00Z` through
 `2026-10-16T22:00:00Z` (Monday 8 a.m. through Friday 6 p.m. in New York).
 For the dated interview demo, confirm this editable request and submit it to
-`POST /api/requests` as a different sandbox user from the demo lender:
+`POST /api/requests` as a different user from the demo lender. This is example
+A, with an $80 maximum deposit:
 
 ```json
 {
-  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40.",
   "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}},
   "modes": ["borrow"],
   "budget_cents": 4000,
@@ -78,11 +95,16 @@ For the dated interview demo, confirm this editable request and submit it to
 }
 ```
 
+Example B submits the **same request body**, changing only
+`"max_deposit_cents": 20000` ($200). The original text, normalized fields,
+mode, rental budget, dates, pickup window, and area stay identical.
+
 `GET /api/requests/{id}/matches` places the navy suit in
-`needs_confirmation`: type, size, budget, and dates fit, while its proposed
-$200 deposit exceeds the $80 limit. The charcoal 46L suit is rejected. The
-lower deposit requires negotiation and explicit lender acknowledgment; the
-match result does not change the owner's proposal.
+`needs_confirmation` for example A: type, size, rental budget, and dates fit,
+while its proposed $200 deposit exceeds the $80 limit. It places the navy suit
+in `confirmed` for example B, where the deposit fits. The charcoal 46L suit is
+rejected in both. A lower deposit still requires negotiation and explicit lender
+acknowledgment; matching does not change the owner's proposal.
 
 After changing a model (Person 1 only):
 
@@ -164,6 +186,25 @@ development key and network access.
   `SUPABASE_ANON_KEY` (public) and
   `DATABASE_URL` to the Supabase Postgres URL. The service-role key stays
   backend-only.
+
+`server/config.py` loads `.env` when the app starts; an already-exported shell
+variable takes precedence. Restart Flask after editing `.env`. For the shared
+Supabase Session pooler, use the URL copied from **Connect → Session pooler**,
+change only the scheme to `postgresql+psycopg://`, and percent-encode reserved
+password characters. If a read-only `SELECT 1` fails, compare the application's
+effective driver, host, port, database, and username with a working PSQL command
+without logging the password or full URL. An authentication error alone does not
+identify whether the cause is a wrong secret, URL encoding, stale process
+configuration, or another connection setting. Run migrations only after the
+application connection succeeds.
+
+Browser storage is scoped to the exact origin. Start the magic-link flow and
+open its callback on the same scheme, hostname, and port (for example, use
+`127.0.0.1:5055` throughout, not `localhost:5000` for one step). A saved
+Supabase session can outlive a temporary `/api/me` database failure; the
+header then reports that account details are unavailable without treating
+the user as signed out. Confirm the actual `/api/me` status before concluding
+that authentication failed.
 
 ## Supabase project setup and live checks
 

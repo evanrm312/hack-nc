@@ -53,7 +53,8 @@ your functions.
 
 ### P3-1 Shell + request-to-results journey — Person 3, `p3-marketplace-ui`
 
-Status: open. Acceptance: shared Frutiger Aero shell in `base.html` and
+Status: merged into `main` by PR #4; live browser integration check pending.
+Acceptance: shared Frutiger Aero shell in `base.html` and
 `theme.css`; home request input calls `/api/requests/normalize` then shows the
 editable interpretation and creates the request; results page renders
 confirmed vs needs-confirmation matches with reasons from
@@ -86,19 +87,29 @@ separate tasks (P4-2, P4-3).
 - Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen and
   its migration/release behavior is unverified.
 - `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` and covered
-  by mocked provider tests, but has not been exercised against a real Supabase
-  project or a real confirmed UNC mailbox. Browser lifecycle checks use a
-  mocked Supabase client.
+  by mocked provider tests. A real UNC magic-link callback was observed by the
+  user; `/api/me`, refresh persistence, and sign-out still need a live browser
+  check with an existing authenticated session.
 - `SupabaseStorage` is implemented and mocked for upload, download, deletion,
-  bucket separation, and private-read gating. The current development Supabase
-  project responds that both configured buckets are missing, so live
-  upload/retrieval remains unverified. `STORAGE_BACKEND=local` remains available.
+  bucket separation, and private-read gating. Live adapter checks verified both
+  bucket visibility settings, disposable upload/retrieval, private denial, and
+  cleanup. End-to-end evidence access awaits Person 4's evidence routes.
+- The application's effective SQLAlchemy configuration connected through the
+  Supabase Session pooler and returned `SELECT 1`. The initial migration was
+  applied to the designated development database; the explicit opt-in demo
+  seed created three meeting spots, one labeled demo profile, two labeled suit
+  listings, and two fixture price references. API reads verified the listings
+  and meeting spots; both listings persisted after a Flask restart. The cause
+  of the earlier password authentication error was not established. No reset
+  was run.
 - PostgreSQL migration/persistence validation requires a dedicated
   `TEST_DATABASE_URL` ending in `_test`; none is configured in this environment.
 - Normalization and matching are implemented by Person 2. Price appraisal
-  remains a stub; live Gemini behavior was reported in Person 2's handoff and
-  has not been rechecked in this Person 1 integration run. The dated suit seed
-  gap identified in that handoff is addressed in PR #2.
-- Exchange endpoints: labeled fixture reads, `501` writes.
+  remains a stub. A direct live Gemini normalization in the Person 1 integration
+  run succeeded with `gemini-3.5-flash-lite`; authenticated request creation and
+  live seeded-catalog matching remain unverified.
+- PR #7 contains persisted item exchanges and PR #8 contains services. Both
+  remain draft and require integration review before merging; main still serves
+  labeled exchange fixtures and `501` writes.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.

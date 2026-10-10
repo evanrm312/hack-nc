@@ -43,13 +43,17 @@
       if (signOut) signOut.hidden = false;
     } catch (err) {
       clearProfile();
+      const sessionSaved = !!api.getToken();
       if (err instanceof api.ApiError && (err.status === 401 || err.status === 403)) {
         status.textContent = err.message;
-        if (err.status === 401) api.setToken(null);
+      } else if (sessionSaved) {
+        status.textContent = "Session saved. Account details are temporarily unavailable.";
       } else {
         status.textContent = "Could not check session. Try again shortly.";
       }
-      if (navSignIn) navSignIn.textContent = "Sign in";
+      if (navSignIn) navSignIn.textContent = sessionSaved ? "Account" : "Sign in";
+      const signOut = $("sign-out");
+      if (signOut) signOut.hidden = !sessionSaved;
     }
   }
 

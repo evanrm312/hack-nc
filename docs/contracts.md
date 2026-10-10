@@ -80,7 +80,8 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 }
 ```
 
-- `allowed_modes`: subset of `["sale", "borrow"]`, non-empty.
+- `allowed_modes`: non-empty subset of `["sale", "borrow"]` for items, or exactly
+  `["service"]` for a service. Services cannot be combined with item modes.
 - `condition`: one of `new`, `like_new`, `good`, `fair`, `worn`, or null.
 - `status`: `available` | `reserved` | `sold` | `withdrawn`. Only the reservation
   helper moves a listing to `reserved`/`sold`; owners may set `available`/`withdrawn`.
@@ -90,13 +91,57 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 - `collateral_percent` is the owner's proposal (0-100). The deposit in cents is
   decided per offer revision, not here.
 
+#### Service Listing (public view)
+
+Services use the same listing endpoints and `allowed_modes: ["service"]`.
+Categories are exactly `tutoring`, `proofreading`, or `moving help`.
+`service_price_cents` may be zero; `service_duration_minutes` is 1–1440;
+`service_available_windows` is a nonempty list of offset-aware UTC intervals.
+Item condition, collateral, deposit, agreed value, sale price, and rental fee
+fields are rejected and omitted from service responses. Example `POST /api/listings`
+body:
+
+```json
+{
+  "title": "Calculus tutoring",
+  "description": "One-on-one calculus help at the library.",
+  "category": "tutoring",
+  "allowed_modes": ["service"],
+  "service_price_cents": 2500,
+  "service_duration_minutes": 60,
+  "service_available_windows": [{"start": "2030-10-12T12:00:00Z", "end": "2030-10-12T14:00:00Z"}]
+}
+```
+
+Example `201 {"listing": ...}` record:
+
+```json
+{
+  "id": "4a0c0000000000000000000000000001",
+  "owner_id": "0f1c0000000000000000000000000001",
+  "owner": {"id": "0f1c0000000000000000000000000001", "display_name": "Member 0f1c00", "confirmed_email_domain": "unc.edu", "verification_source": "sandbox", "badge": "Sandbox identity (not verified)", "is_demo": true},
+  "title": "Calculus tutoring",
+  "category": "tutoring",
+  "description": "One-on-one calculus help at the library.",
+  "allowed_modes": ["service"],
+  "status": "available",
+  "active_exchange_id": null,
+  "public_photo_url": null,
+  "created_at": "2030-10-10T19:01:00Z",
+  "updated_at": "2030-10-10T19:01:00Z",
+  "service_price_cents": 2500,
+  "service_duration_minutes": 60,
+  "service_available_windows": [{"start": "2030-10-12T12:00:00Z", "end": "2030-10-12T14:00:00Z"}]
+}
+```
+
 ### NeedRequest (owner view)
 
 ```json
 {
   "id": "9b3f…",
   "requester_id": "77aa…",
-  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40, maximum deposit $80.",
+  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40.",
   "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}, "follow_up_questions": []},
   "modes": ["borrow"],
   "budget_cents": 4000,
@@ -117,6 +162,48 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 - `visibility`: `private` | `public`. Publishing sets `public` + `open`.
 - `budget_cents` (purchase/rental budget) and `max_deposit_cents` (deposit
   affordability) are separate constraints.
+
+#### Service NeedRequest (owner view)
+
+Service requests use `modes: ["service"]` and one of the three service
+categories in `normalized.category`. `max_deposit_cents`, loan dates, and pickup
+windows are rejected and omitted. `service_duration_minutes` and
+`service_time_windows` may be omitted when unknown; a missing constraint stays
+unknown. Example `POST /api/requests` body:
+
+```json
+{
+  "original_text": "I need an hour of calculus tutoring.",
+  "normalized": {"source": "manual", "category": "tutoring", "required_specifications": {}, "preferred_specifications": {}},
+  "modes": ["service"],
+  "budget_cents": 3000,
+  "needed_by": "2030-10-13T00:00:00Z",
+  "service_duration_minutes": 60,
+  "service_time_windows": [{"start": "2030-10-12T12:00:00Z", "end": "2030-10-12T14:00:00Z"}],
+  "area": "Davis Library"
+}
+```
+
+Example `201 {"request": ..., "view": "owner"}` record:
+
+```json
+{
+  "id": "9b3f0000000000000000000000000001",
+  "requester_id": "77aa0000000000000000000000000001",
+  "original_text": "I need an hour of calculus tutoring.",
+  "normalized": {"source": "manual", "category": "tutoring", "required_specifications": {}, "preferred_specifications": {}},
+  "modes": ["service"],
+  "budget_cents": 3000,
+  "needed_by": "2030-10-13T00:00:00Z",
+  "area": "Davis Library",
+  "visibility": "private",
+  "status": "draft",
+  "created_at": "2030-10-10T19:02:00Z",
+  "updated_at": "2030-10-10T19:02:00Z",
+  "service_duration_minutes": 60,
+  "service_time_windows": [{"start": "2030-10-12T12:00:00Z", "end": "2030-10-12T14:00:00Z"}]
+}
+```
 
 ### NeedRequest (sanitized public view)
 
@@ -185,8 +272,71 @@ confirm. Missing or invalid Gemini output never creates fixture data.
 }
 ```
 
-`status`: `negotiating` | `reserved` | `on_loan` | `return_pending` |
-`completed` | `disputed` | `cancelled`.
+Item `status`: `negotiating` | `reserved` | `on_loan` | `return_pending` |
+`completed` | `disputed` | `cancelled`. Services use `negotiating` |
+`scheduled` | `completed` | `cancelled` | `disputed` only.
+
+#### Service Exchange
+
+Service negotiation starts with `POST /api/exchanges` body
+`{"listing_id":"4a0c0000000000000000000000000001","mode":"service","source_request_id":"9b3f0000000000000000000000000001"}`.
+The response is `201 {"exchange": ServiceExchange, "current_offer": null}`.
+Example service exchange record after both participants accept the current offer:
+
+```json
+{
+  "id": "c1d20000000000000000000000000001",
+  "listing_id": "4a0c0000000000000000000000000001",
+  "owner_id": "0f1c0000000000000000000000000001",
+  "requester_id": "77aa0000000000000000000000000001",
+  "source_request_id": "9b3f0000000000000000000000000001",
+  "mode": "service",
+  "status": "scheduled",
+  "current_offer_revision": 1,
+  "cancellation_reason": null,
+  "dispute_reason": null,
+  "created_at": "2030-10-10T19:05:00Z",
+  "updated_at": "2030-10-10T19:08:00Z",
+  "owner_service_confirmed_at": null,
+  "requester_service_confirmed_at": null,
+  "payment_notice": "Simulated: no real funds are reserved or charged."
+}
+```
+
+`POST /api/exchanges/{id}/offers` accepts
+`{"service_price_cents":2500,"service_duration_minutes":60,"service_scheduled_at":"2030-10-12T12:00:00Z"}`.
+The scheduled interval must fit a listing availability window. Example `offer`
+record returned with `201 {"offer": ..., "exchange": ...}`:
+
+```json
+{
+  "id": "e5f60000000000000000000000000001",
+  "exchange_id": "c1d20000000000000000000000000001",
+  "version": 1,
+  "created_by": "0f1c0000000000000000000000000001",
+  "owner_accepted_at": "2030-10-10T19:07:00Z",
+  "requester_accepted_at": "2030-10-10T19:08:00Z",
+  "created_at": "2030-10-10T19:06:00Z",
+  "service_price_cents": 2500,
+  "service_duration_minutes": 60,
+  "service_scheduled_at": "2030-10-12T12:00:00Z"
+}
+```
+
+Each participant calls `POST /api/exchanges/{id}/accept` with `{"version":1}`.
+Both acceptances move `negotiating → scheduled` and reserve the listing; a
+new offer creates a new revision with neither acceptance. Each participant then
+calls `POST /api/exchanges/{id}/complete` with `{"confirm":true}` after the
+session happened. Only the second confirmation moves `scheduled → completed`
+and releases the listing. `POST /cancel` or `/dispute` accepts a nonempty
+`{"reason":"..."}` and never charges funds. The price is a proposed service
+fee in integer cents; no real payment is collected. Service responses omit
+deposit status, item condition, collateral, agreed value, handoff, return,
+and evidence fields. Service calls to `/handoff`, `/return`, or `/evidence`
+return `409 invalid_transition`; nonparticipants receive `403`. Use
+`GET /api/exchanges?mode=service` for the caller's real service exchanges;
+`GET /api/exchanges/{id}` returns the service exchange and offers to its
+participants only.
 
 ### OfferRevision
 
@@ -356,7 +506,8 @@ continues through `GET /api/requests/{id}/matches`.
 
 Body: `original_text` (required), `normalized`, `modes` (required),
 `budget_cents`, `max_deposit_cents`, `needed_by`, `use_start`, `use_end`,
-`pickup_windows`, `area`. → `201 {"request": owner view, "view": "owner"}`.
+`pickup_windows`, `area`; services may instead supply `service_duration_minutes`
+and private `service_time_windows`. → `201 {"request": owner view, "view": "owner"}`.
 
 ### `GET /api/requests/{id}`
 
@@ -430,28 +581,33 @@ values and unaffordable proposed collateral appear in `needs_confirmation`.
 The example listing covers the requested dates. It remains in
 `needs_confirmation` solely because its proposed $200 deposit exceeds the
 requester's $80 maximum; the lender and borrower must negotiate an agreement.
+For the second demo request, keep every field above the same except
+`max_deposit_cents: 20000`. The navy suit moves to `confirmed`, with
+`unknown_required: []` and no deposit shortcoming. The charcoal 46L suit is
+rejected in both cases.
 
 ### `POST /api/requests/{id}/publish` (requester only)
 
 → `200 {"request": owner view, "public_preview": public view, "view": "owner"}`.
 
-## Person 4 endpoints (stubs now; contract to implement)
+## Exchange endpoints
 
-All require a verified user and, once implemented, a participant check
-(`exchange.owner_id` or `exchange.requester_id == caller`), else `403`.
+All require a verified user. Service exchanges enforce a participant check
+(`exchange.owner_id` or `exchange.requester_id == caller`), else `403`. The
+item exchange paths below remain Person 4 stubs on this branch.
 
 | Method | Path | Body (request) | Response now | Response when real |
 |---|---|---|---|---|
 | GET | `/api/exchanges` | — | `{"fixture": true, "exchanges": [Exchange]}` | `{"exchanges": [Exchange + listing summary]}` for the caller |
 | POST | `/api/exchanges` | `{"listing_id", "mode", "source_request_id"?}` | `501` | `201 {"exchange": Exchange, "current_offer": OfferRevision}` |
-| GET | `/api/exchanges/{id}` | — | `{"fixture": true, "simulation_notice", "exchange", "current_offer", "offers", "deposit_status", "participants"}` | same shape, real |
+| GET | `/api/exchanges/{id}` | — | `{"fixture": true, "simulation_notice", "exchange", "current_offer", "offers", "deposit_status", "participants"}` | real `exchange`, `current_offer`, `offers`, `simulation_notice`, `deposit_status`, `participants`, `confirmations`, and `max_upload_bytes` |
 | GET | `/api/exchanges/{id}/messages` | `?after=<iso>` | `{"fixture": true, "messages": [Message]}` | `{"messages": [Message]}` |
 | POST | `/api/exchanges/{id}/messages` | `{"body"}` | `501` | `201 {"message": Message}` |
 | POST | `/api/exchanges/{id}/offers` | OfferRevision terms (no `version`) | `501` | `201 {"offer": OfferRevision, "exchange": Exchange}`; new version resets acceptances |
 | POST | `/api/exchanges/{id}/accept` | `{"version": 2, "lower_deposit_acknowledged": true?}` | `501` | `200 {"exchange", "current_offer"}`; `409 stale_offer` if version ≠ current; `409 reservation_conflict` if the atomic reserve fails; repeat accept is idempotent |
 | GET | `/api/exchanges/{id}/evidence` | — | `{"fixture": true, "evidence": [Evidence]}` | `{"evidence": [Evidence]}` |
 | POST | `/api/exchanges/{id}/evidence` | multipart `photo`, field `stage` | `501` | `201 {"evidence": Evidence}` |
-| GET | `/api/exchanges/{id}/evidence/{evidence_id}` | — | `501` | image bytes, participants only |
+| GET | `/api/exchanges/{id}/evidence/{evidence_id}` | `?preview=1` optional | `501` | image bytes, or JSON `{"data_url": "data:image/jpeg;base64,..."}` for an authenticated preview; participants only |
 | POST | `/api/exchanges/{id}/handoff` | `{"confirm": true, "accept_condition": true}` | `501` | `200 {"exchange"}`; sale → `completed`, loan → `on_loan` after both confirm |
 | POST | `/api/exchanges/{id}/return` | `{"action": "initiate"|"accept"|"issue", "reason"?}` | `501` | `200 {"exchange"}`; `on_loan → return_pending → completed`, or `disputed` |
 | POST | `/api/exchanges/{id}/review` | Review fields | `501` | `201 {"review": Review}` |
@@ -460,6 +616,11 @@ All require a verified user and, once implemented, a participant check
 
 Deposit status values are simulated and labeled:
 `{"state": "simulated_pending"|"simulated_held"|"simulated_released", "label": "Simulated: no real funds are reserved or charged."}`.
+The planned real item detail includes `confirmations` with `stage`
+(`handoff` or `return`), `participant_id`, `condition_acknowledged_at`,
+`confirmed_at`, and `evidence_ids`. `max_upload_bytes` is the server's evidence
+upload limit. Evidence previews remain private and must use the authenticated
+API request; no public URL or storage path is returned.
 
 ### Exchange status rules (enforced in Python)
 
@@ -470,6 +631,9 @@ Deposit status values are simulated and labeled:
 - `on_loan → return_pending` when return is initiated.
 - `return_pending → completed` after before/after evidence and mutual confirmation; `release_listing()`.
 - `return_pending → disputed` on a raised issue; never an automatic charge.
+- Service: `negotiating → scheduled` after both accept the latest service offer;
+  `scheduled → completed` after both confirm the session happened. Services
+  cannot enter `reserved`, `on_loan`, or `return_pending`.
 - `cancelled` from `negotiating`/`reserved` only; `release_listing()`; records a reason.
 - Any change to price, collateral, meeting, condition, or dates creates a new revision and resets both acceptances.
 - Duplicate actions are rejected (`409`) or idempotent.
@@ -487,10 +651,10 @@ def match_listings(request: dict, listings: list[dict]) -> dict:
     """request = NeedRequest owner view; listings = current available Listing dicts.
     Returns {"source": "deterministic", "confirmed": [MatchEntry],
              "needs_confirmation": [MatchEntry], "rejected": [MatchEntry]}.
-    MatchEntry = {"listing_id", "mode": "sale"|"borrow"|None, "score": float|None,
+    MatchEntry = {"listing_id", "mode": "sale"|"borrow"|"service"|None, "score": float|None,
                   "reasons": [str], "shortcomings": [str], "unknown_required": [str]}.
-    Hard checks (mode, known required specs, dates, budget, deposit affordability,
-    availability) are deterministic. Unknown required attribute → needs_confirmation,
+    Hard checks (mode, known required specs, dates, budget, deposit affordability
+    for loans, service duration/windows, availability) are deterministic. Unknown required attribute → needs_confirmation,
     never confirmed. Every listing_id must come from `listings`."""
 
 def evaluate_price(price_cents: int, reference: dict | None) -> dict:

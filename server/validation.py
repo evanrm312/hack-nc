@@ -110,6 +110,37 @@ def string_list(value, field: str, errors: FieldErrors) -> list | None:
     return [v.strip() for v in value if v.strip()]
 
 
+def time_windows(value, field: str, errors: FieldErrors, *, required: bool = False) -> list | None:
+    """Validate explicit UTC windows for service availability or requested times."""
+    if value is None:
+        if required:
+            errors.add(field, "required")
+        return None
+    if not isinstance(value, list):
+        errors.add(field, "must be a list of {start, end}")
+        return None
+    if required and not value:
+        errors.add(field, "must not be empty")
+    cleaned = []
+    for index, window in enumerate(value):
+        if not isinstance(window, dict):
+            errors.add(f"{field}[{index}]", "must be an object with start and end")
+            continue
+        start = datetime_utc(window.get("start"), f"{field}[{index}].start", errors)
+        end = datetime_utc(window.get("end"), f"{field}[{index}].end", errors)
+        if start is None or end is None:
+            if window.get("start") is None:
+                errors.add(f"{field}[{index}].start", "required")
+            if window.get("end") is None:
+                errors.add(f"{field}[{index}].end", "required")
+        elif end <= start:
+            errors.add(f"{field}[{index}]", "end must be after start")
+        else:
+            cleaned.append({"start": start.isoformat().replace("+00:00", "Z"),
+                            "end": end.isoformat().replace("+00:00", "Z")})
+    return cleaned
+
+
 def json_object(value, field: str, errors: FieldErrors) -> dict | None:
     if value is None:
         return None
