@@ -100,7 +100,15 @@ python -m pytest -q tests/test_postgres_catalog.py
 ```
 
 The PostgreSQL test skips when `TEST_DATABASE_URL` is unset. Never point it at
-the application database.
+the application database. The URL must use the installed `postgresql+psycopg`
+driver; the test creates and removes only a unique schema in the dedicated
+`*_test` database. Do not use the live Supabase application database for tests.
+
+Browser session checks (Node.js, no package install):
+
+```bash
+node tests/browser_auth.test.cjs
+```
 
 ## Auth modes
 
@@ -111,16 +119,76 @@ the application database.
 - `AUTH_MODE=supabase`: the browser signs in with a Supabase magic link
   (`static/js/auth.js`); Flask verifies every request's access token against
   Supabase Auth and requires `email_confirmed_at` plus an exact `@unc.edu`
-  domain. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (public) and
+  domain. The client initializes on every page, updates the shared API token
+  on refresh, and calls Supabase sign-out. Set `SUPABASE_URL` and
+  `SUPABASE_ANON_KEY` (public) and
   `DATABASE_URL` to the Supabase Postgres URL. The service-role key stays
   backend-only.
 
-## Deploy (skeleton)
+## Supabase project setup and live checks
 
-`Procfile` runs `flask db upgrade` on release and `gunicorn wsgi:app` for web.
-Set `DATABASE_URL`, `SECRET_KEY`, `AUTH_MODE=supabase`, the Supabase keys, and
-`GEMINI_API_KEY` as environment variables on the host. Not yet deployed; see
-`docs/tasks.md` P1-2.
+In the Supabase dashboard, enable email magic links and set the site URL to
+the deployed origin. Add `https://YOUR_HOST/sign-in` to the allowed redirect
+URLs. Configure email delivery if the default sender does not reach the team's
+actual addresses. Copy the project URL and anon key into `SUPABASE_URL` and
+`SUPABASE_ANON_KEY`; keep `SUPABASE_SERVICE_ROLE_KEY` server-side only. A live
+auth check requires a real confirmed `@unc.edu` inbox: sign in at `/sign-in`,
+follow the link, verify `/api/me` shows the UNC badge, refresh the page, then
+sign out and confirm a protected request returns 401. Wrong-domain and
+unconfirmed-email behavior is covered by mocked provider tests, not a live
+Supabase project check yet.
+
+For `STORAGE_BACKEND=supabase`, create two distinct buckets:
+`SUPABASE_PUBLIC_BUCKET=public-listings` (public) and
+`SUPABASE_PRIVATE_BUCKET=private-evidence` (private). Browser clients must not
+have direct write access to either bucket or direct read access to private
+evidence; only Flask uses the service-role key. A live public upload/retrieval
+check is: sign in, create a listing, upload a PNG through
+`POST /api/listings/<id>/photo` as its owner, then request the returned
+`public_photo_url` through Flask and compare the image bytes. Repeat the GET
+after a server restart. The private bucket can be checked for direct anonymous
+denial now; an end-to-end participant evidence check waits for Person 4's
+exchange evidence route. Private `SupabaseStorage.send` also requires
+`authorize_private_read` in the current Flask request. If using local storage
+on a persistent disk, keep `UPLOAD_DIR/private` outside directly served paths.
+
+## Deploy (host pending)
+
+No host has been selected. `Procfile` declares a release command, but whether
+it runs depends on the chosen host; verify its release or predeploy feature
+before relying on it. Configure these environment variables on the host:
+
+| Variable | Value or purpose |
+|---|---|
+| `APP_ENV` | `production`; rejects sandbox auth and development secrets |
+| `SECRET_KEY` | unique, nondevelopment random value |
+| `DATABASE_URL` | deployed PostgreSQL URL using `postgresql+psycopg://` |
+| `AUTH_MODE` | `supabase` |
+| `ALLOWED_EMAIL_DOMAIN` | `unc.edu` |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | project URL and browser-safe anon key |
+| `AUTH_HTTP_TIMEOUT_SECONDS` | optional Auth provider timeout |
+| `STORAGE_BACKEND` | `supabase`, or `local` only with a persistent disk |
+| `SUPABASE_SERVICE_ROLE_KEY` | required for Supabase Storage; server only |
+| `SUPABASE_PUBLIC_BUCKET`, `SUPABASE_PRIVATE_BUCKET` | distinct public/private bucket names |
+| `UPLOAD_DIR` | required persistent path if using `local` storage |
+| `MAX_UPLOAD_BYTES`, `STORAGE_HTTP_TIMEOUT_SECONDS` | optional upload size and storage timeout |
+| `PORT` | supplied by the host for the web process |
+
+`TEST_DATABASE_URL` is only for an isolated test target and must not point to
+the deployed application database. `SANDBOX_USERS` is for local development.
+`GEMINI_API_KEY` is optional for the Person 2 integration and is not needed by
+the auth/storage scaffold. The host must supply `PORT` for the web command:
+
+```bash
+flask --app server.app db upgrade
+gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2
+```
+
+Run the migration as a deliberate deployment step before starting the new web
+version. On the selected host, confirm how to run that first command once per
+deploy; do not assume the Procfile `release:` entry is honored. Check
+`/healthz`, the real magic-link flow, a public image upload/read, and listing
+persistence after a restart. Deployment and these live checks remain pending.
 
 ## Layout
 

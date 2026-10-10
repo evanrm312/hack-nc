@@ -27,7 +27,10 @@ user creates a listing; another user can read it; the other user's PATCH is
 
 ### P1-2 Deploy skeleton + Supabase auth/storage — Person 1, `p1-backend`
 
-Status: open. Acceptance: deployed URL serves `/healthz`; `AUTH_MODE=supabase`
+Status: in progress. Automated Supabase Auth adapter and browser lifecycle
+checks pass with mocked responses; production config rejects sandbox auth and
+development secrets. `SupabaseStorage` has mocked adapter checks; local storage
+remains available. Acceptance: deployed URL serves `/healthz`; `AUTH_MODE=supabase`
 magic-link sign-in works with a real `@unc.edu` address (configure SMTP or
 confirm Supabase default sender reaches team addresses); `DATABASE_URL` points
 at Postgres; `flask db upgrade` runs in the release step; records survive a
@@ -78,11 +81,17 @@ separate tasks (P4-2, P4-3).
 
 ## Known blockers / limitations of the scaffold
 
-- Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen.
-- `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` but has not
-  been exercised against a real Supabase project.
-- `SupabaseStorage` is an interface only; `STORAGE_BACKEND=local` is the
-  working backend.
+- Not deployed yet (P1-2). `Procfile` and `wsgi.py` exist; no host chosen and
+  its migration/release behavior is unverified.
+- `AUTH_MODE=supabase` is implemented against `GET /auth/v1/user` and covered
+  by mocked provider tests, but has not been exercised against a real Supabase
+  project or a real confirmed UNC mailbox. Browser lifecycle checks use a
+  mocked Supabase client.
+- `SupabaseStorage` is implemented and mocked for upload, download, deletion,
+  bucket separation, and private-read gating. Live bucket configuration and
+  upload/retrieval remain unverified. `STORAGE_BACKEND=local` remains available.
+- PostgreSQL migration/persistence validation requires a dedicated
+  `TEST_DATABASE_URL` ending in `_test`; none is configured in this environment.
 - Gemini, matching, pricing: stubs with labeled fixture output.
 - Exchange endpoints: labeled fixture reads, `501` writes.
 - Built and tested on Python 3.14; requirements are pinned from that

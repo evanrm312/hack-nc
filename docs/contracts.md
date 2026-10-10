@@ -423,9 +423,17 @@ def evaluate_price(price_cents: int, reference: dict | None) -> dict:
   caller commits.
 - `server.storage.get_storage().save(scope, stream, max_bytes) -> StoredFile`,
   `.send(scope, path, content_type)`, `.delete(scope, path)`;
-  `authorize_private_read(viewer_id, participant_ids)`.
+  `authorize_private_read(viewer_id, participant_ids)`. `scope` is `public` for
+  listing photos and `private` for evidence; Supabase uses distinct buckets.
+  Call `authorize_private_read` after loading the evidence's exchange and its
+  participants, then `send("private", ...)` in the same Flask request. The
+  adapter refuses private `send` without that check and never returns a signed
+  evidence URL. The exchange route must still verify the requested evidence
+  belongs to the authorized exchange.
 - `server.validation.json_body()`, `FieldErrors`, `money_cents`, `percent`,
   `string`, `choice_list`, `datetime_utc`, `json_object`.
 - `server.errors.ApiError(status, code, message, fields)`.
 - Browser: `window.api.get/post/patch/upload`, `api.getToken/setToken`,
-  `api.formatCents`, `api.formatTime`; errors are `api.ApiError {status, code, fields}`.
+  `api.sessionToken()`, `api.formatCents`, `api.formatTime`; errors are
+  `api.ApiError {status, code, fields}`. API calls await the current Supabase
+  session on every page; `getToken()` is only a synchronous snapshot.

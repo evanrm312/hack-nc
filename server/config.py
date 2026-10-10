@@ -45,6 +45,8 @@ class Config:
     """Default configuration. Values come from the environment."""
 
     SECRET_KEY = _env("SECRET_KEY", "dev-only-change-me")
+    # Fail closed when a deployment forgets to set its environment marker.
+    # Local setup copies .env.example, which explicitly selects development.
     APP_ENV = _env("APP_ENV", "production")
 
     SQLALCHEMY_DATABASE_URI = _database_url()
@@ -67,8 +69,11 @@ class Config:
     GEMINI_API_KEY = _env("GEMINI_API_KEY")  # backend only, used by Person 2
 
     # "local": files under UPLOAD_DIR/public and UPLOAD_DIR/private.
-    # "supabase": interface defined, not implemented yet (see docs/tasks.md).
+    # "supabase": server-side uploads to separate public/private buckets.
     STORAGE_BACKEND = (_env("STORAGE_BACKEND", "local") or "local").lower()
+    SUPABASE_PUBLIC_BUCKET = _env("SUPABASE_PUBLIC_BUCKET", "public-listings")
+    SUPABASE_PRIVATE_BUCKET = _env("SUPABASE_PRIVATE_BUCKET", "private-evidence")
+    STORAGE_HTTP_TIMEOUT_SECONDS = float(_env("STORAGE_HTTP_TIMEOUT_SECONDS", "10"))
     UPLOAD_DIR = _env("UPLOAD_DIR", str(PROJECT_ROOT / "var" / "uploads"))
     MAX_UPLOAD_BYTES = int(_env("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
     MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES + 64 * 1024  # multipart overhead
@@ -78,6 +83,8 @@ class Config:
 
 def validate_config(config) -> None:
     """Fail fast on contradictory settings."""
+    if config["APP_ENV"] not in {"development", "production"}:
+        raise RuntimeError("APP_ENV must be 'development' or 'production'")
     mode = config["AUTH_MODE"]
     if mode not in {"supabase", "sandbox"}:
         raise RuntimeError(f"AUTH_MODE must be 'supabase' or 'sandbox', got {mode!r}")
@@ -88,5 +95,15 @@ def validate_config(config) -> None:
         )
     if mode == "supabase" and not (config["SUPABASE_URL"] and config["SUPABASE_ANON_KEY"]):
         raise RuntimeError("AUTH_MODE=supabase requires SUPABASE_URL and SUPABASE_ANON_KEY")
+    if config["APP_ENV"] == "production":
+        if mode != "supabase":
+            raise RuntimeError("APP_ENV=production requires AUTH_MODE=supabase")
+        if not config["SECRET_KEY"] or config["SECRET_KEY"] in {"dev-only-change-me", "change-me"}:
+            raise RuntimeError("APP_ENV=production requires a nondevelopment SECRET_KEY")
     if config["STORAGE_BACKEND"] not in {"local", "supabase"}:
         raise RuntimeError("STORAGE_BACKEND must be 'local' or 'supabase'")
+    if config["STORAGE_BACKEND"] == "supabase":
+        if not config["SUPABASE_URL"] or not config["SUPABASE_SERVICE_ROLE_KEY"]:
+            raise RuntimeError("STORAGE_BACKEND=supabase requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY")
+        if not config["SUPABASE_PUBLIC_BUCKET"] or not config["SUPABASE_PRIVATE_BUCKET"] or config["SUPABASE_PUBLIC_BUCKET"] == config["SUPABASE_PRIVATE_BUCKET"]:
+            raise RuntimeError("Supabase public and private storage buckets must be distinct")

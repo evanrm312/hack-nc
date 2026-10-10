@@ -17,10 +17,10 @@ def _isolated_postgres_target():
     if not target:
         pytest.skip("TEST_DATABASE_URL is not configured")
     test_url = make_url(target)
-    if test_url.get_backend_name() != "postgresql" or not (
+    if test_url.drivername != "postgresql+psycopg" or not (
         test_url.database or ""
     ).endswith("_test"):
-        pytest.fail("TEST_DATABASE_URL must target a dedicated PostgreSQL _test database")
+        pytest.fail("TEST_DATABASE_URL must use postgresql+psycopg and a dedicated _test database")
 
     live = os.environ.get("DATABASE_URL")
     if live:
@@ -42,6 +42,7 @@ def test_postgres_migration_and_persistence(tmp_path):
 
         config = {
             "TESTING": True,
+            "APP_ENV": "development",
             "SQLALCHEMY_DATABASE_URI": target,
             "SQLALCHEMY_ENGINE_OPTIONS": {
                 "connect_args": {"options": f"-csearch_path={schema}"}

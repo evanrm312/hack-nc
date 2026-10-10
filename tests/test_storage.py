@@ -5,7 +5,7 @@ import io
 import pytest
 
 from server.errors import ApiError
-from server.storage import LocalStorage, authorize_private_read, detect_image_type, read_image_upload
+from server.storage import LocalStorage, SupabaseStorage, authorize_private_read, detect_image_type, read_image_upload
 
 
 def test_detect_image_type():
@@ -62,3 +62,97 @@ def test_authorize_private_read():
         with pytest.raises(ApiError) as excinfo:
             authorize_private_read(viewer, {"owner", "requester"})
         assert excinfo.value.status == 403
+
+
+def test_local_private_send_requires_participant_check(tmp_path, app):
+    storage = LocalStorage(tmp_path)
+    image = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    saved = storage.save("private", io.BytesIO(image), 100)
+    with app.test_request_context():
+        with pytest.raises(ApiError) as denied:
+            storage.send("private", saved.path)
+        assert denied.value.status == 403
+        authorize_private_read("owner", {"owner", "borrower"})
+        response = storage.send("private", saved.path)
+        response.direct_passthrough = False
+        assert response.data == image
+
+
+class ProviderResponse:
+    def __init__(self, status_code=200, content=b"", content_type="image/png"):
+        self.status_code = status_code
+        self.content = content
+        self.headers = {"Content-Type": content_type}
+
+
+def test_supabase_storage_public_upload_download_delete(monkeypatch, app):
+    calls = []
+    image = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+    def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return ProviderResponse(content=image)
+
+    monkeypatch.setattr("server.storage.requests.request", fake_request)
+    storage = SupabaseStorage("https://example.supabase.co", "service-secret", timeout=7)
+    saved = storage.save("public", io.BytesIO(image), 100)
+    assert saved.scope == "public" and saved.content_type == "image/png" and saved.size == len(image)
+    assert calls[0][0] == "POST"
+    assert calls[0][1] == f"https://example.supabase.co/storage/v1/object/public-listings/{saved.path}"
+    assert calls[0][2]["headers"]["Authorization"] == "Bearer service-secret"
+    assert calls[0][2]["headers"]["x-upsert"] == "false"
+    assert calls[0][2]["data"] == image
+    assert calls[0][2]["timeout"] == 7
+
+    with app.test_request_context():
+        response = storage.send("public", saved.path)
+    assert response.status_code == 200 and response.data == image
+    assert "service-secret" not in str(response.headers)
+    assert calls[1][1] == f"https://example.supabase.co/storage/v1/object/public/public-listings/{saved.path}"
+    assert calls[1][2]["headers"] == {}
+
+    storage.delete("public", saved.path)
+    assert calls[2][0] == "DELETE"
+    assert calls[2][1] == "https://example.supabase.co/storage/v1/object/public-listings"
+    assert calls[2][2]["json"] == {"prefixes": [saved.path]}
+
+
+def test_supabase_storage_private_requires_participant_check(monkeypatch, app):
+    calls = []
+    image = b"\xff\xd8\xff" + b"\x00" * 32
+    monkeypatch.setattr("server.storage.requests.request", lambda method, url, **kwargs: (calls.append((method, url, kwargs)) or ProviderResponse(content=image, content_type="image/jpeg")))
+    storage = SupabaseStorage("https://example.supabase.co", "service-secret")
+    saved = storage.save("private", io.BytesIO(image), 100)
+    assert "/object/private-evidence/" in calls[0][1]
+    with app.test_request_context():
+        with pytest.raises(ApiError) as blocked:
+            storage.send("private", saved.path)
+        assert blocked.value.status == 403
+        with pytest.raises(ApiError):
+            authorize_private_read("stranger", {"owner", "borrower"})
+        assert len(calls) == 1
+        authorize_private_read("owner", {"owner", "borrower"})
+        response = storage.send("private", saved.path)
+        assert response.data == image
+        assert response.headers["Cache-Control"] == "no-store"
+    assert calls[1][1] == f"https://example.supabase.co/storage/v1/object/authenticated/private-evidence/{saved.path}"
+    assert calls[1][2]["headers"]["Authorization"] == "Bearer service-secret"
+
+
+def test_supabase_storage_rejects_invalid_paths_and_provider_errors(monkeypatch, app):
+    storage = SupabaseStorage("https://example.supabase.co", "service-secret")
+    with app.test_request_context():
+        with pytest.raises(ApiError) as bad_path:
+            storage.send("public", "../private-evidence/file.jpg")
+        assert bad_path.value.status == 404
+    with pytest.raises(ValueError):
+        storage.save("other", io.BytesIO(b"\x89PNG\r\n\x1a\n"), 100)
+    monkeypatch.setattr("server.storage.requests.request", lambda *_args, **_kwargs: ProviderResponse(status_code=503))
+    with pytest.raises(ApiError) as unavailable:
+        storage.save("public", io.BytesIO(b"\x89PNG\r\n\x1a\n"), 100)
+    assert unavailable.value.status == 503
+    monkeypatch.setattr("server.storage.requests.request", lambda *_args, **_kwargs: ProviderResponse(status_code=404))
+    with app.test_request_context():
+        with pytest.raises(ApiError) as missing:
+            storage.send("public", "ab/" + "a" * 32 + ".png")
+    assert missing.value.status == 404

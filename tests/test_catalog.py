@@ -1,6 +1,7 @@
 """Migration and demo-seed checks carried forward from Person 1 M2."""
 
 from flask_migrate import upgrade
+import pytest
 from sqlalchemy import func, select
 
 from server.app import create_app
@@ -40,10 +41,8 @@ def test_migration_and_listing_survive_new_app_instance(tmp_path):
 
 def test_demo_seed_requires_dev_target_and_is_idempotent(tmp_path):
     app, config = _migrated_app(tmp_path, "seed_dev.sqlite")
-    production_app = create_app({**config, "APP_ENV": "production"})
-    refused = production_app.test_cli_runner().invoke(args=["seed-demo"])
-    assert refused.exit_code != 0
-    assert "APP_ENV=development" in refused.output
+    with pytest.raises(RuntimeError, match="AUTH_MODE=supabase"):
+        create_app({**config, "APP_ENV": "production"})
 
     runner = app.test_cli_runner()
     assert runner.invoke(args=["seed-demo"]).exit_code == 0
