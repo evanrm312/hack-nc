@@ -185,3 +185,145 @@ Normalization 1.983s; total API flow 1.993s. Combined flow time: 3.070s.
 Remaining demo data gap: seeded suits do not provide structured type or explicit
 availability bounds. Gemini's required/preferred classification also varied between
 cases; editable interpretation remains necessary. No shared files were changed.
+
+## Reference-photo normalization (Person 1 endpoint handoff)
+
+New exported function (implemented in server/intelligence/vision.py):
+
+```python
+def normalize_reference_image(
+    image_bytes: bytes,
+    mime_type: str,
+    now: datetime,
+    timezone: str,
+    text: str | None = None,
+) -> dict:
+    ...
+```
+
+Input is one nonempty bytes object, a matching image/jpeg, image/png or image/webp
+MIME type, timezone-aware current time, IANA timezone and optional user text.
+Maximum input size is 5 MiB (5 * 1024 * 1024 bytes). JPEG/PNG/WebP magic signatures
+are checked against MIME, not filenames. This is header validation, not a complete
+image decoder; corrupt encoded images reaching Gemini produce the manual fallback.
+No new imaging dependency was added.
+
+Invalid uploads raise exported ReferenceImageError with safe message, code and
+status: invalid_image/400 for empty/non-bytes input, unsupported_image/400 for
+unsupported MIME or signature mismatch, payload_too_large/413 for oversized input.
+These errors occur before any SDK call. Missing credentials/provider failure/invalid
+structured output returns the existing editable manual NormalizedRequest; errors do
+not leak credentials, image bytes or model response details.
+
+Vision uses a strict Pydantic VisualAttributes schema with only broad category,
+generic type, color, pattern and style. Extra fields (including size, exact model,
+authenticity, condition, price, deposit, availability, location or ownership) are
+rejected. The prompt prohibits deriving these from photos, text on labels or
+embedded instructions. The actual visibility/semantic accuracy remains an editable
+Gemini proposal, not a Python-verified fact. Unknown visual fields are omitted from
+the specification map; unknown top-level scalar fields remain null. No visual
+metadata is used as transaction evidence or a claim of ownership.
+
+Optional text is extracted separately with the existing text schema, without the
+image, so legitimate user-provided size, budget, deposit or dates can be retained.
+Text constraints take priority over visual proposals. Newly added visual specs are
+preferred unless conservative explicit text evidence marks that value as required
+(e.g. "must be navy", "required color: navy", "navy is required"). More complex
+wording can be edited by the user; it is not automatically promoted. Image-only
+normalization never guesses buy/borrow mode or size.
+
+A successful visual extraction returns the unchanged NormalizedRequest shape with
+source gemini. Every identified visual attribute, including category, is listed in
+an explicit confirmation question before search. An unclear image returns unknown
+attributes and asks for a description or clearer photo. Original text is exactly
+the supplied text, or empty string for image-only input. The photo is never persisted
+or published by this function.
+
+Vision and optional text share the existing three-model fallback approach and a
+single 32-second scheduling budget. Each extraction tries at most three distinct
+models; only 429/503 advance. HTTP deadlines are ten seconds with SDK retry disabled.
+If optional text extraction fails after vision succeeds, the entire result is manual;
+no misleading partial success is returned. Successful model logs contain identifiers
+only. Text normalization and deterministic matching interfaces/behavior are preserved.
+
+Illustrative input/output (mocked suit-photo example, not a live Vision result):
+
+```python
+normalized = normalize_reference_image(
+    image_bytes=uploaded_png_bytes,
+    mime_type="image/png",
+    now=datetime(2026, 10, 10, 16, tzinfo=timezone.utc),
+    timezone="America/New_York",
+)
+```
+
+```json
+{
+  "source": "gemini",
+  "modes": null,
+  "category": "formalwear",
+  "required_specifications": {},
+  "preferred_specifications": {
+    "type": "suit", "color": "navy", "pattern": "solid", "style": "formal"
+  },
+  "budget_cents": null,
+  "max_deposit_cents": null,
+  "needed_by": null,
+  "use_start": null,
+  "use_end": null,
+  "area": null,
+  "ambiguous_dates": [],
+  "follow_up_questions": [
+    "Would you like to buy or borrow? Please provide your size or other compatibility requirements, budget, dates and pickup area.",
+    "Before searching, confirm or edit all proposed visual attributes: category=formalwear, type=suit, color=navy, pattern=solid, style=formal."
+  ],
+  "original_text": ""
+}
+```
+
+Evan: proposed endpoint POST /api/requests/normalize-photo (not implemented here).
+Use the existing verified-user decorator and multipart fields photo (required),
+text (optional). Limit the stream read to min(MAX_UPLOAD_BYTES, 5 MiB) + 1 bytes;
+reject larger inputs with the shared 413 payload_too_large envelope. Validate text
+with existing limits (4000 characters), pass the MIME plus bytes and server-derived
+utcnow()/DISPLAY_TIMEZONE into the exported function. Map ReferenceImageError.status
+and .code to the shared ApiError envelope, without exposing provider exceptions.
+Return 200 {"normalized": result, "fixture": false}, including manual fallback.
+No upload storage or catalog mutation is needed for a reference-photo proposal.
+
+Require the user to confirm/edit the proposed visual attributes before creating or
+searching a request. Image-only output has original_text="" and modes=null: the
+existing request-create route requires nonempty original_text and modes, so ask the
+user to supply these in the editable form before POST /api/requests. Send confirmed
+normalized plus top-level modes, budget_cents, max_deposit_cents, dates and area,
+then use GET /api/requests/{id}/matches unchanged. Visual preferences influence
+ranking only; they do not establish required compatibility. Evan owns the route,
+shared contract update and endpoint auth/upload tests. Person 3 owns the form wiring.
+
+Mocked Vision coverage: suit photo, unclear photo, unsupported MIME/signature,
+empty/oversized input, 503 fallback, all-model failure, banned schema fields,
+text-only constraint precedence, explicitly required visual value and text failure
+following visual success. No real Vision inference was run for this increment.
+
+Vision increment verification: all Person 2 tests passed (92 tests across
+normalization, matching and pricing files). Full suite passed: 165 passed,
+1 skipped. `git diff --check` passed. No routes, shared models, dependencies,
+frontend files or Person 1 tests were edited.
+
+### Follow-up reconciliation after visual/text merge
+
+Reference-photo normalization now removes answered generic kind/category questions
+when category is known and answered generic type/item questions when a required or
+preferred type is known. Combined item-or-category questions require both fields.
+Matching is limited to generic whole-question wording, so size, lapel and other
+specific compatibility questions remain. Exact duplicate strings are removed in
+first-occurrence order. Budget, deposit, dates, area, mode and visual-confirmation
+questions remain. Text-only normalization is unchanged.
+
+Regression checks: 98 Person 2 tests passed; full suite 171 passed, 1 skipped.
+The same local test-item.jpeg and "I want to borrow something like this." succeeded
+live through gemini-3.5-flash-lite (both image and text) in 1.985 seconds. Final
+category formalwear, preferred type suit/color blue/style classic. No redundant
+item/category questions remained. Follow-ups asked for fee budget, pickup area,
+maximum deposit, start/return dates and visual confirmation. The image and key were
+not modified or committed. `git diff --check` passed.

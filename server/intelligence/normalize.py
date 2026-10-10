@@ -27,8 +27,11 @@ def _model_order():
     return list(dict.fromkeys(([preferred] if preferred else []) + list(DEFAULT_MODELS)))[:3]
 
 
-def _extract(text, local_now, timezone, key):
-    deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
+def _extract(text, local_now, timezone, key, *, contents=None, instruction=None, schema=None, deadline=None):
+    deadline = deadline if deadline is not None else time.monotonic() + TOTAL_TIMEOUT_SECONDS
+    schema = schema or Extraction
+    instruction = instruction or INSTRUCTION
+    contents = contents if contents is not None else json.dumps(dict(request=text, now=local_now.isoformat(), timezone=timezone))
     # Disable SDK retries: each model gets one attempt within the shared budget.
     with genai.Client(api_key=key, http_options=types.HttpOptions(
             timeout=ATTEMPT_TIMEOUT_MS,
@@ -41,17 +44,17 @@ def _extract(text, local_now, timezone, key):
             try:
                 response = client.models.generate_content(
                     model=model,
-                    contents=json.dumps(dict(request=text, now=local_now.isoformat(), timezone=timezone)),
-                    config=types.GenerateContentConfig(system_instruction=INSTRUCTION,
+                    contents=contents,
+                    config=types.GenerateContentConfig(system_instruction=instruction,
                         response_mime_type='application/json',
-                        response_json_schema=Extraction.model_json_schema(), temperature=0,
+                        response_json_schema=schema.model_json_schema(), temperature=0,
                         http_options=types.HttpOptions(timeout=min(ATTEMPT_TIMEOUT_MS, remaining_ms))))
             except errors.APIError as error:
                 if error.code not in (429, 503):
                     raise
                 continue
             # Invalid structured output is non-retryable, including malformed JSON.
-            extracted = Extraction.model_validate_json(response.text)
+            extracted = schema.model_validate_json(response.text)
             logger.info('Gemini normalization succeeded model=%s', model)
             return extracted
     raise RuntimeError('Gemini model attempts exhausted')
@@ -166,30 +169,34 @@ def normalize_request(text: str, now: datetime, timezone: str) -> dict:
             return manual(text)
         local_now = now.astimezone(ZoneInfo(timezone))
         extracted = _extract(text, local_now, timezone, key)
-        result = extracted.model_dump(exclude={'budget_dollars', 'max_deposit_dollars'})
-        for field in ('budget', 'max_deposit'):
-            amount = getattr(extracted, field + '_dollars')
-            result[field + '_cents'] = None if amount is None else int(Decimal(amount) * 100)
-        for field in ('required_specifications', 'preferred_specifications'):
-            result[field] = {s.name: s.value for s in getattr(extracted, field)}
-        missing = dict(modes='Would you like to buy, borrow, or consider either?',
-                       category='What kind of item do you need?',
-                       budget_cents='What is your purchase or rental fee budget in USD?',
-                       area='Which campus area works for pickup?')
-        if extracted.modes and 'borrow' in extracted.modes:
-            missing.update(max_deposit_cents='What is the maximum refundable deposit you can afford?',
-                           use_start='When does your borrowing period start?',
-                           use_end='When can you return the item?')
-        else:
-            missing['needed_by'] = 'When do you need the item?'
-        questions = result['follow_up_questions']
-        for field, question in missing.items():
-            if result[field] is None and question not in questions:
-                questions.append(question)
-        for date in result['ambiguous_dates']:
-            questions.append(f"Please confirm the date/time for '{date['text']}': {date['proposed'] or 'provide an explicit date and time'}.")
-        result.update(source='gemini', original_text=text)
-        return result
+        return _to_request(extracted, text)
     except Exception:
         # Never expose SDK errors, credentials, or unvalidated response content.
         return manual(text)
+
+
+def _to_request(extracted, text):
+    result = extracted.model_dump(exclude={'budget_dollars', 'max_deposit_dollars'})
+    for field in ('budget', 'max_deposit'):
+        amount = getattr(extracted, field + '_dollars')
+        result[field + '_cents'] = None if amount is None else int(Decimal(amount) * 100)
+    for field in ('required_specifications', 'preferred_specifications'):
+        result[field] = {s.name: s.value for s in getattr(extracted, field)}
+    missing = dict(modes='Would you like to buy, borrow, or consider either?',
+                   category='What kind of item do you need?',
+                   budget_cents='What is your purchase or rental fee budget in USD?',
+                   area='Which campus area works for pickup?')
+    if extracted.modes and 'borrow' in extracted.modes:
+        missing.update(max_deposit_cents='What is the maximum refundable deposit you can afford?',
+                       use_start='When does your borrowing period start?',
+                       use_end='When can you return the item?')
+    else:
+        missing['needed_by'] = 'When do you need the item?'
+    questions = result['follow_up_questions']
+    for field, question in missing.items():
+        if result[field] is None and question not in questions:
+            questions.append(question)
+    for date in result['ambiguous_dates']:
+        questions.append(f"Please confirm the date/time for '{date['text']}': {date['proposed'] or 'provide an explicit date and time'}.")
+    result.update(source='gemini', original_text=text)
+    return result
