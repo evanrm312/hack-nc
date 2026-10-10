@@ -275,37 +275,41 @@ proposals are marked, with a neutral "from photo (accepted)" badge. The photo
 is never stored, never sent anywhere else, and never appears on request cards
 or the public feed.
 
-## Services (pending backend; sample data)
+## Services (implemented against Person 1's contract)
 
-A third listing kind. Person 1 is adding the backend; the UI runs on the
-`SERVICES` block at the top of `marketplace.js` (`backendReady: false` plus
-labeled sample listings and one sample request). To switch over: set
-`backendReady = true` and delete the samples. Assumed shape, to check against
-the contract:
+Services are a third listing kind on the real endpoints (docs/contracts.md,
+merged from p1-services). No sample data remains. Shape used by the UI:
 
-- Listing: `kind: "service"`, `allowed_modes: ["service"]`, `title`,
-  `description`, `category` ∈ `tutoring | proofreading | moving_help`,
-  `price_cents`, `duration_minutes`, `time_windows: [{start, end}]` (ISO UTC),
-  `meeting_spot_ids`; no condition, accessories, defects, specifications,
-  sale/rental/value/collateral fields. Physical listings: `kind: "item"` or
-  absent.
-- NeedRequest: `"service"` accepted in `modes`; `normalized.kind = "service"`;
-  the public view exposes `kind` (or `"service"` in `modes`).
-- Endpoints: the existing `POST/GET/PATCH /api/listings` accept the shape;
-  `GET /api/requests/{id}/matches` may return service listings.
+- Listing:  exactly ;  is one of
+  , ,  (with a space);   required;  (0 allowed),   (1–1440),  (nonempty; one must fit the
+  duration). Item fields are not sent (the server rejects them), including
+  , so the meeting-spot picker hides in service mode. A
+  photo may still be uploaded afterwards via the photo endpoint.
+- NeedRequest:  exactly ,  a
+  service category, ///  null or omitted, optional  and private
+  . The public view adds .
 
-Behavior: the listing form has a **Service** pill (exclusive with sale/borrow)
-that shows service category, price, duration, and time windows and hides every
-item field; while the backend is pending, submitting shows a labeled preview of
-the exact request body instead of posting. Listing detail renders a service
-layout (no deposit section). Service cards everywhere carry the teal
-`badge--service` "Service" badge; samples carry "Sample data (not saved)" and
-a "Sample data, not a member" provider badge (never green). The interpretation
-form offers "A service"; until the server accepts it, the choice is stored in
-`normalized.modes`/`normalized.kind` and stripped from the top-level `modes`
-(a fixture notice says so), and the results page appends the sample services
-under "needs confirmation". The feed gets a "Needs a service" badge and filter
-plus one sample service request.
+Behavior: the listing form's **Service** pill is exclusive and shows the
+service category, price, session length, and availability windows, hiding
+condition, photo-independent item fields, specs, accessories, defects, sale and
+borrowing terms, and meeting spots; client validation mirrors the server
+(description required, windows nonempty and long enough). Listing detail
+renders a service layout with price, session length, category, and windows,
+no deposit section, and a disabled "Request this service" placeholder. All
+cards use the teal  "Service" badge. In the interpretation
+form (confirmation step and results) "A service" is exclusive with buy/borrow,
+switches the category list to the three service categories, hides deposit and
+borrowing dates, and shows optional session length and private time windows;
+/ build bodies that omit the rejected
+fields. The feed shows "Needs a service" plus the session length and a
+"Needs a service" filter.
+
+Mismatches found against the earlier assumption (all resolved in the UI):
+field names are prefixed  (,
+,  on listings and
+ on requests); there is no  field, the kind is
+;  has a space; description and windows are
+required; duration is 1–1440 not 5–720; meeting spots are rejected.
 
 ## Home "How it works" (implemented)
 
