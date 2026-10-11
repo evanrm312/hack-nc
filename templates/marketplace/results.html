@@ -1,12 +1,31 @@
 {% extends "base.html" %}
-{# Person 3 owns templates/marketplace/. Stub created by Person 1. #}
+{# Results: editable interpretation (PATCH /api/requests/{id}) at the top,
+   confirmed matches, a separate needs-confirmation section, and excluded
+   listings from GET /api/requests/{id}/matches. Behavior in
+   static/js/marketplace.js (page "results"). No-match publishing is the next
+   milestone and is not built here. #}
 {% block title %}Results · Campus Current{% endblock %}
+{% block page_id %}results{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Search results</h1>
-  <p>Stub for request <code>{{ request_id }}</code>. Person 3 renders the editable
-     interpretation, confirmed vs needs-confirmation matches with reasons
-     (<code>GET /api/requests/{id}/matches</code>), a genuine no-match state, and the
-     explicit Publish Request button (<code>POST /api/requests/{id}/publish</code>).</p>
-</section>
+<div id="results-root" data-request-id="{{ request_id }}">
+
+  <section class="card" aria-labelledby="results-heading">
+    <div class="section__head">
+      <h1 id="results-heading" style="margin:0">Matches for your request</h1>
+      <div class="cluster" id="results-badges"></div>
+    </div>
+    <blockquote class="lede" id="results-original" style="margin:0 0 var(--space-3); padding-left: var(--space-3); border-left: 4px solid var(--sky-200)"></blockquote>
+    <p class="muted" style="margin:0">Every result below is a real current listing. Compatibility is checked in code, not guessed; anything unverified is marked "needs confirmation".</p>
+  </section>
+
+  <section class="card" id="interp-box" aria-labelledby="interp-heading">
+    <div class="section__head">
+      <h2 id="interp-heading" tabindex="-1">Interpretation</h2>
+      <div class="cluster" id="interp-badges"></div>
+    </div>
+    <div id="interp-body" aria-live="polite"></div>
+  </section>
+
+  <section id="matches" aria-label="Matches" aria-live="polite" aria-busy="true"></section>
+</div>
 {% endblock %}

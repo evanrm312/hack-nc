@@ -94,6 +94,38 @@ def test_source_request_must_belong_to_requester(client, alice, bob):
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize("mode,source_mode", [("borrow", "sale"), ("sale", "borrow")])
+def test_source_request_must_include_item_exchange_mode(client, alice, bob, mode, source_mode):
+    listing = create_listing(client, alice)
+    source = client.post("/api/requests", json={
+        "original_text": "Suit", "modes": [source_mode],
+    }, headers=bob).get_json()["request"]
+    response = client.post("/api/exchanges", json={
+        "listing_id": listing["id"], "mode": mode, "source_request_id": source["id"],
+    }, headers=bob)
+    assert response.status_code == 400
+    assert "source_request_id" in response.get_json()["error"]["fields"]
+
+
+@pytest.mark.parametrize("status", ["fulfilled", "cancelled", "expired"])
+def test_item_exchange_rejects_closed_source_request(client, app, alice, bob, status):
+    from server.db import db
+    from server.models import NeedRequest
+
+    listing = create_listing(client, alice)
+    source = client.post("/api/requests", json={
+        "original_text": "Suit", "modes": ["borrow"],
+    }, headers=bob).get_json()["request"]
+    need = db.session.get(NeedRequest, source["id"])
+    need.status = status
+    db.session.commit()
+    response = client.post("/api/exchanges", json={
+        "listing_id": listing["id"], "mode": "borrow", "source_request_id": source["id"],
+    }, headers=bob)
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "request_closed"
+
+
 def test_third_party_cannot_read_or_mutate_exchange_messages_or_evidence(client, alice, bob, third_party, spot):
     exchange = ready_exchange(client, alice, bob, spot)
     base = f"/api/exchanges/{exchange['id']}"

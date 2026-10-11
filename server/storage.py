@@ -21,16 +21,20 @@ Usage:
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from flask import current_app, send_from_directory
+import requests
+from flask import Response, current_app, has_request_context, request, send_from_directory
 
 from .errors import ApiError
 
 SCOPES = ("public", "private")
+_GENERATED_PATH = re.compile(r"[0-9a-f]{2}/[0-9a-f]{32}\.(?:jpg|png|webp)\Z")
+_PRIVATE_READ_KEY = "campus.private_evidence_authorized"
 
 _MAGIC = (
     (b"\xff\xd8\xff", "image/jpeg", "jpg"),
@@ -79,6 +83,15 @@ def authorize_private_read(viewer_id: str | None, participant_ids) -> None:
     """Raise 403 unless the viewer is one of the participants."""
     if viewer_id is None or viewer_id not in set(participant_ids):
         raise ApiError(403, "forbidden", "Only participants can view this evidence")
+    if has_request_context():
+        request.environ[_PRIVATE_READ_KEY] = True
+
+
+def _require_private_read(scope: str) -> None:
+    if scope == "private" and (
+        not has_request_context() or not request.environ.get(_PRIVATE_READ_KEY)
+    ):
+        raise ApiError(403, "forbidden", "Only participants can view this evidence")
 
 
 class LocalStorage:
@@ -103,6 +116,7 @@ class LocalStorage:
 
     def send(self, scope: str, path: str, content_type: str | None = None):
         """Flask response streaming the stored file. Path traversal is refused."""
+        _require_private_read(scope)
         directory = self._scope_dir(scope).resolve()
         resolved = (directory / path).resolve()
         if directory not in resolved.parents or not resolved.is_file():
@@ -116,24 +130,82 @@ class LocalStorage:
 
 
 class SupabaseStorage:
-    """Interface for Supabase Storage buckets (public-listings / private-evidence).
+    """Server-side Storage API adapter. The service key never reaches the browser.
 
-    Not implemented yet; tracked in docs/tasks.md. Same method signatures as
-    LocalStorage so Person 4 code does not change when it lands.
+    Buckets must be configured as public listings / private evidence in
+    Supabase. Private files are returned only after a participant check in
+    the same Flask request; no signed or public evidence URL is generated.
     """
 
-    def __init__(self, url: str, service_role_key: str):
-        self.url = url
+    def __init__(self, url: str, service_role_key: str, public_bucket: str = "public-listings", private_bucket: str = "private-evidence", timeout: float = 10):
+        self.url = url.rstrip("/") + "/storage/v1"
         self.service_role_key = service_role_key  # backend only
+        self.buckets = {"public": public_bucket, "private": private_bucket}
+        self.timeout = timeout
+
+    def _bucket(self, scope: str) -> str:
+        if scope not in SCOPES:
+            raise ValueError(f"unknown scope {scope!r}")
+        return self.buckets[scope]
+
+    def _path(self, path: str) -> str:
+        if not isinstance(path, str) or not _GENERATED_PATH.fullmatch(path):
+            raise ApiError(404, "not_found", "file not found")
+        return path
+
+    def _headers(self) -> dict[str, str]:
+        return {"apikey": self.service_role_key, "Authorization": f"Bearer {self.service_role_key}"}
+
+    def _request(self, method: str, url: str, **kwargs):
+        try:
+            return requests.request(method, url, timeout=self.timeout, **kwargs)
+        except requests.RequestException as exc:
+            raise ApiError(503, "storage_unavailable", "File storage is unavailable") from exc
+
+    def _check(self, response, *, not_found: bool = False) -> None:
+        if 200 <= response.status_code < 300:
+            return
+        if not_found and response.status_code == 404:
+            raise ApiError(404, "not_found", "file not found")
+        raise ApiError(503, "storage_unavailable", "File storage is unavailable")
 
     def save(self, scope: str, stream: BinaryIO, max_bytes: int) -> StoredFile:
-        raise NotImplementedError("SupabaseStorage.save is not implemented; set STORAGE_BACKEND=local")
+        bucket = self._bucket(scope)
+        data, content_type, ext = read_image_upload(stream, max_bytes)
+        name = uuid.uuid4().hex
+        path = f"{name[:2]}/{name}.{ext}"
+        response = self._request(
+            "POST", f"{self.url}/object/{bucket}/{path}",
+            headers={**self._headers(), "Content-Type": content_type, "x-upsert": "false"},
+            data=data,
+        )
+        self._check(response)
+        return StoredFile(scope=scope, path=path, content_type=content_type, size=len(data))
 
     def send(self, scope: str, path: str, content_type: str | None = None):
-        raise NotImplementedError("SupabaseStorage.send is not implemented; set STORAGE_BACKEND=local")
+        bucket = self._bucket(scope)
+        path = self._path(path)
+        if scope == "private":
+            _require_private_read(scope)
+            url = f"{self.url}/object/authenticated/{bucket}/{path}"
+            headers = self._headers()
+        else:
+            url = f"{self.url}/object/public/{bucket}/{path}"
+            headers = {}
+        response = self._request("GET", url, headers=headers)
+        self._check(response, not_found=True)
+        result = Response(response.content, mimetype=content_type or response.headers.get("Content-Type", "application/octet-stream"))
+        result.headers["Cache-Control"] = "no-store" if scope == "private" else "public, max-age=3600"
+        return result
 
     def delete(self, scope: str, path: str) -> None:
-        raise NotImplementedError("SupabaseStorage.delete is not implemented; set STORAGE_BACKEND=local")
+        bucket = self._bucket(scope)
+        path = self._path(path)
+        response = self._request(
+            "DELETE", f"{self.url}/object/{bucket}",
+            headers=self._headers(), json={"prefixes": [path]},
+        )
+        self._check(response)
 
 
 def get_storage():
@@ -142,5 +214,9 @@ def get_storage():
     if backend == "local":
         return LocalStorage(config["UPLOAD_DIR"])
     if backend == "supabase":
-        return SupabaseStorage(config["SUPABASE_URL"] or "", config["SUPABASE_SERVICE_ROLE_KEY"] or "")
+        return SupabaseStorage(
+            config["SUPABASE_URL"], config["SUPABASE_SERVICE_ROLE_KEY"],
+            config["SUPABASE_PUBLIC_BUCKET"], config["SUPABASE_PRIVATE_BUCKET"],
+            config["STORAGE_HTTP_TIMEOUT_SECONDS"],
+        )
     raise RuntimeError(f"Unknown STORAGE_BACKEND {backend!r}")

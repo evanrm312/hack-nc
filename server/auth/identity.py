@@ -110,16 +110,24 @@ def _resolve_supabase(token: str, config) -> Identity | None:
         if err.code in (400, 401, 403):
             return None  # invalid or expired token
         raise AuthUnavailable(f"Supabase auth returned HTTP {err.code}") from err
-    except (urllib.error.URLError, TimeoutError, ValueError) as err:
-        raise AuthUnavailable(str(err)) from err
+    except (urllib.error.URLError, TimeoutError, ValueError, UnicodeError) as err:
+        raise AuthUnavailable("Supabase auth request failed") from err
 
+    if not isinstance(payload, dict):
+        raise AuthUnavailable("Supabase auth returned a malformed user")
     subject = payload.get("id")
     email = payload.get("email")
-    if not subject or not email:
-        return None
+    confirmed_at = payload.get("email_confirmed_at")
+    if (
+        not isinstance(subject, str) or not subject.strip()
+        or not isinstance(email, str) or not email.strip()
+        or "email_confirmed_at" not in payload
+        or (confirmed_at is not None and not isinstance(confirmed_at, str))
+    ):
+        raise AuthUnavailable("Supabase auth returned a malformed user")
     return Identity(
         subject=f"supabase:{subject}",
         email=normalize_email(email),
-        email_confirmed=bool(payload.get("email_confirmed_at")),
+        email_confirmed=bool(confirmed_at),
         source="supabase",
     )

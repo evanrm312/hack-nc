@@ -13,7 +13,7 @@ from .exchange import (
     Message,
     OfferRevision,
 )
-from .listing import LISTING_MODES, LISTING_STATUSES, Listing
+from .listing import LISTING_MODES, LISTING_STATUSES, SERVICE_CATEGORIES, Listing
 from .meeting_spot import MeetingSpot
 from .need_request import REQUEST_STATUSES, REQUEST_VISIBILITIES, NeedRequest
 from .price_reference import PriceReference
@@ -33,6 +33,7 @@ __all__ = [
     "PriceReference",
     "LISTING_MODES",
     "LISTING_STATUSES",
+    "SERVICE_CATEGORIES",
     "REQUEST_STATUSES",
     "REQUEST_VISIBILITIES",
     "EXCHANGE_MODES",

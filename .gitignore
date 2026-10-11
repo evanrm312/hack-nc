@@ -5,14 +5,22 @@ __pycache__/
 venv/
 .pytest_cache/
 *.egg-info/
+.coverage
+htmlcov/
 
 # Environment and local data
 .env
+.env.*
+!.env.example
+.aws
 instance/
 var/
+uploads/
 *.sqlite
 *.sqlite3
 *.db
+*.pem
+*.key
 
 # Editors / OS
 .vscode/

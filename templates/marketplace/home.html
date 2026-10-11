@@ -1,14 +1,71 @@
 {% extends "base.html" %}
-{# Person 3 owns templates/marketplace/. Stub created by Person 1. #}
+{# Home: natural-language request box -> POST /api/requests/normalize ->
+   POST /api/requests -> /results/{id} (where the interpretation is edited).
+   Below: available listings from GET /api/listings. Behavior in
+   static/js/marketplace.js (page "home"). #}
 {% block title %}Home · Campus Current{% endblock %}
+{% block page_id %}home{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Describe what you need</h1>
-  <p>Stub page. Person 3 builds the natural-language request input here using
-     <code>POST /api/requests/normalize</code> then <code>POST /api/requests</code>.</p>
+
+<section class="card card--hero" aria-labelledby="request-heading">
+  <div class="hero-grid">
+    <div class="request-box">
+      <div class="hero-mark" data-circulation data-autoplay="true" data-replay="true"
+           aria-label="An item carried in a bubble from one person to another: reuse in motion"></div>
+      <h1 id="request-heading">Describe what you need</h1>
+      <p class="lede">Say it the way you would to a friend. We pull out the size, dates, budget, and
+        whether you want to buy or borrow, then show you what is already on campus.</p>
+
+      <div id="auth-gate" class="notice notice--info" role="status" hidden>
+        <div>
+          <strong>Browsing is open to everyone.</strong> To interpret a request and search, first
+          <a href="{{ url_for('pages.sign_in') }}">sign in</a> with a confirmed @{{ public_config.allowed_email_domain }} email.
+        </div>
+      </div>
+
+      <form id="request-form" novalidate>
+        <div class="field">
+          <label class="field__label" for="request-text"><span>What do you need?</span></label>
+          <p class="field__hint" id="request-text-hint">Include size or model, when you need it, your budget, and whether borrowing is fine. You can correct every interpreted field on the next page.</p>
+          <textarea id="request-text" name="text" rows="4" required maxlength="4000"
+                    aria-describedby="request-text-hint request-text-error"
+                    placeholder="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit."></textarea>
+          <p class="field__error" id="request-text-error" role="alert"></p>
+        </div>
+        <div class="cluster example-chips" aria-label="Example requests">
+          <span class="muted">Try:</span>
+          <button type="button" class="btn btn--sm" data-example="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit.">Interview suit</button>
+          <button type="button" class="btn btn--sm" data-example="Looking to borrow a TI-84 calculator for my stats final on Friday morning. Can pick up anywhere on central campus.">Calculator for a final</button>
+          <button type="button" class="btn btn--sm" data-example="Want to buy a used mini fridge under $60 for my dorm, need it before move-in this weekend.">Mini fridge</button>
+        </div>
+        <div class="cluster" style="margin-top: var(--space-4)">
+          <button type="submit" class="btn btn--primary" id="request-submit">Interpret my request</button>
+          <span class="muted" id="request-status" aria-live="polite"></span>
+        </div>
+        <div id="request-error" class="notice notice--error" role="alert" hidden></div>
+      </form>
+    </div>
+
+    <aside class="card card--compact card--sky" aria-label="How it works" style="margin:0">
+      <h2 style="font-size:1.05rem">How it works</h2>
+      <ol class="steps">
+        <li><div><strong>Interpret</strong> Gemini proposes the fields; you confirm or edit every one. Unknowns stay unknown.</div></li>
+        <li><div><strong>Match</strong> Python checks size, dates, budget, and deposit against real listings and explains each result.</div></li>
+        <li><div><strong>Agree and meet</strong> Settle fee, value, and deposit with the owner, then hand off at a public campus spot.</div></li>
+      </ol>
+    </aside>
+  </div>
 </section>
-<section class="card">
-  <h2>Available listings</h2>
-  <p>Stub. Person 3 renders <code>GET /api/listings</code> here.</p>
+
+<section class="section" aria-labelledby="listings-heading">
+  <div class="section__head">
+    <h2 id="listings-heading">Available on campus now</h2>
+    <div class="cluster">
+      <a class="btn btn--sm" href="{{ url_for('pages.requests_feed') }}">Browse public requests</a>
+      <a class="btn btn--sm btn--primary" href="{{ url_for('pages.listing_form') }}">List an item</a>
+    </div>
+  </div>
+  <div id="listings" class="grid" aria-live="polite" aria-busy="true"></div>
 </section>
+
 {% endblock %}

@@ -36,6 +36,7 @@ from .lifecycle import (
     PICKUP_STAGES, acknowledge_and_confirm, confirmations_for, ensure_photos_open,
     invalid_transition, require_pickup_photos, require_return_photos,
 )
+from . import service
 
 bp = Blueprint("exchanges", __name__, url_prefix="/api/exchanges")
 SIMULATION_NOTICE = "Simulated: no real funds are reserved or charged."
@@ -103,6 +104,12 @@ def _negotiating(exchange: Exchange) -> None:
 def _available(listing: Listing) -> None:
     if listing.status != "available" or listing.active_exchange_id is not None:
         raise ApiError(409, "reservation_conflict", "This item is no longer available")
+
+
+def _is_service(exchange_id: str) -> bool:
+    """Route by persisted mode; the selected handler enforces participant access."""
+    exchange = db.session.get(Exchange, exchange_id)
+    return exchange is not None and exchange.mode == "service"
 
 
 @bp.after_request
@@ -174,11 +181,13 @@ def list_exchanges():
 @_transaction
 def create_exchange():
     body = json_body()
+    if body.get("mode") == "service":
+        return service.create()
     errors = FieldErrors()
     listing_id = string(body.get("listing_id"), "listing_id", errors, required=True, max_len=32)
     mode = body.get("mode")
     if mode not in ("sale", "borrow"):
-        errors.add("mode", "must be sale or borrow")
+        errors.add("mode", "must be sale, borrow, or service")
     source_id = string(body.get("source_request_id"), "source_request_id", errors, max_len=32)
     errors.raise_if_any()
     listing = db.session.get(Listing, listing_id)
@@ -196,6 +205,8 @@ def create_exchange():
             raise not_found("request")
         if source.status not in ("draft", "open"):
             raise ApiError(409, "request_closed", "This request is closed")
+        if mode not in (source.modes or []):
+            raise validation_error({"source_request_id": "request does not include this exchange mode"})
 
     exchange = Exchange(
         listing_id=listing.id, owner_id=listing.owner_id, requester_id=user_id,
@@ -215,6 +226,8 @@ def create_exchange():
 @bp.get("/<exchange_id>")
 @require_verified_user
 def get_exchange(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.detail(exchange_id)
     exchange = _participant(exchange_id)
     offers = db.session.scalars(
         db.select(OfferRevision).where(OfferRevision.exchange_id == exchange.id)
@@ -238,6 +251,8 @@ def get_exchange(exchange_id: str):
 @bp.get("/<exchange_id>/messages")
 @require_verified_user
 def list_messages(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.messages(exchange_id)
     exchange = _participant(exchange_id)
     query = db.select(Message).where(Message.exchange_id == exchange.id)
     if "after" in request.args:
@@ -255,6 +270,8 @@ def list_messages(exchange_id: str):
 @require_verified_user
 @_transaction
 def post_message(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.post_message(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     errors = FieldErrors()
     body = string(json_body().get("body"), "body", errors, required=True, max_len=4000)
@@ -269,6 +286,8 @@ def post_message(exchange_id: str):
 @require_verified_user
 @_transaction
 def post_offer(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.offer(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     _negotiating(exchange)
     body = json_body()
@@ -298,6 +317,8 @@ def post_offer(exchange_id: str):
 @require_verified_user
 @_transaction
 def accept_offer(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.accept(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     body = json_body()
     version = body.get("version")
@@ -332,9 +353,20 @@ def accept_offer(exchange_id: str):
     return jsonify({"exchange": exchange.to_dict(), "current_offer": offer.to_dict()})
 
 
+@bp.post("/<exchange_id>/complete")
+@require_verified_user
+@_transaction
+def complete_service(exchange_id: str):
+    if not _is_service(exchange_id):
+        _participant(exchange_id)
+        raise invalid_transition()
+    return service.complete(exchange_id)
+
+
 @bp.get("/<exchange_id>/evidence")
 @require_verified_user
 def list_evidence(exchange_id: str):
+    service.reject_item_step(exchange_id)
     exchange = _participant(exchange_id)
     evidence = db.session.scalars(
         db.select(Evidence).where(Evidence.exchange_id == exchange.id).order_by(Evidence.created_at)
@@ -345,6 +377,7 @@ def list_evidence(exchange_id: str):
 @bp.get("/<exchange_id>/evidence/<evidence_id>")
 @require_verified_user
 def get_evidence_file(exchange_id: str, evidence_id: str):
+    service.reject_item_step(exchange_id)
     exchange = _participant(exchange_id)
     authorize_private_read(current_profile().id, exchange.participant_ids)
     evidence = db.session.get(Evidence, evidence_id)
@@ -383,6 +416,7 @@ def _record_return_issue(exchange, body):
 @require_verified_user
 @_transaction
 def upload_evidence(exchange_id: str):
+    service.reject_item_step(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     user_id = current_profile().id
     stage = request.form.get("stage")
@@ -421,6 +455,7 @@ def upload_evidence(exchange_id: str):
 @require_verified_user
 @_transaction
 def confirm_handoff(exchange_id: str):
+    service.reject_item_step(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     user_id = current_profile().id
     if exchange.status != "reserved":
@@ -451,6 +486,7 @@ def confirm_handoff(exchange_id: str):
 @require_verified_user
 @_transaction
 def confirm_return(exchange_id: str):
+    service.reject_item_step(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     user_id = current_profile().id
     body = json_body()
@@ -530,6 +566,8 @@ def post_review(exchange_id: str):
 @require_verified_user
 @_transaction
 def cancel_exchange(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.cancel(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     errors = FieldErrors()
     reason = string(json_body().get("reason"), "reason", errors, required=True, max_len=2000)
@@ -552,6 +590,8 @@ def cancel_exchange(exchange_id: str):
 @require_verified_user
 @_transaction
 def dispute_exchange(exchange_id: str):
+    if _is_service(exchange_id):
+        return service.dispute(exchange_id)
     exchange = _participant(exchange_id, lock=True)
     _record_return_issue(exchange, json_body())
     db.session.commit()

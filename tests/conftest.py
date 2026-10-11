@@ -23,6 +23,7 @@ def app(tmp_path):
     app = create_app(
         {
             "TESTING": True,
+            "APP_ENV": "development",
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'test.sqlite3').as_posix()}",
             "AUTH_MODE": "sandbox",
             "SANDBOX_USERS": [ALICE, BOB, MALLORY, LOOKALIKE],
