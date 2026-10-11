@@ -180,7 +180,7 @@ development key and network access.
   email in `SANDBOX_USERS`. No real verification; profiles are labeled
   "Sandbox identity (not verified)" and `is_demo=true`. Never use this on a
   public deployment.
-- `AUTH_MODE=supabase`: the browser signs in with a Supabase magic link
+- `AUTH_MODE=supabase`: the browser signs in with Supabase email/password
   (`static/js/auth.js`); Flask verifies every request's access token against
   Supabase Auth and requires `email_confirmed_at` plus an exact `@unc.edu`
   domain. The client initializes on every page, updates the shared API token
@@ -200,7 +200,7 @@ identify whether the cause is a wrong secret, URL encoding, stale process
 configuration, or another connection setting. Run migrations only after the
 application connection succeeds.
 
-Browser storage is scoped to the exact origin. Start the magic-link flow and
+Browser storage is scoped to the exact origin. Start account confirmation or recovery and
 open its callback on the same scheme, hostname, and port (for example, use
 `127.0.0.1:5055` throughout, not `localhost:5000` for one step). A saved
 Supabase session can outlive a temporary `/api/me` database failure; the
@@ -208,15 +208,22 @@ header then reports that account details are unavailable without treating
 the user as signed out. Confirm the actual `/api/me` status before concluding
 that authentication failed.
 
+Existing verified users can set a password in Account, or use **Forgot password /
+first password** once. New users create a password and confirm their UNC email
+once. Ordinary password sign-in sends no email; confirmation/recovery still use
+the provider's email quota. Passwords go only to Supabase, never Flask or app
+storage. See [the team acceptance scenario](docs/team-test-scenario.md).
+
 ## Supabase project setup and live checks
 
-In the Supabase dashboard, enable email magic links and set the site URL to
+In the Supabase dashboard, enable email/password with email confirmation and set the site URL to
 the deployed origin. Add `https://YOUR_HOST/sign-in` to the allowed redirect
 URLs. Configure email delivery if the default sender does not reach the team's
 actual addresses. Copy the project URL and anon key into `SUPABASE_URL` and
 `SUPABASE_ANON_KEY`; keep `SUPABASE_SERVICE_ROLE_KEY` server-side only. A live
 auth check requires a real confirmed `@unc.edu` inbox: sign in at `/sign-in`,
-follow the link, verify `/api/me` shows the UNC badge, refresh the page, then
+confirm the email once (or recover an existing account), set a password,
+verify `/api/me` shows the UNC badge, refresh the page, then
 sign out and confirm a protected request returns 401. Wrong-domain and
 unconfirmed-email behavior is covered by mocked provider tests, not a live
 Supabase project check yet.
@@ -252,6 +259,28 @@ docker compose up -d web
 `/api/ready` verifies database connectivity and migration head; `/healthz` remains
 process liveness. Supabase Auth site URL/callback allowlist must use the final
 HTTPS origin. No web-worker scheduler or automatic seed runs.
+
+## Targeted Render backend repair
+
+The public app is `https://hack-nc.onrender.com`; Render settings were inspected,
+and its schema and 52-record catalog import have been repaired. A real
+login, refresh, sign-out and both live Gemini checks passed. Release settings,
+backups and evidence are in
+[docs/render-backend-repair.md](docs/render-backend-repair.md).
+
+```bash
+flask --app server.app backend-diagnostics
+flask --app server.app import-demo-catalog --dry-run > reviewed-catalog.json
+# Review the exact target/schema/assets/changes first:
+flask --app server.app import-demo-catalog --apply --plan reviewed-catalog.json
+```
+
+Dry-run is the default and makes no database or Storage writes. The Docker
+image packages the licensed assets and provenance; startup never imports them.
+After merging this branch, use `/bin/sh deploy/render-release.sh` for predeploy.
+Current main uses the equivalent pinned migration command without diagnostics.
+Never run the broad `seed-demo` command on production or a shared database.
+The user approved repair operations; merging into `main` still requires approval.
 
 ## Layout
 

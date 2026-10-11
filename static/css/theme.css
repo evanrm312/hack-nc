@@ -574,3 +574,20 @@ input[type="range"].range:focus-visible { box-shadow: var(--focus); }
 .start-exchange .notice { margin-top: var(--space-2); }
 .feed-respond { font-size: .9rem; margin: 0; }
 .mine-kind { margin-top: var(--space-3); }
+
+/* Editable interpreter review and a compact calendar summary. */
+.schedule-review { padding: 1.1rem; border: 1px solid #bdd8d2; border-radius: 16px; background: linear-gradient(135deg, #f4fbf8, #edf7fc); }
+.schedule-review legend { padding: 0 .4rem; font-weight: 700; }
+.schedule-review__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .75rem; margin: .8rem 0; }
+.schedule-review__card { display: flex; align-items: center; gap: .8rem; padding: .8rem; background: #fff; border: 1px solid #d9e9e6; border-radius: 12px; }
+.schedule-review__card p { font-size: .85rem; line-height: 1.5; margin: .25rem 0 0; color: #435d69; }
+.schedule-review__calendar { flex: 0 0 50px; text-align: center; overflow: hidden; border: 1px solid #b3d5d0; border-radius: 9px; background: #f4fbfa; }
+.schedule-review__calendar span { display: block; background: #317d79; color: #fff; font-size: .75rem; padding: .2rem; text-transform: uppercase; }
+.schedule-review__calendar strong { display: block; font-size: 1.5rem; padding: .2rem; color: #214b53; }
+.schedule-review__accept { display: flex; align-items: center; gap: .6rem; padding: .7rem; border-radius: 9px; cursor: pointer; font-weight: 600; }
+.schedule-review__accept:has(input:checked) { background: #dff0e9; }
+.schedule-review__accept input { width: 1.15rem; height: 1.15rem; accent-color: #317d79; }
+.auth-actions { margin-top: 1rem; }
+.auth-registration { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #cadbd8; }
+.auth-registration summary { cursor: pointer; font-weight: 600; padding: .5rem 0; }
+.account-password { padding-bottom: 1.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid #cadbd8; }

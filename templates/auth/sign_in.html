@@ -25,13 +25,34 @@
     <button class="btn--primary" type="submit">Use sandbox identity</button>
   </form>
   {% else %}
-  <form id="magic-link-form">
-    <label for="email">Email address</label>
-    <input id="email" name="email" type="email" autocomplete="email" required
+  <p class="field__hint">Use your email and password. No sign-in email needed.</p>
+  <form id="password-sign-in-form">
+    <label for="email">UNC email address</label>
+    <input id="email" name="email" type="email" autocomplete="username" required
            placeholder="you@{{ public_config.allowed_email_domain }}">
-    <button class="btn--primary" type="submit">Email me a sign-in link</button>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <div class="cluster auth-actions">
+      <button class="btn--primary" type="submit">Sign in</button>
+      <button type="button" class="btn--ghost" id="password-recovery">Forgot password / first password</button>
+    </div>
   </form>
-  <p id="magic-link-hint"></p>
+  <p id="auth-hint" role="status" aria-live="polite"></p>
+  <details class="auth-registration" id="registration-details">
+    <summary>New here? Create an account</summary>
+    <p>Confirm your UNC email once. After that, sign in with your password.</p>
+    <form id="password-sign-up-form">
+      <label for="signup-email">UNC email address</label>
+      <input id="signup-email" name="email" type="email" autocomplete="username" required
+             placeholder="you@{{ public_config.allowed_email_domain }}">
+      <label for="signup-password">Choose a password</label>
+      <input id="signup-password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="field__hint">At least 8 characters. Use a unique password.</p>
+      <label for="signup-password-confirm">Repeat your password</label>
+      <input id="signup-password-confirm" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn--primary" type="submit">Create account</button>
+    </form>
+  </details>
   {% endif %}
 
   <p id="sign-in-error" role="alert"></p>
@@ -39,6 +60,21 @@
 </section>
 
 <section class="card" id="me-card" hidden>
+  {% if public_config.auth_mode == "supabase" %}
+  <section class="account-password" aria-labelledby="password-heading">
+    <h2 id="password-heading">Set your password</h2>
+    <p id="password-update-hint">Set or change your password for future sign-ins.</p>
+    <form id="password-update-form">
+      <label for="new-password">New password</label>
+      <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="new-password-confirm">Repeat your new password</label>
+      <input id="new-password-confirm" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="field__hint">At least 8 characters. Your password is managed by Supabase.</p>
+      <button type="submit" class="btn--primary">Save password</button>
+      <p id="password-update-status" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+  {% endif %}
   <h2>Your profile</h2>
   <div id="community-avatar" class="photo-preview" role="img" aria-label="No avatar"></div>
   <form id="avatar-form"><label for="avatar-photo">Change avatar (public)</label><input id="avatar-photo" type="file" accept="image/jpeg,image/png,image/webp" required><p class="field__hint">Still JPEG, PNG or WebP, up to 1 MiB. Avatars are public.</p><button type="submit">Upload avatar</button><p id="avatar-status" role="status"></p></form>

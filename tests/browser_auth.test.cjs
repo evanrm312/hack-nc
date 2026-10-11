@@ -9,11 +9,15 @@ const root = path.join(__dirname, '..');
 const apiSource = fs.readFileSync(path.join(root, 'static/js/api.js'), 'utf8');
 const authSource = fs.readFileSync(path.join(root, 'static/js/auth.js'), 'utf8');
 
-function harness({ signInPage = false } = {}) {
+function harness({ signInPage = false, recovery = false } = {}) {
   const listeners = new Map();
   const elements = new Map();
   const storage = new Map();
   const requests = [];
+  const authCalls = [];
+  const sessionStorage = new Map();
+  const navigations = [];
+  let providerError = null;
   let authCallback;
   let session = null;
   let sessionError = null;
@@ -25,13 +29,15 @@ function harness({ signInPage = false } = {}) {
     if (!elements.has(id)) elements.set(id, {
       hidden: true, textContent: '', value: '',
       addEventListener(event, fn) { this[event] = fn; },
-      replaceChildren() {}, append() {},
+      replaceChildren() {}, append() {}, focus() {},
+      querySelectorAll() { return [element(id + '-submit')]; },
     });
     return elements.get(id);
   };
   const document = {
     getElementById(id) {
-      if (!signInPage && ['magic-link-form', 'sign-out', 'me-card', 'me-json', 'sign-in-error'].includes(id)) return null;
+      if (id === 'sandbox-form') return null;
+      if (!signInPage && !['session-status', 'nav-sign-in'].includes(id)) return null;
       return element(id);
     },
     createElement() { return { textContent: '', className: '' }; },
@@ -43,18 +49,26 @@ function harness({ signInPage = false } = {}) {
     onAuthStateChange(callback) { authCallback = callback; },
     async getSession() { return { data: { session }, error: sessionError }; },
     async signOut() { signOutCalls++; if (signOutError) return {error:signOutError}; session = null; authCallback?.('SIGNED_OUT', null); return { error: null }; },
-    async signInWithOtp() { return { error: null }; },
+    async signInWithPassword(body) {
+      authCalls.push({method:'password', body});
+      if (!providerError) { session={access_token:'password-token'}; authCallback?.('SIGNED_IN',session); }
+      return {error:providerError};
+    },
+    async signUp(body) { authCalls.push({method:'signup',body}); return {error:providerError}; },
+    async resetPasswordForEmail(email, options) { authCalls.push({method:'recovery',email,options}); return {error:providerError}; },
+    async updateUser(body) { authCalls.push({method:'update',body}); return {error:providerError}; },
   } };
   const context = {
     window: {
-      CAMPUS_CONFIG: { auth_mode: 'supabase', supabase_url: 'https://example.supabase.co', supabase_anon_key: 'public-key' },
+      CAMPUS_CONFIG: { auth_mode: 'supabase', allowed_email_domain:'unc.edu', supabase_url: 'https://example.supabase.co', supabase_anon_key: 'public-key' },
       localStorage: { getItem: (k) => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: (k) => storage.delete(k) },
+      sessionStorage: {getItem:k=>sessionStorage.get(k)||null,setItem:(k,v)=>sessionStorage.set(k,v),removeItem:k=>sessionStorage.delete(k)},
       supabase: { createClient: () => client },
     },
     document,
     CustomEvent: class { constructor(type) { this.type = type; } },
     FormData: class {},
-    location: { hash: '', pathname: '/', search: '', origin: 'http://localhost' },
+    location: { hash: recovery ? '#type=recovery' : '', pathname: signInPage ? '/sign-in' : '/', search: '', origin: 'http://localhost', assign:value=>navigations.push(value) },
     history: { replaceState() {} },
     fetch: async (url, options) => {
       requests.push({ url, options });
@@ -70,7 +84,8 @@ function harness({ signInPage = false } = {}) {
   vm.runInContext(authSource, context);
   document.sdkScript.onload();
   return {
-    api: context.window.api, element, requests,
+    api: context.window.api, element, requests, authCalls, sessionStorage, navigations,
+    setProviderError(value) { providerError=value; },
     setSession(value) { session = value; authCallback?.('TOKEN_REFRESHED', value); },
     setSessionError(value) { sessionError = value; },
     setApiFailure(value, status = 401) { apiFailure = value; apiFailureStatus = status; },
@@ -88,6 +103,83 @@ test('every page initializes the session and API calls use refreshed tokens', as
   await h.api.get('/api/me');
   assert.equal(h.requests.at(-1).options.headers.Authorization, 'Bearer refreshed');
   assert.equal(h.api.getToken(), 'refreshed');
+});
+
+const submit = async (h,id) => h.element(id).submit({preventDefault(){}});
+
+test('password login authenticates without sending an email and clears the input', async () => {
+  const h=harness({signInPage:true});
+  h.element('email').value='member@unc.edu';
+  h.element('password').value='only-in-test';
+  await submit(h,'password-sign-in-form');
+  assert.deepEqual(h.authCalls.map(c=>c.method),['password']);
+  assert.equal(h.api.getToken(),'password-token');
+  assert.equal(h.element('password').value,'');
+  assert.equal(h.element('password-sign-in-form').hidden,true);
+});
+
+test('wrong-domain login never calls the provider and invalid credentials do not invent a session', async () => {
+  const h=harness({signInPage:true});
+  h.element('email').value='member@unc.edu.evil.com';
+  h.element('password').value='only-in-test';
+  await submit(h,'password-sign-in-form');
+  assert.equal(h.authCalls.length,0);
+  h.element('email').value='member@unc.edu';
+  h.setProviderError({status:400,code:'invalid_credentials'});
+  await submit(h,'password-sign-in-form');
+  assert.equal(h.api.getToken(),null);
+  assert.match(h.element('sign-in-error').textContent,/Check your email and password/);
+});
+
+test('signup validates password confirmation and leaves email verification with Supabase', async () => {
+  const h=harness({signInPage:true});
+  h.element('signup-email').value='new@unc.edu';
+  h.element('signup-password').value='only-in-test';
+  h.element('signup-password-confirm').value='mismatch';
+  await submit(h,'password-sign-up-form');
+  assert.equal(h.authCalls.length,0);
+  h.element('signup-password-confirm').value='only-in-test';
+  await submit(h,'password-sign-up-form');
+  assert.equal(h.authCalls[0].body.options.emailRedirectTo,'http://localhost/sign-in');
+  assert.equal(h.api.getToken(),null);
+  assert.match(h.element('auth-hint').textContent,/confirm your account once/);
+  assert.equal(h.element('signup-password').value,'');
+});
+
+test('recovery uses the approved callback and a generic account-existence message', async () => {
+  const h=harness({signInPage:true});
+  h.element('email').value='member@unc.edu';
+  await h.element('password-recovery').click();
+  assert.equal(h.authCalls[0].method,'recovery');
+  assert.equal(h.authCalls[0].options.redirectTo,'http://localhost/sign-in');
+  assert.match(h.element('auth-hint').textContent,/If this email has an account/);
+  h.setProviderError({status:429});
+  await h.element('password-recovery').click();
+  assert.match(h.element('sign-in-error').textContent,/temporarily limited/);
+});
+
+test('password update requires a real session, stays on recovery until saved, then resumes destination', async () => {
+  const h=harness({signInPage:true,recovery:true});
+  h.sessionStorage.set('campus_return_to','/exchanges');
+  h.element('new-password').value='only-in-test';
+  h.element('new-password-confirm').value='only-in-test';
+  await submit(h,'password-update-form');
+  assert.equal(h.authCalls.length,0);
+  h.setSession({access_token:'recovery-session'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(h.navigations,[]);
+  h.setProviderError({status:500});
+  await submit(h,'password-update-form');
+  assert.equal(h.sessionStorage.get('campus_password_recovery'),'1');
+  assert.deepEqual(h.navigations,[]);
+  h.setProviderError(null);
+  h.element('new-password').value='only-in-test';
+  h.element('new-password-confirm').value='only-in-test';
+  await submit(h,'password-update-form');
+  assert.equal(h.sessionStorage.has('campus_password_recovery'),false);
+  assert.deepEqual(h.navigations,['/exchanges']);
+  assert.equal(h.element('new-password').value,'');
+  assert.equal(h.requests.some(r=>r.options.body?.includes('only-in-test')),false);
 });
 
 test('sign-out calls Supabase and clears app token', async () => {
