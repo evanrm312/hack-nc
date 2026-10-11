@@ -395,7 +395,26 @@ legend { font-weight: 700; padding: 0 var(--space-2); color: var(--ink); }
   background: linear-gradient(160deg, var(--sky-100), var(--leaf-100)); display: grid; place-items: center; color: var(--ink-muted);
 }
 .card__media img { width: 100%; height: 100%; object-fit: cover; }
-.card__media--empty::after { content: "No photo yet"; font-size: .9rem; }
+
+/* Photo placeholder: glossy category bubble + label (+ owner action). Items
+   and services share the same 4:3 box so cards line up in the grid. */
+.media-placeholder { display: grid; justify-items: center; gap: 6px; padding: var(--space-3); text-align: center; }
+.media-icon {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: var(--sky-900);
+  background:
+    radial-gradient(circle at 32% 26%, #fff 0 16%, rgba(255,255,255,0) 44%),
+    linear-gradient(160deg, #fff, var(--sky-200) 55%, var(--leaf-200));
+  box-shadow: inset 0 -6px 10px rgba(10,75,125,0.18), 0 3px 8px rgba(10,75,125,0.18);
+}
+.media-icon svg { width: 32px; height: 32px; display: block; }
+.media-label { font-size: .85rem; color: var(--ink-soft); font-weight: 600; }
+.card__media--service { background: linear-gradient(160deg, #e6f7fa, var(--leaf-100)); }
+.card__media--service .media-icon { color: #064e5a; background: radial-gradient(circle at 32% 26%, #fff 0 16%, rgba(255,255,255,0) 44%), linear-gradient(160deg, #fff, #bfe9f0 55%, var(--leaf-200)); }
+.media-action { position: relative; z-index: 1; }   /* above a card's stretched link */
+.detail-media--empty .media-icon { width: 96px; height: 96px; }
+.detail-media--empty .media-icon svg { width: 48px; height: 48px; }
+.detail-media--empty .media-label { font-size: 1rem; }
+.detail-photo-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: calc(-1 * var(--space-2)) 0 var(--space-4); }
 .card a.card__link { color: inherit; text-decoration: none; }
 .card a.card__link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .card a.card__link:hover { text-decoration: underline; }

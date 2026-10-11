@@ -987,7 +987,7 @@
 
       return C.card({
         variant: ["compact"].concat(kind === "needs" ? ["needs"] : []),
-        media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + (listing.title || "listing") : "" },
+        media: cardMedia(listing),
         title: listing.title || "Untitled listing",
         subtitle: service
           ? serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes)
@@ -1716,7 +1716,7 @@
       const allowed = listing.allowed_modes || [];
 
       if (params.get("created") === "1") root.append(C.notice("leaf", C.el("span", {}, C.el("strong", { text: "Listing published. " }), "It now appears in search results and on the home page.")));
-      if (params.get("photo") === "failed") root.append(C.notice("warn", "The listing was saved, but the photo upload failed. You can add a photo later."));
+      if (params.get("photo") === "failed") root.append(C.notice("warn", "The listing was saved, but the photo upload failed. You can add one below with Add photo."));
 
       // ---- header
       const badges = [];
@@ -1727,7 +1727,16 @@
 
       const media = C.el("div", { className: "detail-media" + (listing.public_photo_url ? "" : " detail-media--empty") });
       if (listing.public_photo_url) media.append(C.el("img", { src: listing.public_photo_url, alt: "Photo of " + listing.title }));
-      else media.append(C.el("span", { text: "No photo provided" }));
+      else media.append(C.mediaPlaceholder({ category: listing.category, label: isMine ? "No photo yet. Add one so people can see what you are offering." : "No photo provided" }));
+      // Owner: add or replace the photo here; the server swaps the file and
+      // the page reloads from the returned listing.
+      let photoActions = null;
+      if (isMine) {
+        const btn = C.button({ label: listing.public_photo_url ? "Replace photo" : "Add photo", size: "sm", variant: listing.public_photo_url ? "default" : "primary" });
+        btn.addEventListener("click", () => openPhotoDialog(listing, btn, () => load()));
+        photoActions = C.el("div", { className: "detail-photo-actions" }, btn,
+          C.el("span", { className: "muted", text: "Only photos you upload are shown; nothing is filled in automatically." }));
+      }
 
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
@@ -1785,7 +1794,7 @@
           exchangeEntry(listing, auth, { label: "Start exchange", noun: "item" })));
 
       root.append(C.el("div", { className: "detail-grid" },
-        C.el("div", { className: "card" }, media, facts),
+        C.el("div", { className: "card" }, media, photoActions, facts),
         side));
       const h1 = root.querySelector("h1"); h1.setAttribute("tabindex", "-1"); h1.focus();
     }
@@ -2097,6 +2106,24 @@
 
       const actions = C.el("span", { className: "cluster" });
       actions.append(C.button({ label: "View", size: "sm", href: "/listings/" + enc(listing.id) }));
+      // Photo: items only (services show their category icon). Add from the
+      // placeholder, replace from the actions; both open the same dialog.
+      const media = cardMedia(listing);
+      const onUploaded = (updated) => {
+        listings = listings.map((l) => (l.id === updated.id ? updated : l));
+        render();
+        const next = root.querySelector('[data-photo-for="' + updated.id + '"]');
+        if (next) next.focus();
+      };
+      if (!service && listing.public_photo_url) {
+        const btn = C.button({ label: "Replace photo", size: "sm", attrs: { "data-photo-for": listing.id } });
+        btn.addEventListener("click", () => openPhotoDialog(listing, btn, onUploaded));
+        actions.append(btn);
+      } else if (!service) {
+        const add = C.button({ label: "Add photo", size: "sm", variant: "primary", attrs: { className: "btn btn--sm btn--primary media-action", "data-photo-for": listing.id, "aria-label": "Add a photo to " + listing.title } });
+        add.addEventListener("click", () => openPhotoDialog(listing, add, onUploaded));
+        media.placeholder.action = add;
+      }
       if (listing.status === "available") {
         const btn = C.button({ label: "Withdraw", size: "sm", variant: "danger", attrs: { "aria-describedby": "withdraw-hint" } });
         btn.addEventListener("click", () => confirmWithdraw(listing, btn));
@@ -2111,7 +2138,7 @@
 
       return C.card({
         variant: ["compact"],
-        media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + listing.title : "" },
+        media,
         title: C.el("a", { href: "/listings/" + enc(listing.id), text: listing.title }),
         subtitle: service ? serviceCategoryLabel(listing.category) : listing.category,
         badges,
@@ -2396,6 +2423,108 @@
     }
   }
 
+  // ---------------------------------------------------------- LISTING PHOTOS
+  // Only photos the owner uploaded (listing.public_photo_url) are ever shown;
+  // nothing is fetched from the web or generated. Cards without one get the
+  // category placeholder from components.mediaPlaceholder.
+  function photoLimitBytes() {
+    return Math.min(Number((window.CAMPUS_CONFIG || {}).max_upload_bytes) || Infinity, 5 * 1024 * 1024);
+  }
+  function cardMedia(listing) {
+    if (listing.public_photo_url) return { src: listing.public_photo_url, alt: "Photo of " + (listing.title || "listing") };
+    return isService(listing)
+      ? { placeholder: { category: listing.category, kind: "service", label: serviceCategoryLabel(listing.category) } }
+      : { placeholder: { category: listing.category } };
+  }
+
+  // Add or replace a listing's photo through POST /api/listings/{id}/photo
+  // (owner only; the server swaps the file and returns the updated listing).
+  // onUploaded(listing) receives the server's listing.
+  function openPhotoDialog(listing, opener, onUploaded) {
+    const limit = photoLimitBytes();
+    const limitMb = Math.round(limit / (1024 * 1024));
+    const hasPhoto = !!listing.public_photo_url;
+    const field = C.field({ id: C.nextId("photo"), label: hasPhoto ? "New photo" : "Photo", type: "file", required: true,
+      attrs: { accept: "image/jpeg,image/png,image/webp" },
+      hint: "JPEG, PNG, or WebP up to " + limitMb + " MB. It is shown publicly on the listing. Only photos you upload are ever shown; nothing is filled in for you." });
+    const preview = C.el("div", { className: "photo-preview", hidden: true }, C.el("img", { alt: "Preview of the chosen photo" }));
+    const errorBox = C.el("div", { className: "notice notice--error", role: "alert", hidden: true });
+    const current = hasPhoto
+      ? C.el("div", { className: "cluster" }, C.el("div", { className: "photo-preview", style: { marginTop: 0, width: "120px" } }, C.el("img", { src: listing.public_photo_url, alt: "Current photo of " + listing.title })),
+          C.el("span", { className: "muted", text: "Current photo. The new one replaces it." }))
+      : null;
+    let objectUrl = null;
+    let uploading = false;
+    let file = null;
+    const cancel = C.button({ label: "Cancel", onClick: () => dlg.close("cancel") });
+    const submit = C.button({ label: hasPhoto ? "Replace photo" : "Add photo", variant: "leaf", attrs: { disabled: true } });
+
+    function clearPreview() {
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+      preview.hidden = true;
+      file = null;
+      submit.disabled = true;
+    }
+    field.control.addEventListener("change", () => {
+      field.clearError();
+      showNotice(errorBox, null);
+      const chosen = field.control.files[0];
+      clearPreview();
+      if (!chosen) return;
+      if (!/^image\/(jpeg|png|webp)$/.test(chosen.type)) { field.setError("Choose a JPEG, PNG, or WebP image."); field.control.value = ""; return; }
+      if (chosen.size > limit) { field.setError("That photo is over " + limitMb + " MB. Choose a smaller one."); field.control.value = ""; return; }
+      file = chosen;
+      objectUrl = URL.createObjectURL(chosen);
+      preview.querySelector("img").src = objectUrl;
+      preview.hidden = false;
+      submit.disabled = false;
+    });
+
+    const dlg = C.dialog({
+      title: hasPhoto ? "Replace the photo" : "Add a photo",
+      body: C.el("div", { className: "stack--tight" },
+        C.el("p", {}, C.el("strong", { text: listing.title })),
+        current, field.root, preview, errorBox),
+      actions: [cancel, submit],
+      onClose: () => { if (objectUrl) URL.revokeObjectURL(objectUrl); dlg.root.remove(); },
+    });
+    submit.addEventListener("click", async () => {
+      if (uploading || !file) return;
+      uploading = true;
+      C.setBusy(submit, true, "Uploading photo");
+      cancel.disabled = true;
+      showNotice(errorBox, null);
+      try {
+        const data = await api.upload("/api/listings/" + enc(listing.id) + "/photo", "photo", file);
+        dlg.close("done");
+        C.toast(hasPhoto ? "Photo replaced." : "Photo added.", "leaf");
+        if (onUploaded) onUploaded(data.listing);
+      } catch (err) {
+        uploading = false;
+        C.setBusy(submit, false);
+        cancel.disabled = false;
+        if (err instanceof api.ApiError && (err.code === "unsupported_image" || err.code === "payload_too_large")) {
+          field.setError((err.fields && err.fields.photo) || err.message || "That file could not be used.");
+          field.control.focus();
+        } else if (err instanceof api.ApiError && err.code === "validation_error") {
+          field.setError((err.fields && err.fields.photo) || err.message);
+        } else if (err instanceof api.ApiError && err.code === "forbidden") {
+          showNotice(errorBox, "Only the owner can change this listing's photo.");
+        } else if (err instanceof api.ApiError && err.status === 404) {
+          showNotice(errorBox, "This listing no longer exists.");
+        } else if (C.isAuthError(err)) {
+          if (err.status === 401) api.setToken(null);
+          showNotice(errorBox, authMessage(err));
+        } else {
+          showNotice(errorBox, C.errorMessage(err));
+        }
+      }
+    });
+    dlg.open(opener);
+    field.control.focus();
+    return dlg;
+  }
+
   function listingCard(listing) {
     const owner = listing.owner || {};
     if (isService(listing)) {
@@ -2404,6 +2533,7 @@
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
       return C.card({
         variant: ["compact"], interactive: true,
+        media: cardMedia(listing),
         title: C.el("a", { className: "card__link", href: "/listings/" + enc(listing.id), text: listing.title }),
         badges,
         body: [
@@ -2441,7 +2571,7 @@
 
     return C.card({
       variant: ["compact"], interactive: true,
-      media: { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + listing.title : "" },
+      media: cardMedia(listing),
       title, badges,
       body: [meta, money, specList],
       footer: [C.el("span", { className: "muted", text: owner.display_name || "Owner" }), C.profileBadge(owner)],
