@@ -13,6 +13,8 @@ def register_blueprints(app: Flask) -> None:
 
     from .notifications import bp as notifications_bp
     from .. import notifications  # transactional event listener
+    from .locations import bp as locations_bp
+    app.register_blueprint(locations_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(me_bp)
     app.register_blueprint(catalog_bp)
