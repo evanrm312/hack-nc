@@ -142,7 +142,9 @@ pytest -q            # or: python -m pytest -q
 requests and sanitized views, reservation atomicity, storage validation, and
 the error shape. Person 2's normalization and matching tests use mocked Gemini
 responses and synthetic inventory; price appraisal and Person 4's
-exchange/review tests remain stubs.
+exchange/review tests exercise persisted state, participant authorization and
+invalid transitions. Supabase auth/Storage provider checks are mocked unless
+explicitly reported as live.
 
 The migration and persistence tests apply the committed migration to a new
 temporary SQLite file. PostgreSQL validation uses a separate database whose
@@ -162,7 +164,7 @@ driver; the test creates and removes only a unique schema in the dedicated
 Browser session checks (Node.js, no package install):
 
 ```bash
-node tests/browser_auth.test.cjs
+node --test tests/browser_*.test.cjs
 ```
 
 `POST /api/requests/normalize` returns a validated Gemini proposal when

@@ -53,7 +53,7 @@ try:
           const result = await original(path, body, options);
           window.reviewIds.push(result.request.id);
           sessionStorage.setItem('qa-review-keys', JSON.stringify(window.reviewCalls));
-          if (window.reviewCalls.length === 1) throw new api.ApiError(503,'network_unavailable','Simulated lost response');
+          if (window.reviewCalls.length === 1) throw new api.ApiError(503,{error:{code:'network_unavailable',message:'Simulated lost response'}});
           return result;
         }
         return original(path, body, options);
