@@ -475,18 +475,57 @@ main :is(input,select,textarea,button,a,summary) { scroll-margin-block: 90px; }
 .results-overview blockquote { overflow-wrap: anywhere; }
 #results-badges { max-width: 100%; }
 @media (min-width: 1100px) { #confirm .time-window-row, .listing-terms-pane .time-window-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } #confirm .time-window-row > .btn, .listing-terms-pane .time-window-row > .btn { grid-column: 1 / -1; } }
-.about-intro { display: grid; grid-template-columns: 1.2fr 1fr; overflow: hidden; border: 1px solid #a6c7cf; border-radius: 22px; background: #f4fbfb; box-shadow: inset 0 2px 0 #fff, 0 8px 18px #32647620; }
-.about-copy { padding: clamp(22px,4vw,44px); }
-.about-copy h1 { max-width: 13em; margin: 15px 0; }
-.about-mark { display: inline-flex; width: 50px; height: 50px; align-items: center; justify-content: center; border-radius: 50%; color: #fff; background: linear-gradient(#96d598,#448c4f); box-shadow: inset 0 2px 2px #ffffffb0, 0 4px 7px #294f3935; }
-.about-mark svg { width: 26px; height: 26px; }
-.about-nature { min-height: 250px; background: url('../assets/leaves.webp') center / cover; border-left: 1px solid #adcabe; }
-.about-guide { margin: 24px 0; }
-.about-guide dl { display: grid; grid-template-columns: 140px minmax(0,1fr); gap: 12px 20px; }
-.about-guide dt { display: flex; align-items: center; gap: 8px; color: #256342; font-weight: 600; }
-.about-guide dt svg { width: 20px; height: 20px; }
-.about-guide dd { margin: 0; }
-.about-community { border-top: 1px solid #b5d0c6; padding-top: 20px; max-width: 740px; }
-.about-community h2 { font-size: 23px; }
-.about-team { font-size: 18px; }.about-team span { padding: 0 8px; color: #58806e; }
-@media (max-width: 600px) { .about-intro { grid-template-columns: 1fr; }.about-nature { min-height: 130px; grid-row: 1; border-left: 0; }.about-guide dl { grid-template-columns: 1fr; gap: 6px; }.about-guide dd { margin-bottom: 12px; } }
+/* About: the team photograph and story lead, within the shared Aero shell. */
+.about-page { padding: 10px 4px 4px; }
+.about-story { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); align-items: center; gap: clamp(24px,4vw,48px); }
+.about-team-photo { margin: 0; min-width: 0; padding: 9px; border: 1px solid #b6cdd4; border-radius: 19px; background: linear-gradient(#fff,#e8f3f4); box-shadow: inset 0 1px #fff, 0 7px 16px #32647620; }
+.about-team-photo img { width: 100%; height: auto; border-radius: 11px; }
+.about-team-photo figcaption { padding: 12px 8px 3px; color: #3d5f64; font-size: 14px; text-align: center; }
+.about-story-copy { min-width: 0; }
+.about-story-copy h1 { font-size: clamp(30px,3.1vw,43px); line-height: 1.12; margin: 0 0 18px; }
+.about-story-copy > p { max-width: 48ch; margin-bottom: 16px; }
+.about-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #386753; }
+.about-team { color: #245d65; font-size: 18px; font-weight: 600; }
+.about-team span { padding: 0 4px; color: #789b91; }
+.about-story-copy .btn { margin-top: 4px; font-size: 15px; }
+.about-values { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; margin: 34px 0; padding: 24px 0; border-top: 1px solid #d1e0de; border-bottom: 1px solid #d1e0de; }
+.about-values article { display: grid; grid-template-columns: 34px minmax(0,1fr); align-content: start; column-gap: 10px; }
+.about-values .ui-icon { grid-row: span 2; width: 29px; height: 29px; color: #3b775e; }
+.about-values h2 { font-size: 18px; margin-bottom: 8px; }
+.about-values p { grid-column: 2; color: #48636d; font-size: 15px; }
+.about-simulation { padding: clamp(18px,3vw,32px); border: 1px solid #b1cfc6; border-radius: 21px; background: linear-gradient(130deg,#f3faf4,#f6fbfc); box-shadow: inset 0 2px #fff, 0 5px 14px #32647612; }
+.about-simulation-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.about-simulation-heading h2 { font-size: clamp(24px,2.5vw,30px); font-weight: 500; }
+.about-simulation-heading .badge { flex: none; font-size: 12px; margin-top: 3px; }
+.about-simulation-note { margin: 4px 0 24px; max-width: 85ch; font-size: 14px; color: #48636d; }
+.about-simulation-grid { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: 26px; }
+.about-assumptions fieldset { height: 100%; margin: 0; padding: 14px 18px 12px; border-color: #c5d9d7; }
+.about-assumptions legend { font-size: 15px; font-weight: 600; }
+.about-presets { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; margin: 0 0 22px; }
+.about-presets button { display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 58px; padding: 8px 4px; font-size: 12px; line-height: 1.25; white-space: normal; text-align: center; border-radius: 9px; }
+.about-presets button span { display: block; margin-top: 3px; font-size: 11px; font-weight: 400; }
+.about-presets button[aria-pressed="true"] { border-color: #6da391; background: linear-gradient(#e7f6e8,#cbe5d6); color: #20553f; box-shadow: inset 0 1px 3px #38675425; }
+.about-assumptions label { display: flex; justify-content: space-between; align-items: start; gap: 12px; font-size: 14px; }
+.about-assumptions output { flex: none; min-width: 46px; font-weight: 700; color: #245e69; text-align: right; font-variant-numeric: tabular-nums; }
+.about-assumptions input[type="range"] { width: 100%; min-height: 28px; padding: 0; margin: 0 0 18px; accent-color: #3e8062; background: transparent; border: none; box-shadow: none; cursor: pointer; }
+.about-assumptions .field__hint { font-size: 12px; margin: -12px 0 20px; }
+.about-projection { display: flex; flex-direction: column; min-width: 0; padding: 25px; border: 1px solid #b6d5ca; border-radius: 16px; background: linear-gradient(150deg,#fff,#e7f4e9); box-shadow: inset 0 1px #fff; }
+.about-savings > span { color: #2c6650; font-size: 14px; font-weight: 600; }
+.about-savings > strong { display: block; margin: 4px 0; color: #1e5b43; font-size: clamp(42px,5vw,62px); line-height: 1.15; font-weight: 500; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.about-savings p { color: #426859; font-size: 14px; }
+.about-cost-comparison { margin: 25px 0 20px; }
+.about-cost-label { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 13px; margin-bottom: 7px; }
+.about-cost-label strong { flex: none; font-variant-numeric: tabular-nums; }
+.about-cost-track { height: 12px; overflow: hidden; border-radius: 10px; background: #d6e4df; box-shadow: inset 0 1px 2px #345b4930; }
+.about-cost-track + .about-cost-label { margin-top: 18px; }
+.about-cost-bar { height: 100%; border: 1px solid #56836c; border-radius: 10px; background: linear-gradient(#acd4b2,#6caa7e); }
+.about-cost-bar--new { border-color: #6194a8; background: linear-gradient(#a6d8ed,#6ba6bf); }
+.about-projection-summary { font-size: 14px; line-height: 1.6; }
+.about-projection > .field__hint { margin-top: auto; padding-top: 12px; font-size: 12px; }
+.about-method { margin-top: 24px; padding-top: 16px; border-top: 1px solid #c4d9d1; font-size: 14px; color: #48636d; }
+.about-method summary { color: #28534c; cursor: pointer; font-weight: 600; }
+.about-method p { max-width: 95ch; margin-top: 12px; }
+.about-closing { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 18px; padding: 30px 4px 12px; }
+.about-closing p { margin: 0; color: #3d6259; font-size: 18px; }
+@media (max-width: 900px) { .about-story { grid-template-columns: 1fr; gap: 24px; }.about-team-photo { max-width: 660px; width: 100%; justify-self: center; }.about-story-copy > p { max-width: 70ch; }.about-values { gap: 16px; }.about-simulation-heading { flex-wrap: wrap; }.about-simulation-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .about-page { padding: 0; }.about-story-copy h1 { font-size: 32px; }.about-team { font-size: 17px; }.about-team-photo { padding: 6px; }.about-team-photo figcaption { font-size: 12px; }.about-values { grid-template-columns: 1fr; gap: 22px; margin: 26px 0; }.about-assumptions fieldset { padding: 12px; }.about-projection { padding: 20px; }.about-simulation { padding: 16px 12px; }.about-assumptions label { font-size: 13px; }.about-presets button { font-size: 11px; }.about-presets button span { font-size: 10px; }.about-closing .btn { width: 100%; } }

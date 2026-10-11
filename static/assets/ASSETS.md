@@ -29,3 +29,11 @@ It is a modern humanist approximation, not an original Vista font. No new
 photographs or generated imagery were added for this typography/material pass.
 All interface icons are original inline SVG geometry.
 Historical screenshots are reference-only and are not bundled or reproduced.
+
+## Team photograph
+
+`team.webp` is the photograph supplied by Evan for the About page from
+`IMG_9563.heic` on 2026-10-11. Permission to include it was given in the page
+request; no public stock license or photographer identity is claimed. Converted
+from HEIC, resized to 1600 × 1200, and encoded as WebP quality 84. Metadata was
+removed; the full composition is preserved, with no generated edits.
