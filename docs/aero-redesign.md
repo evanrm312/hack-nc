@@ -133,4 +133,3 @@ Reference snapshots are in `/tmp/campus-aero-review/references/`.
 Temporary test scripts/results are in the same review directory, not application
 code or added application dependencies. No UI changes were pushed, deployed,
 merged, or committed to main. Explicit user approval is required before main.
-
