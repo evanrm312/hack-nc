@@ -11,6 +11,9 @@ def register_blueprints(app: Flask) -> None:
     from .pages import bp as pages_bp
     from .requests import bp as requests_bp
 
+    from .notifications import bp as notifications_bp
+    from .. import notifications  # transactional event listener
+    app.register_blueprint(notifications_bp)
     app.register_blueprint(me_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(health_bp)
