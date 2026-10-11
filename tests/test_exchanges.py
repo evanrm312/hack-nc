@@ -427,7 +427,7 @@ def test_preview_uses_isolated_labeled_data_and_does_not_duplicate_inventory(tmp
         assert profile["is_demo"] is True
         assert profile["badge"] == "Sandbox identity (not verified)"
         listings = client.get(f"/api/listings?owner_id={profile['id']}").get_json()["listings"]
-        assert len(listings) == 2
+        assert len(listings) == 5
         assert all("demo inventory" in listing["title"] for listing in listings)
         assert all(listing["status"] == "available" for listing in listings)
         assert client.get("/api/exchanges", headers=alice).get_json() == {"exchanges": []}

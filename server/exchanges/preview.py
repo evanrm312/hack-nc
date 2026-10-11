@@ -45,7 +45,7 @@ def create_preview_app(data_dir: Path):
         checked(client.patch("/api/me", headers={"Authorization": f"Bearer sandbox:{name}@unc.edu"}, json={"display_name": label}))
 
     owner_id = checked(client.get("/api/me", headers=alice))["profile"]["id"]
-    existing = checked(client.get(f"/api/listings?status=all&owner_id={owner_id}"))["listings"]
+    existing = checked(client.get(f"/api/listings?status=all&owner_id={owner_id}", headers=alice))["listings"]
     titles = {listing["title"] for listing in existing}
     spots = checked(client.get("/api/meeting-spots"))["meeting_spots"]
     items = [
@@ -66,10 +66,15 @@ def create_preview_app(data_dir: Path):
     ]
     for item in items:
         if item["title"] not in titles:
-            checked(client.post("/api/listings", headers=alice, json={
+            draft = checked(client.post("/api/listings", headers=alice, json={
                 **item, "description": "Labeled sample inventory for an isolated local transaction preview.",
                 "meeting_spot_ids": [spot["id"] for spot in spots],
-            }))
+            }))["listing"]
+            # Reuse licensed application photography for isolated preview uploads.
+            from io import BytesIO
+            photo = next((PROJECT_ROOT / "static/assets").glob("**/sky*"))
+            checked(client.post(f"/api/listings/{draft['id']}/publish",headers=alice,
+                data={"photo":(BytesIO(photo.read_bytes()),photo.name)}))
     return app
 
 

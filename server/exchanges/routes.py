@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import and_, or_, update
 
 from ..auth import current_profile, require_verified_user
+from ..idempotency import creation, commit_creation
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..models import (
@@ -183,6 +184,8 @@ def create_exchange():
     body = json_body()
     if body.get("mode") == "service":
         return service.create()
+    existing,key,fingerprint=creation(Exchange,"requester_id",current_profile().id,body)
+    if existing: return jsonify({"exchange":existing.to_dict(),"current_offer":_current_offer(existing).to_dict()}),201
     errors = FieldErrors()
     listing_id = string(body.get("listing_id"), "listing_id", errors, required=True, max_len=32)
     mode = body.get("mode")
@@ -211,6 +214,7 @@ def create_exchange():
     exchange = Exchange(
         listing_id=listing.id, owner_id=listing.owner_id, requester_id=user_id,
         source_request_id=source_id, mode=mode, status="negotiating", current_offer_revision=1,
+        creation_key=key,creation_fingerprint=fingerprint,
     )
     db.session.add(exchange)
     db.session.flush()
@@ -219,8 +223,8 @@ def create_exchange():
         **validate_terms(initial_terms(listing, mode), mode),
     )
     db.session.add(offer)
-    db.session.commit()
-    return jsonify({"exchange": exchange.to_dict(), "current_offer": offer.to_dict()}), 201
+    exchange=commit_creation(exchange,"requester_id")
+    return jsonify({"exchange": exchange.to_dict(), "current_offer": _current_offer(exchange).to_dict()}), 201
 
 
 @bp.get("/<exchange_id>")
@@ -276,9 +280,12 @@ def post_message(exchange_id: str):
     errors = FieldErrors()
     body = string(json_body().get("body"), "body", errors, required=True, max_len=4000)
     errors.raise_if_any()
-    message = Message(exchange_id=exchange.id, sender_id=current_profile().id, body=body)
+    existing,key,fingerprint=creation(Message,"sender_id",current_profile().id,{"exchange_id":exchange.id,"body":body})
+    if existing: return jsonify({"message":existing.to_dict()}),201
+    message = Message(exchange_id=exchange.id, sender_id=current_profile().id, body=body,
+                      creation_key=key,creation_fingerprint=fingerprint)
     db.session.add(message)
-    db.session.commit()
+    message=commit_creation(message,"sender_id")
     return jsonify({"message": message.to_dict()}), 201
 
 

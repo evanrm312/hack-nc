@@ -1,4 +1,5 @@
 """Supabase Auth adapter tests: provider responses are mocked, never live calls."""
+from tests.conftest import publish_listing
 
 import io
 import json
@@ -81,11 +82,12 @@ def test_supabase_identity_owns_normalized_request_and_matches_real_catalog(supa
 
     listing_response = supabase_client.post("/api/listings", json={
         "title": "Navy suit 40R", "category": "formalwear", "allowed_modes": ["borrow"],
+        "description": "Synthetic suit for authentication integration.",
         "specifications": {"jacket_size": "40R"}, "rental_fee_cents": 0,
         "proposed_item_value_cents": 20000, "collateral_percent": 30,
     }, headers=owner)
     assert listing_response.status_code == 201
-    listing = listing_response.get_json()["listing"]
+    listing = publish_listing(supabase_client, owner, listing_response.get_json()["listing"])
 
     normalized_response = supabase_client.post("/api/requests/normalize", json={"text": "I need a 40R suit"}, headers=requester)
     assert normalized_response.status_code == 200
