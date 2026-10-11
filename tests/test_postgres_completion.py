@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from io import BytesIO
 from uuid import uuid4
-from threading import Barrier
+from threading import Barrier, Lock
 import pytest
 from flask_migrate import upgrade
 from sqlalchemy import create_engine,text,inspect
@@ -112,3 +112,29 @@ def test_postgres_acceptance_reservation_and_message_deduplication(tmp_path):
         with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(message,range(2)))
         assert results[0]==results[1] and results[0][0]==201
         with app.app_context():assert db.session.query(Notification).filter_by(kind='message').count()==1
+
+
+def test_concurrent_first_signin_creates_one_profile(tmp_path):
+    from sqlalchemy import event
+    from server.models import Profile
+    with isolated(tmp_path) as app:
+        with app.app_context():
+            upgrade();engine=db.engine
+        barrier=Barrier(2)
+        lookup_lock=Lock();lookup_count=0
+        def simultaneous_lookup(connection,cursor,statement,parameters,context,executemany):
+            nonlocal lookup_count
+            if statement.startswith('SELECT profiles.') and 'WHERE profiles.auth_subject =' in statement:
+                with lookup_lock:
+                    lookup_count+=1
+                    initial_lookup=lookup_count<=2
+                if initial_lookup:barrier.wait(timeout=10)
+        event.listen(engine,'after_cursor_execute',simultaneous_lookup)
+        try:
+            def first_login(_):
+                response=app.test_client().get('/api/me',headers=auth('alice@unc.edu'))
+                return response.status_code,response.json.get('profile',{}).get('id')
+            with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(first_login,range(2)))
+        finally:event.remove(engine,'after_cursor_execute',simultaneous_lookup)
+        assert results[0]==results[1] and results[0][0]==200
+        with app.app_context():assert db.session.query(Profile).count()==1
