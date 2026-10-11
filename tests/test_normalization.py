@@ -341,3 +341,201 @@ def test_reference_followup_unknowns_required_types_and_dedup(category, type_loc
     ]
     _reconcile_questions(result)
     assert result['follow_up_questions'] == expected + [specific, confirmation]
+
+
+@pytest.mark.parametrize('category,text', [
+    ('tutoring', 'I need tutoring'),
+    ('proofreading', 'I need proofreading'),
+    ('moving help', 'I need moving help'),
+])
+def test_service_unknown_requirements_stay_unknown(sdk, category, text):
+    sdk[2](payload(modes=['service'], category=category))
+    result = normalize(text)
+    assert result['modes'] == ['service']
+    assert result['category'] == category
+    assert result['required_specifications'] == {}
+    assert result['service_duration_minutes'] is None
+    assert result['service_time_windows'] is None
+    assert result['budget_cents'] is None
+    assert result['max_deposit_cents'] is None
+    assert result['use_start'] is None and result['use_end'] is None
+    assert any('minutes' in q for q in result['follow_up_questions'])
+    assert any('start and end' in q for q in result['follow_up_questions'])
+    assert not any('deposit' in q or 'pickup' in q or 'return the item' in q for q in result['follow_up_questions'])
+    if category == 'tutoring':
+        assert any('subject' in q for q in result['follow_up_questions'])
+
+
+def test_service_clear_explicit_constraints(sdk):
+    sdk[2](payload(modes=['service'], category='tutoring', budget_dollars='25.50',
+        service_duration_minutes=45,
+        service_time_windows=[dict(start='2026-10-14T14:00:00-04:00', end='2026-10-14T16:00:00-04:00')],
+        needed_by='2026-10-14T17:00:00-04:00', required_specifications=[dict(name='subject', value='calculus')]))
+    result = normalize('45 minutes of calculus tutoring on October 14, 2026, 2–4pm; finish by 5pm. Budget $25.50.')
+    assert result['budget_cents'] == 2550
+    assert result['service_duration_minutes'] == 45
+    assert result['service_time_windows'] == [dict(start='2026-10-14T18:00:00Z', end='2026-10-14T20:00:00Z')]
+    assert result['needed_by'] == '2026-10-14T21:00:00Z'
+    assert result['required_specifications'] == {'subject': 'calculus'}
+    assert not any('subject' in q or 'minutes' in q or 'start and end' in q for q in result['follow_up_questions'])
+
+
+def test_service_deadline_is_not_a_session_window(sdk):
+    sdk[2](payload(modes=['service'], category='proofreading', needed_by='2026-10-16T21:00:00Z',
+        ambiguous_dates=[dict(text='by Friday', proposed='2026-10-16T21:00:00Z', needs_confirmation=True)]))
+    result = normalize('I need proofreading by Friday.')
+    assert result['service_time_windows'] is None
+    assert result['service_duration_minutes'] is None
+    assert result['needed_by'] == '2026-10-16T21:00:00Z'
+    assert any('confirm' in q and 'by Friday' in q for q in result['follow_up_questions'])
+    assert any('start and end' in q for q in result['follow_up_questions'])
+    instruction = sdk[1].models.generate_content.call_args.kwargs['config'].system_instruction
+    assert 'NEVER an availability window' in instruction
+    assert 'Never assume one hour' in instruction
+
+
+def test_service_relative_session_requires_confirmation(sdk):
+    sdk[2](payload(modes=['service'], category='moving help', service_duration_minutes=90,
+        service_time_windows=[dict(start='2026-10-11T18:00:00Z', end='2026-10-11T20:00:00Z')],
+        ambiguous_dates=[dict(text='tomorrow 2–4pm', proposed='2026-10-11T18:00:00Z', needs_confirmation=True)]))
+    result = normalize('90 minutes of moving help tomorrow 2–4pm.')
+    assert result['source'] == 'gemini'
+    assert result['ambiguous_dates'][0]['needs_confirmation'] is True
+    assert any('confirm' in q for q in result['follow_up_questions'])
+
+
+@pytest.mark.parametrize('changes', [dict(service_duration_minutes=0), dict(service_duration_minutes=1441),
+    dict(service_duration_minutes=True), dict(service_duration_minutes=1.5),
+    dict(service_time_windows=[dict(start='2026-10-11T20:00:00Z', end='2026-10-11T18:00:00Z')]),
+    dict(service_time_windows=[dict(start='2026-10-11T18:00:00', end='2026-10-11T20:00:00')]),
+    dict(category='formalwear'), dict(use_start='2026-10-11T18:00:00Z'),
+    dict(modes=['service', 'borrow']), dict(max_deposit_dollars='0')])
+def test_service_validation_failure_preserves_manual_fallback(sdk, changes):
+    sdk[2](payload(**dict(dict(modes=['service'], category='tutoring'), **changes)))
+    assert_manual(normalize())
+    assert sdk[1].models.generate_content.call_count == 1
+
+
+@pytest.mark.parametrize('deadline_only,subject_required', [(False, False), (True, False), (False, True)])
+def test_service_normalization_create_and_match_integration(sdk, client, alice, bob, deadline_only, subject_required):
+    window = dict(start='2030-10-12T12:00:00Z', end='2030-10-12T14:00:00Z')
+    listing_response = client.post('/api/listings', json=dict(title='Test calculus tutor',
+        category='tutoring', allowed_modes=['service'], description='Calculus tutoring, synthetic test listing.',
+        service_price_cents=2500, service_duration_minutes=60, service_available_windows=[window]), headers=bob)
+    assert listing_response.status_code == 201, listing_response.get_json()
+    listing_id = listing_response.get_json()['listing']['id']
+    sdk[2](payload(modes=['service'], category='tutoring', budget_dollars='30',
+        service_duration_minutes=60, service_time_windows=None if deadline_only else [window],
+        needed_by='2030-10-13T00:00:00Z', required_specifications=[dict(name='subject', value='calculus')] if subject_required else []))
+    response = client.post('/api/requests/normalize', json={'text': 'Test explicit calculus request'}, headers=alice)
+    assert response.status_code == 200
+    normalized = response.get_json()['normalized']
+    assert normalized['source'] == 'gemini'
+    body = dict(original_text='Test explicit calculus request', normalized=normalized)
+    for field in ('modes', 'budget_cents', 'needed_by', 'area', 'service_duration_minutes', 'service_time_windows'):
+        body[field] = normalized[field]
+    created = client.post('/api/requests', json=body, headers=alice)
+    assert created.status_code == 201, created.get_json()
+    request = created.get_json()['request']
+    assert 'max_deposit_cents' not in request and 'use_start' not in request
+    response = client.get(f"/api/requests/{request['id']}/matches", headers=alice)
+    assert response.status_code == 200
+    groups = response.get_json()
+    bucket = 'needs_confirmation' if deadline_only or subject_required else 'confirmed'
+    assert [entry['listing_id'] for entry in groups[bucket]] == [listing_id]
+    if deadline_only:
+        assert 'service_time_windows' in groups[bucket][0]['unknown_required']
+    if subject_required:
+        assert 'subject' in groups[bucket][0]['unknown_required']
+
+
+@pytest.mark.parametrize('proposal', ['2026-10-12T12:00:00Z', '2026-10-11T12:00:00Z'])
+def test_weekday_saturday_night_sunday_deadline(sdk, proposal):
+    sdk[2](payload(modes=['service'], category='proofreading', budget_dollars='15',
+        needed_by=proposal, ambiguous_dates=[dict(text='Sunday at 8 AM', proposed=proposal, needs_confirmation=True)]))
+    result = module.normalize_request('I need my essay proofread by SuNdAy at 8 AM for under $15',
+        datetime(2026, 10, 11, 1, 36, tzinfo=timezone.utc), 'America/New_York')
+    assert result['needed_by'] == '2026-10-11T12:00:00Z'
+    assert result['ambiguous_dates'][0]['proposed'] == result['needed_by']
+    assert result['ambiguous_dates'][0]['needs_confirmation'] is True
+    assert result['service_time_windows'] is None
+    assert result['service_duration_minutes'] is None
+    assert any('start and end' in q for q in result['follow_up_questions'])
+
+
+def test_weekday_local_boundary_and_explicit_time(sdk):
+    sdk[2](payload(needed_by='2026-10-12T03:00:00Z'))
+    result = normalize('I need it by Saturday at 11 PM')
+    assert result['needed_by'] == '2026-10-11T03:00:00Z'
+    assert any('confirm' in q for q in result['follow_up_questions'])
+
+
+def test_weekday_correct_local_day_left_unchanged(sdk):
+    sdk[2](payload(needed_by='2026-10-11T03:00:00Z'))
+    assert normalize('Saturday at 11 PM')['needed_by'] == '2026-10-11T03:00:00Z'
+
+
+def test_weekday_next_tuesday_remains_ambiguous(sdk):
+    proposal = '2026-10-14T14:00:00Z'
+    sdk[2](payload(needed_by=proposal, ambiguous_dates=[dict(text='next Tuesday at 10 AM', proposed=proposal, needs_confirmation=True)]))
+    result = normalize('I need it next Tuesday at 10 AM')
+    assert result['needed_by'] == '2026-10-13T14:00:00Z'
+    assert result['ambiguous_dates'][0]['needs_confirmation'] is True
+    assert any('next Tuesday' in q and 'confirm' in q for q in result['follow_up_questions'])
+
+
+def test_weekday_service_window_preserves_end_clock(sdk):
+    sdk[2](payload(modes=['service'], category='proofreading', service_duration_minutes=45,
+        service_time_windows=[dict(start='2026-10-12T23:00:00Z', end='2026-10-13T01:00:00Z')]))
+    result = normalize('Proofreading Sunday between 7 PM and 9 PM')
+    assert result['service_time_windows'] == [dict(start='2026-10-11T23:00:00Z', end='2026-10-12T01:00:00Z')]
+    assert result['needed_by'] is None
+
+
+def test_weekday_borrow_multiple_days_use_ambiguity_associations(sdk):
+    start, end = '2026-10-12T14:00:00Z', '2026-10-13T15:00:00Z'
+    sdk[2](payload(modes=['borrow'], use_start=start, use_end=end,
+        ambiguous_dates=[dict(text='Sunday at 10 AM', proposed=start, needs_confirmation=True),
+                         dict(text='Monday at 11 AM', proposed=end, needs_confirmation=True)]))
+    result = normalize('Borrow from Sunday at 10 AM to Monday at 11 AM')
+    assert result['use_start'] == '2026-10-11T14:00:00Z'
+    assert result['use_end'] == '2026-10-12T15:00:00Z'
+
+
+def test_weekday_dst_uses_target_date_offset(sdk):
+    sdk[2](payload(needed_by='2026-11-02T13:00:00Z'))
+    result = module.normalize_request('Sunday at 8 AM', datetime(2026, 10, 31, 22, tzinfo=timezone.utc), 'America/New_York')
+    assert result['needed_by'] == '2026-11-01T13:00:00Z'
+
+
+def test_weekday_missing_association_does_not_guess(sdk):
+    sdk[2](payload(needed_by='2026-10-14T12:00:00Z'))
+    result = normalize('Available Monday, but finish by Sunday at 8 AM')
+    assert result['needed_by'] is None
+    assert any('which weekday' in q for q in result['follow_up_questions'])
+
+
+def test_absolute_date_without_weekday_unchanged(sdk):
+    sdk[2](payload(needed_by='2026-10-12T12:00:00Z'))
+    assert normalize('By October 12, 2026 at 8 AM')['needed_by'] == '2026-10-12T12:00:00Z'
+
+
+def test_weekday_nearest_future_skips_elapsed_clock(sdk):
+    sdk[2](payload(needed_by='2026-10-12T12:00:00Z'))
+    assert normalize('Saturday at 8 AM')['needed_by'] == '2026-10-17T12:00:00Z'
+
+
+def test_weekday_dst_gap_clears_unsupported_wall_time(sdk):
+    sdk[2](payload(needed_by='2027-03-15T06:30:00Z'))
+    result = module.normalize_request('Sunday at 2:30 AM', datetime(2027, 3, 13, 20, tzinfo=timezone.utc), 'America/New_York')
+    assert result['source'] == 'gemini'
+    assert result['needed_by'] is None
+    assert any('daylight-saving gap' in q for q in result['follow_up_questions'])
+
+
+def test_weekday_ambiguity_proposal_without_repeated_weekday(sdk):
+    sdk[2](payload(needed_by='2026-10-12T12:00:00Z', ambiguous_dates=[
+        dict(text='at 8 AM', proposed='2026-10-12T12:00:00Z', needs_confirmation=True)]))
+    result = normalize('By Sunday at 8 AM')
+    assert result['needed_by'] == '2026-10-11T12:00:00Z'
+    assert all(a['proposed'] in (None, '2026-10-11T12:00:00Z') for a in result['ambiguous_dates'])

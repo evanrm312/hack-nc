@@ -327,3 +327,122 @@ category formalwear, preferred type suit/color blue/style classic. No redundant
 item/category questions remained. Follow-ups asked for fee budget, pickup area,
 maximum deposit, start/return dates and visual confirmation. The image and key were
 not modified or committed. `git diff --check` passed.
+
+## Service normalization and matching (Person 2 completion)
+
+Repository state was inspected before implementation: clean working tree on
+p2-image-search, HEAD 6924c92. After `git fetch origin`, Person 1's service backend
+was confirmed merged via PR #8 (ba36590), with latest origin/main 9d778b5. The
+branch was safely advanced with `git merge --ff-only origin/main`; no new commit
+was created, no branch switch occurred and no uncommitted work was discarded.
+Shared routes/models/migrations/UI are the upstream implementation, not rebuilt here.
+
+Supported service modes/categories are exactly modes ["service"] with category
+"tutoring", "proofreading", or "moving help". New validated extraction fields:
+service_duration_minutes (nullable strict integer, 1–1440) and service_time_windows
+(nullable list of {start, end} offset-aware intervals). Python converts timestamps
+to UTC and rejects invalid/reversed windows, invalid duration/category, mixed
+service/item modes, deposits and loan dates for services. Item normalization omits
+service fields, preserving its existing output. Service NormalizedRequest retains
+legacy item-only keys as null; it never populates them with values. Service owner
+views omit them, per Person 1's API. No service_price_cents request field is invented:
+budget_cents is the request cap, compared to listing.service_price_cents.
+
+Gemini instructions require explicit evidence in the user text for duration,
+subject and other constraints; absent values stay unknown. Time windows express
+acceptable sessions, never work inferred from a deadline. "By Friday" supplies only
+a needed_by proposal/ambiguity flag, not service_time_windows. Relative dates must
+be confirmed. Missing duration/session windows produce focused follow-ups; tutoring
+without a subject asks which subject. Gemini can ask proofreading/moving scope
+questions. Existing SDK fallback and editable all-unknown manual behavior remain.
+Language interpretation still depends on Gemini; validation is not proof of correct
+semantic extraction, so all normalized fields remain editable.
+
+Examples (mocked fixtures, not real inference):
+- "45 minutes of calculus tutoring on October 14, 2026, 2–4pm; finish by 5pm.
+  Budget $25.50." → modes [service], category tutoring, budget_cents 2550,
+  required_specifications {subject: calculus}, service_duration_minutes 45,
+  service_time_windows [{start: 2026-10-14T18:00:00Z, end: 2026-10-14T20:00:00Z}],
+  needed_by 2026-10-14T21:00:00Z (America/New_York).
+- "I need proofreading by Friday." → category proofreading, service mode,
+  nullable duration and time windows, a proposed needed_by timestamp flagged for
+  confirmation, questions about session duration and acceptable times. No deposit.
+- "I need moving help." → service category moving help; no guessed duration,
+  budget, dates or scope, and follow-ups for missing constraints.
+
+Matching extends the already-merged service implementation. Service/item modes
+are strictly separated in both directions, including malformed mixed-mode dicts.
+Required known specs/category and service price budget are enforced. A requested
+session duration is a minimum; a provider with fewer minutes is rejected. If a
+provider offers more minutes, matching can check a shorter requested session
+without prorating the published service price. Actual price/duration still require
+mutual agreement. Missing provider/request duration or windows needs confirmation.
+Explicit service specs absent from a listing remain unknown, never assumed.
+
+The feasible interval is an actual contiguous intersection of one provider window
+and one requester window, capped by needed_by as a completion deadline. Its length
+must be at least the requested minutes; touching or brief overlaps reject. Disjoint
+intervals are not added together. Offset-aware instants and exact-duration boundaries
+are supported. A deadline alone never supplies requester availability: if provider
+windows can meet it, the missing requester windows still require confirmation; if
+known provider windows cannot meet it, reject. Malformed windows/deadlines need
+confirmation. Unconfirmed normalized ambiguous dates also need confirmation.
+Deposits, collateral and item availability fields are not used for service matches.
+Reasons, shortcomings, unknown_required, scores and preference/cost ordering use
+the existing response format. Every result ID comes from the given real inventory.
+
+Integration handoff:
+- Evan's existing normalize/create/matches endpoints already call these functions.
+  No new service endpoint is required. Service listing creation currently forbids
+  specifications and its public view omits them. Subject/scope requirements cannot
+  be confirmed until the provider confirms them or Evan supplies a reviewed shared
+  contract for structured service attributes. Do not derive them from descriptions.
+- Emily's merged form already reads duration/windows and sends the contract fields.
+  Preserve these at top level when POSTing a confirmed request. Clear resolved
+  ambiguous_dates only after the user confirms the proposed schedule. Blank time
+  windows mean unknown to the matcher, not guaranteed "any time works"; the current
+  form hint should be updated accordingly. Show needs_confirmation for missing
+  subject/scope and scheduling, and keep deadlines distinct from availability.
+- Item-only keys may remain null in the normalized proposal for compatibility, but
+  service create bodies should omit deposits, loan dates and pickup windows. Service
+  records returned by Person 1 omit them already.
+
+New tests supplement existing service CRUD/exchange tests rather than duplicating
+those implementations: clear/ambiguous/deadline-only normalization, no guessed
+subject/duration, validation/manual fallback, budgets/categories/required specs,
+minimum duration, sufficient vs touching/brief/disjoint overlap, offsets, deadlines,
+missing scheduling, service/item separation, ranking, and mocked normalize→create→
+matches integration (including the real API's missing service-spec limitation).
+Gemini was mocked throughout this increment; no real Gemini service call was run.
+
+Final validation commands/results:
+- `.venv/bin/python -m pytest -q tests/test_normalization.py tests/test_matching.py tests/test_pricing.py`: 140 passed.
+- `.venv/bin/python -m pytest -q tests/test_normalization.py tests/test_matching.py tests/test_pricing.py tests/test_services.py`: 158 passed.
+- `.venv/bin/python -m pytest -q`: 327 passed, 1 skipped.
+- `git diff --check`: passed.
+
+The first full run had 21 exchange-image failures because Pillow was missing locally.
+Installed the existing upstream pin with `.venv/bin/python -m pip install Pillow==12.3.0`
+(no dependency file edits); final full run above passed. Only normalize.py,
+matching.py, tests/test_normalization.py, tests/test_matching.py and this document
+were edited. No commit or push was performed.
+
+## Deterministic weekday proposal validation
+
+After text extraction and before generating confirmation questions, Python checks
+full weekday names case-insensitively against each proposal's local date using
+ZoneInfo. Wrong weekdays move to the nearest future occurrence, preserving an
+explicit unambiguous AM/PM clock time (otherwise the proposed local clock).
+Correct weekdays and inputs without weekday names remain unchanged. Abbreviations
+are not parsed. Deadlines remain needed_by; no session window is synthesized.
+
+Gemini ambiguity text/proposal pairs associate multiple named weekdays with their
+fields. Unassociated multi-weekday dates are cleared and require clarification,
+rather than guessed. Service intervals move together in local calendar time,
+preserving overnight ends; separately associated endpoints are checked individually.
+UTC offsets come from the target date, including DST. Nonexistent local times are
+cleared with a focused question; repeated times retain the proposed fold and require
+confirmation. All resulting structures are revalidated with Pydantic. Relative
+weekday proposals still require user confirmation; stale ISO timestamps in model
+questions are replaced when corrected. Natural-language interpretation remains
+limited: ambiguous date/field associations require editing, not automatic guessing.

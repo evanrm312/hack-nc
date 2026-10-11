@@ -21,6 +21,25 @@ without redesign. Files: `static/css/theme.css`, `static/js/components.js`,
 - Unknown is rendered as "unknown" (via `api.formatCents`/`api.formatTime`),
   never as `$0.00` or a made-up value.
 
+## Typography
+
+System stack only, no downloaded fonts, matching the mid-2000s Frutiger Aero
+era (Windows Vista/7, Mac OS X, early iPhone):
+
+```css
+--font: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
+```
+
+Windows renders Segoe UI, macOS/iOS fall back to Lucida Grande, older systems
+to Tahoma/Verdana. Body text is 1rem/1.5, plain weight, `--ink` on opaque
+surfaces. Only large headings get polish: `h1` has a white top highlight plus a
+faint sky shadow, the hero `h1` uses an ink-to-sky-900 gradient fill (both
+colors are dark, so contrast stays high; it falls back to plain ink where
+`background-clip: text` is unsupported), `h2` gets the highlight only. Form
+fields, buttons, badges, and body copy have no shadows or gradients on text
+except the white text on primary/leaf buttons, which keeps a 1px dark shadow
+for legibility. No pixel, novelty, or display fonts anywhere.
+
 ## Tokens (`:root`)
 
 | Token | Value | Use |
@@ -207,6 +226,114 @@ on load, and has a Replay button.
 Testing reduced motion: Chrome DevTools → Rendering panel → "Emulate CSS
 media feature prefers-reduced-motion: reduce", or Windows Settings →
 Accessibility → Visual effects → Animation effects off, then reload.
+
+## Reference photo in the request flow (endpoint pending)
+
+The home request box has an optional "Add a reference photo" file control.
+Client validation: JPEG/PNG/WebP by MIME type; size limit is
+`min(CAMPUS_CONFIG.max_upload_bytes, 5 MiB)` (the config key is not exposed
+yet, so 5 MiB applies); a small preview with a Remove button. Text alone works
+exactly as before.
+
+Assumed endpoint (per `docs/ai-behavior.md`, Person 1 to confirm):
+`POST /api/requests/normalize-photo`, verified user, **multipart** with
+fields `photo` (file, required) and `text` (optional). Sent through
+`api.post(path, FormData)`. Response `200 {"normalized": NormalizedRequest,
+"fixture": false}`; errors use the shared envelope with `unsupported_image`
+(400), `invalid_image` (400), `payload_too_large` (413). Optional assumed
+response extra: `normalized.photo_attributes` (`{category?, type?, color?,
+pattern?, style?}`); when absent the client derives it from the vision
+whitelist.
+
+Flow: photo present → photo endpoint (loading state "Analyzing photo…",
+double-submit guard). Photo-derived attributes are turned into **pending
+proposals** (`normalized.photo_proposals: [{name, value, status}]`) and
+removed from the normalized category/specs, so nothing from the photo is part
+of the request until the user accepts it. If the endpoint is missing
+(404/405/501) or fails, a note says the photo was not used and the text
+interpretation (or the manual form) is used instead.
+
+Confirmation step (home page, `#confirm`, before any request exists). It
+appears whenever there are photo proposals, the description is empty, or no
+buy/borrow/service mode was interpreted. It contains:
+- a required description textarea ("Add a few words about what you need" is
+  shown beside it while empty);
+- the proposals list: each attribute shows a "from photo" badge with
+  **Accept** / **Dismiss** (and Change afterwards), plus Accept all / Dismiss
+  all. Accepting sets the category or adds a preferred-specification row the
+  user can still edit; dismissed proposals are never sent;
+- the same editable interpretation form as the results page with the mode
+  choice marked required ("Choose buy, borrow, or a service." beside it);
+- a live summary line and a **Find matches** button that stays disabled until
+  the description, a mode, and every proposal decision are present. Money and
+  date validation is the same as for text requests and runs on submit.
+Find matches then creates the request (`POST /api/requests`) with the
+confirmed values and `photo_proposals` statuses recorded in `normalized`, and
+redirects to results. Text requests whose interpretation already has a mode
+skip this step exactly as before. On the results page only *accepted*
+proposals are marked, with a neutral "from photo (accepted)" badge. The photo
+is never stored, never sent anywhere else, and never appears on request cards
+or the public feed.
+
+## Services (implemented against Person 1's contract)
+
+Services are a third listing kind on the real endpoints (docs/contracts.md,
+merged from p1-services). No sample data remains. Shape used by the UI:
+
+- Listing:  exactly ;  is one of
+  , ,  (with a space);   required;  (0 allowed),   (1–1440),  (nonempty; one must fit the
+  duration). Item fields are not sent (the server rejects them), including
+  , so the meeting-spot picker hides in service mode. A
+  photo may still be uploaded afterwards via the photo endpoint.
+- NeedRequest:  exactly ,  a
+  service category, ///  null or omitted, optional  and private
+  . The public view adds .
+
+Behavior: the listing form's **Service** pill is exclusive and shows the
+service category, price, session length, and availability windows, hiding
+condition, photo-independent item fields, specs, accessories, defects, sale and
+borrowing terms, and meeting spots; client validation mirrors the server
+(description required, windows nonempty and long enough). Listing detail
+renders a service layout with price, session length, category, and windows,
+no deposit section, and a disabled "Request this service" placeholder. All
+cards use the teal  "Service" badge. In the interpretation
+form (confirmation step and results) "A service" is exclusive with buy/borrow,
+switches the category list to the three service categories, hides deposit and
+borrowing dates, and shows optional session length and private time windows;
+/ build bodies that omit the rejected
+fields. The feed shows "Needs a service" plus the session length and a
+"Needs a service" filter.
+
+Mismatches found against the earlier assumption (all resolved in the UI):
+field names are prefixed  (,
+,  on listings and
+ on requests); there is no  field, the kind is
+;  has a space; description and windows are
+required; duration is 1–1440 not 5–720; meeting spots are rejected.
+
+## Home "How it works" (implemented)
+
+Below the request box: four steps on opaque step cards with inline SVG icons
+(describe, matches with reasons, agree on price and deposit, meet at a public
+spot) and a simulated-money note. No numbers or impact claims.
+
+## My listings (implemented; route pending)
+
+Template `templates/marketplace/my_listings.html` (page `my-listings`) and
+`initMyListings` in `marketplace.js`. Person 1 needs to add
+`@bp.get("/listings/mine")` rendering it in `server/routes/pages.py`; until
+then `/listings/mine` is served by the listing-detail route and the script
+mounts the same view there. Flow: redirect to `/sign-in` without a token;
+identity from `GET /api/me`; listings from
+`GET /api/listings?owner_id=<me>&status=all` (filtered again by `owner_id`
+client-side); tabs Active (available, reserved) and Past (sold, withdrawn);
+Withdraw only on available listings, confirmed in a `components.dialog`, then
+`PATCH /api/listings/{id} {"status": "withdrawn"}`; `409 listing_locked` and
+`403` are shown inside the dialog. Withdrawn listings get a **Relist** button
+(`PATCH {"status": "available"}`). An in-flight set blocks double clicks on both. "On
+loan" is not a listing status (the listing stays `reserved` during a loan), so
+reserved cards say "Reserved or on loan; manage it in the exchange". The nav
+shows "My listings" only when a token is present.
 
 ## Public request feed (implemented)
 

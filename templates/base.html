@@ -39,6 +39,7 @@
             <li><a href="{{ url_for('pages.home') }}">Home</a></li>
             <li><a href="{{ url_for('pages.requests_feed') }}">Public requests</a></li>
             <li><a href="{{ url_for('pages.listing_form') }}">New listing</a></li>
+            <li id="nav-my-listings" hidden><a href="/listings/mine">My listings</a></li>
             <li><a href="{{ url_for('pages.my_exchanges') }}">My exchanges</a></li>
             <li><a href="{{ url_for('pages.sign_in') }}" id="nav-sign-in">Sign in</a></li>
           </ul>
@@ -83,8 +84,13 @@
       var here = window.location.pathname.replace(/\/$/, "") || "/";
       nav && nav.querySelectorAll("a").forEach(function (a) {
         var path = a.getAttribute("href").replace(/\/$/, "") || "/";
-        if (path === here || (path !== "/" && here.indexOf(path + "/") === 0)) a.setAttribute("aria-current", "page");
+        if (path === here || (path !== "/" && path !== "/listings/mine" && here.indexOf(path + "/") === 0)) a.setAttribute("aria-current", "page");
       });
+      // "My listings" only for signed-in users (token presence; the page itself verifies with /api/me).
+      var mine = document.getElementById("nav-my-listings");
+      function syncMine() { if (mine && window.api) mine.hidden = !api.getToken(); }
+      document.addEventListener("campus:auth-changed", syncMine);
+      syncMine();
     })();
   </script>
   <script src="{{ url_for('static', filename='js/marketplace.js') }}"></script>

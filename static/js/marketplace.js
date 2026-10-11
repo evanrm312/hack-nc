@@ -22,13 +22,36 @@
   // shown as "needs confirmation" until the user confirms it.
   const DEFAULT_MODES = ["borrow", "sale"];
 
+  // =============================================================== SERVICES
+  // Third listing kind, per docs/contracts.md (Person 1, p1-services):
+  //   Listing: allowed_modes exactly ["service"], category in
+  //     tutoring | proofreading | moving help, description required,
+  //     service_price_cents (may be 0), service_duration_minutes (1-1440),
+  //     service_available_windows (nonempty, at least one fits the duration).
+  //     Item fields (condition, specs, accessories, defects, prices, collateral,
+  //     availability, meeting_spot_ids) are rejected for services.
+  //   NeedRequest: modes exactly ["service"], normalized.category a service
+  //     category; max_deposit_cents, use_start, use_end, pickup_windows must be
+  //     absent/null; optional service_duration_minutes and private
+  //     service_time_windows. Public view adds service_duration_minutes.
+  const SERVICE_CATEGORIES = [["tutoring", "Tutoring"], ["proofreading", "Proofreading"], ["moving help", "Moving help"]];
+  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "unknown"])[1];
+  const isServiceCategory = (c) => SERVICE_CATEGORIES.some(([v]) => v === c);
+  const isService = (listing) => !!listing && (listing.allowed_modes || []).includes("service");
+  const isServiceRequest = (r) => !!r && ((r.modes || []).includes("service") || (r.normalized && (r.normalized.modes || []).includes("service")));
+  const formatDuration = (min) => (Number.isInteger(min) ? (min >= 60 ? (min / 60).toFixed(min % 60 ? 1 : 0) + " h" : min + " min") : "unknown");
+
   const CONDITIONS = [["", "Unknown"], ["new", "New"], ["like_new", "Like new"], ["good", "Good"], ["fair", "Fair"], ["worn", "Worn"]];
   const conditionLabel = (c) => (CONDITIONS.find(([v]) => v === c) || [c, c ? String(c).replace("_", " ") : "unknown"])[1];
 
   if (page === "home") initHome();
   if (page === "results") initResults();
   if (page === "listing-form") initListingForm();
-  if (page === "listing-detail") initListingDetail();
+  // /listings/mine is served by the detail route until Person 1 registers
+  // pages.my_listings; the same controller runs either way.
+  if (page === "listing-detail" && $("listing-root") && $("listing-root").dataset.listingId === "mine") initMyListings($("listing-root"));
+  else if (page === "listing-detail") initListingDetail();
+  if (page === "my-listings") initMyListings($("my-listings-root"));
   if (page === "requests-feed") initRequestsFeed();
 
   // ------------------------------------------------------------ shared bits
@@ -52,7 +75,7 @@
   }
 
   const nonNegInt = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
-  const cleanModes = (modes) => (Array.isArray(modes) ? modes.filter((m) => m === "sale" || m === "borrow") : []);
+  const cleanModes = (modes) => (Array.isArray(modes) ? modes.filter((m) => m === "sale" || m === "borrow" || m === "service") : []);
 
   function manualNormalized(text, question) {
     return {
@@ -92,37 +115,121 @@
     });
     textarea.addEventListener("input", () => { textError.textContent = ""; textarea.removeAttribute("aria-invalid"); });
 
+    // ---- optional reference photo (validated here; sent only with the request)
+    const photoInput = $("request-photo");
+    const photoPreview = $("request-photo-preview");
+    const photoError = $("request-photo-error");
+    const photoLimit = Math.min(Number((window.CAMPUS_CONFIG || {}).max_upload_bytes) || Infinity, 5 * 1024 * 1024);
+    let photoFile = null;
+    function setPhotoError(message) {
+      photoError.textContent = message || "";
+      if (message) photoInput.setAttribute("aria-invalid", "true"); else photoInput.removeAttribute("aria-invalid");
+    }
+    function clearPhoto(focusInput) {
+      photoFile = null;
+      photoInput.value = "";
+      const img = photoPreview.querySelector("img");
+      if (img.src) { URL.revokeObjectURL(img.src); img.removeAttribute("src"); }
+      photoPreview.hidden = true;
+      setPhotoError("");
+      if (focusInput) photoInput.focus();
+    }
+    photoInput.addEventListener("change", () => {
+      const file = photoInput.files[0];
+      if (!file) { clearPhoto(false); return; }
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { clearPhoto(false); setPhotoError("Choose a JPEG, PNG, or WebP image."); return; }
+      if (file.size > photoLimit) { clearPhoto(false); setPhotoError("That photo is over " + Math.round(photoLimit / (1024 * 1024)) + " MB."); return; }
+      photoFile = file;
+      setPhotoError("");
+      photoPreview.querySelector("img").src = URL.createObjectURL(file);
+      $("request-photo-name").textContent = file.name + " (" + (file.size / 1024).toFixed(0) + " KB)";
+      photoPreview.hidden = false;
+    });
+    $("request-photo-remove").addEventListener("click", () => clearPhoto(true));
+
+    let submitting = false;
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (submitting) return;
       showNotice(formError, null);
       const text = textarea.value.trim();
-      if (!text) {
-        textError.textContent = "Describe what you need first.";
+      if (!text && !photoFile) {
+        textError.textContent = "Describe what you need, or add a reference photo.";
         textarea.setAttribute("aria-invalid", "true");
         textarea.focus();
         return;
       }
-      C.setBusy(submit, true, "Interpreting your request");
-      status.textContent = "Interpreting…";
+      if (photoError.textContent) { photoInput.focus(); return; }
+      submitting = true;
+      C.setBusy(submit, true, photoFile ? "Analyzing your photo" : "Interpreting your request");
+      status.textContent = photoFile ? "Analyzing photo…" : "Interpreting…";
 
-      // Step 1: interpret. A non-auth failure falls back to a manual
-      // interpretation (all unknown) so the user still gets an editable form.
-      let normalized;
-      try {
-        const result = await api.post("/api/requests/normalize", { text });
-        normalized = result.normalized || manualNormalized(text, "The interpreter returned nothing. Fill in the fields yourself.");
-      } catch (err) {
-        if (C.isAuthError(err)) {
-          if (err.status === 401) api.setToken(null);
-          status.textContent = "";
-          C.setBusy(submit, false);
-          showNotice(formError, authMessage(err));
-          return;
+      // Step 1: interpret. Photo first (if any), then text, then the manual
+      // all-unknown form. Nothing is ever guessed on the client.
+      let normalized = null;
+      let photoNote = null;
+      if (photoFile) {
+        const fd = new FormData();
+        fd.append("photo", photoFile);            // assumed multipart field names: photo, text
+        if (text) fd.append("text", text);
+        try {
+          const result = await api.post("/api/requests/normalize-photo", fd);
+          normalized = markPhotoProposals(result.normalized, text);
+        } catch (err) {
+          if (C.isAuthError(err)) {
+            if (err.status === 401) api.setToken(null);
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            showNotice(formError, authMessage(err));
+            return;
+          }
+          if (err instanceof api.ApiError && (err.code === "unsupported_image" || err.code === "payload_too_large" || err.code === "invalid_image")) {
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            setPhotoError(err.message || "That photo could not be used.");
+            photoInput.focus();
+            return;
+          }
+          const missing = err instanceof api.ApiError && (err.status === 404 || err.status === 405 || err.status === 501);
+          photoNote = missing
+            ? "Photo analysis is not available on the server yet, so the photo was not used."
+            : "The photo could not be analyzed (" + C.errorMessage(err) + "), so it was not used.";
+          if (!text) {
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            showNotice(formError, photoNote + " Add a short description to continue.");
+            textarea.focus();
+            return;
+          }
         }
-        normalized = manualNormalized(text, "The interpreter could not be reached (" + C.errorMessage(err) + "). Nothing was guessed; fill in the fields yourself.");
+      }
+      if (!normalized) {
+        status.textContent = "Interpreting…";
+        try {
+          const result = await api.post("/api/requests/normalize", { text });
+          normalized = result.normalized || manualNormalized(text, "The interpreter returned nothing. Fill in the fields yourself.");
+        } catch (err) {
+          if (C.isAuthError(err)) {
+            if (err.status === 401) api.setToken(null);
+            status.textContent = ""; C.setBusy(submit, false); submitting = false;
+            showNotice(formError, authMessage(err));
+            return;
+          }
+          normalized = manualNormalized(text, "The interpreter could not be reached (" + C.errorMessage(err) + "). Nothing was guessed; fill in the fields yourself.");
+        }
+        if (photoNote) normalized.follow_up_questions = [photoNote].concat(normalized.follow_up_questions || []);
       }
 
-      // Step 2: save the request and go to results, where every field is editable.
+      // Step 2: anything that still needs the user's decision stops here, on
+      // the page, before a request exists: photo proposals to accept or
+      // dismiss, a missing description, or no buy/borrow choice.
+      const pendingProposals = (normalized.photo_proposals || []).length > 0;
+      if (pendingProposals || !text || !cleanModes(normalized.modes).length) {
+        status.textContent = "";
+        C.setBusy(submit, false);
+        submitting = false;
+        renderConfirmStep(text, normalized);
+        return;
+      }
+
+      // Step 3: save the request and go to results, where every field is editable.
       status.textContent = "Saving your request…";
       try {
         const request = await createRequestFrom(text, normalized);
@@ -130,6 +237,7 @@
       } catch (err) {
         status.textContent = "";
         C.setBusy(submit, false);
+        submitting = false;
         if (C.isAuthError(err)) {
           if (err.status === 401) api.setToken(null);
           showNotice(formError, authMessage(err));
@@ -139,23 +247,233 @@
       }
     });
 
+    // ---- confirmation step (before any request is created) ---------------
+    const confirmSection = $("confirm");
+    $("confirm-reset").addEventListener("click", () => {
+      confirmSection.hidden = true;
+      C.clear($("confirm-fields")); C.clear($("confirm-proposals"));
+      textarea.focus();
+    });
+
+    function renderConfirmStep(text, normalized) {
+      const fieldsBox = C.clear($("confirm-fields"));
+      const proposalsBox = C.clear($("confirm-proposals"));
+      const noticesBox = C.clear($("confirm-notices"));
+      const badges = C.clear($("confirm-badges"));
+      const summary = $("confirm-summary");
+      const errorBox = $("confirm-error");
+      const findBtn = $("confirm-submit");
+      const cform = $("confirm-form");
+      showNotice(errorBox, null);
+      let creating = false;
+
+      const source = normalized.source || "unknown";
+      if (normalized.reference_photo) badges.append(C.badge("Reference photo", "info"));
+      if (source === "stub") badges.append(C.fixtureBadge("Stub output, not Gemini"));
+      else if (source === "manual") badges.append(C.badge("Manual entry", "warn"));
+      else badges.append(C.badge("Proposed by Gemini", "info"));
+      noticesBox.append(C.notice("info", C.el("span", {},
+        C.el("strong", { text: "Nothing is saved yet. " }),
+        "Check the fields below. Anything proposed by the interpreter or your photo is a suggestion until you confirm it; blank means unknown.")));
+      const questions = (normalized.follow_up_questions || []).filter(Boolean);
+      if (questions.length) {
+        noticesBox.append(C.el("div", { className: "notice notice--warn", role: "note" }, C.el("div", {},
+          C.el("strong", { text: "Please confirm" }),
+          C.el("ul", { style: { margin: 0, paddingLeft: "1.2em" } }, questions.map((q) => C.el("li", { text: String(q) }))))));
+      }
+
+      // Description is required (image-only normalization returns "").
+      const desc = C.field({ id: "c-text", label: "What you need", type: "textarea", rows: 3, value: text, required: true,
+        hint: "Required. A few words about what you need; the search is based on this." });
+      const descTodo = C.el("p", { className: "field__todo", id: "c-text-todo" });
+      desc.root.append(descTodo);
+      desc.control.setAttribute("aria-describedby", desc.control.getAttribute("aria-describedby") + " c-text-todo");
+
+      const values = {
+        modes: cleanModes(normalized.modes),
+        category: normalized.category || "",
+        required_specifications: normalized.required_specifications || {},
+        preferred_specifications: normalized.preferred_specifications || {},
+        budget_cents: normalized.budget_cents, max_deposit_cents: normalized.max_deposit_cents,
+        needed_by: normalized.needed_by, use_start: normalized.use_start, use_end: normalized.use_end,
+        area: normalized.area,
+        service_duration_minutes: normalized.service_duration_minutes, service_time_windows: normalized.service_time_windows || [],
+      };
+      const editor = buildInterpretationForm(fieldsBox, values, { modesUnknown: false, requireModes: true, ambiguous: normalized.ambiguous_dates || [] });
+      fieldsBox.prepend(desc.root);
+      const modesTodo = C.el("p", { className: "field__todo", id: "modes-todo" });
+      editor.fields.modes.control.append(modesTodo);
+
+      // Photo proposals: nothing is part of the request until accepted.
+      const proposals = (normalized.photo_proposals || []).map((p) => Object.assign({ status: null, row: null }, p));
+      const proposalsTodo = C.el("p", { className: "field__todo" });
+      function applyProposal(p) {
+        if (p.name === "category") {
+          const sel = editor.fields.category.control;
+          if (!Array.from(sel.options).some((o) => o.value === p.value)) sel.append(C.el("option", { value: p.value, text: String(p.value) }));
+          sel.value = p.value;
+        } else {
+          p.row = editor.fields.preferred_specifications.add(p.name, p.value);
+        }
+      }
+      function undoProposal(p) {
+        if (p.name === "category") { if (editor.fields.category.control.value === p.value) editor.fields.category.control.value = ""; }
+        else if (p.row) { p.row.remove(); p.row = null; if (!editor.fields.preferred_specifications.control.children.length) editor.fields.preferred_specifications.add(); }
+      }
+      function renderProposals() {
+        C.clear(proposalsBox);
+        if (!proposals.length) return;
+        const list = C.el("ul", { className: "proposals", "aria-label": "Attributes proposed from your photo" });
+        proposals.forEach((p, i) => {
+          const where = p.name === "category" ? "the category" : "preferred specifications";
+          const statusText = p.status === "accepted" ? "Accepted and added to " + where + "." : p.status === "dismissed" ? "Dismissed; not part of your request." : "Not part of your request until you accept it.";
+          const actions = C.el("span", { className: "cluster" });
+          if (!p.status) {
+            actions.append(
+              C.button({ label: "Accept", variant: "leaf", size: "sm", attrs: { "aria-label": "Accept " + p.name + " " + p.value }, onClick: () => { p.status = "accepted"; applyProposal(p); renderProposals(); refresh(); focusProposal(i); } }),
+              C.button({ label: "Dismiss", size: "sm", attrs: { "aria-label": "Dismiss " + p.name + " " + p.value }, onClick: () => { p.status = "dismissed"; renderProposals(); refresh(); focusProposal(i); } }));
+          } else {
+            actions.append(C.button({ label: "Change", variant: "ghost", size: "sm", attrs: { "aria-label": "Change decision for " + p.name }, onClick: () => { if (p.status === "accepted") undoProposal(p); p.status = null; renderProposals(); refresh(); focusProposal(i); } }));
+          }
+          list.append(C.el("li", { className: "proposal" + (p.status ? " proposal--" + p.status : ""), dataset: { index: String(i) } },
+            C.el("span", { className: "proposal__attr" }, C.badge("from photo", "warn"), " ", C.el("strong", { text: String(p.name).replace(/_/g, " ") }), " = ", C.el("span", { text: String(p.value) })),
+            C.el("span", { className: "proposal__status muted", text: statusText }),
+            actions));
+        });
+        proposalsBox.append(C.el("fieldset", {},
+          C.el("legend", { text: "Proposed from your photo" }),
+          C.el("p", { className: "field__hint", text: "Visual guesses only (category, type, color, pattern, style). Accept the ones that are right; they become preferences you can still edit below. Size, price, condition, and dates are never read from a photo." }),
+          list,
+          C.el("div", { className: "cluster" },
+            C.button({ label: "Accept all", size: "sm", onClick: () => { proposals.forEach((p) => { if (!p.status) { p.status = "accepted"; applyProposal(p); } }); renderProposals(); refresh(); } }),
+            C.button({ label: "Dismiss all", size: "sm", onClick: () => { proposals.forEach((p) => { if (!p.status) p.status = "dismissed"; }); renderProposals(); refresh(); } })),
+          proposalsTodo));
+      }
+      function focusProposal(i) { const li = proposalsBox.querySelector('.proposal[data-index="' + i + '"] button'); if (li) li.focus(); }
+
+      // Live "what's missing": next to each field and in the summary; the
+      // button stays disabled until every required decision is made.
+      function refresh() {
+        const problems = [];
+        const hasText = !!desc.value().trim();
+        descTodo.textContent = hasText ? "" : "Add a few words about what you need.";
+        if (!hasText) problems.push("a short description");
+        const modeCount = fieldsBox.querySelectorAll('input[name="modes"]:checked').length;
+        modesTodo.textContent = modeCount ? "" : "Choose buy, borrow, or a service.";
+        if (!modeCount) problems.push("buy or borrow");
+        const pending = proposals.filter((p) => !p.status).length;
+        proposalsTodo.textContent = pending ? pending + " photo proposal" + (pending === 1 ? "" : "s") + " still need" + (pending === 1 ? "s" : "") + " Accept or Dismiss." : "";
+        if (pending) problems.push("a decision on " + pending + " photo proposal" + (pending === 1 ? "" : "s"));
+        findBtn.disabled = problems.length > 0 || creating;
+        summary.textContent = problems.length ? "To find matches, still needed: " + problems.join("; ") + "." : "Ready. Click Find matches when you are done editing.";
+        summary.classList.toggle("confirm-summary--ready", !problems.length);
+      }
+      fieldsBox.addEventListener("input", refresh);
+      fieldsBox.addEventListener("change", refresh);
+      renderProposals();
+      refresh();
+
+      cform.onsubmit = async (event) => {
+        event.preventDefault();
+        if (creating || findBtn.disabled) return;
+        showNotice(errorBox, null);
+        const read = editor.read();                 // same validation as text requests
+        if (!read.ok) return;
+        const v = read.values;
+        const descText = desc.value().trim();
+        const merged = mergeNormalized(normalized, v, {
+          source: source === "stub" ? "manual" : source,
+          photo_proposals: proposals.map((p) => ({ name: p.name, value: p.value, status: p.status })),
+          original_text: descText,
+        });
+        creating = true;
+        C.setBusy(findBtn, true, "Saving your request");
+        try {
+          const request = (await api.post("/api/requests", requestBodyFrom(v, merged, descText))).request;
+          window.location.href = "/results/" + enc(request.id);
+        } catch (err) {
+          creating = false;
+          C.setBusy(findBtn, false);
+          refresh();
+          if (err instanceof api.ApiError && err.code === "validation_error") {
+            const leftovers = C.applyFieldErrors(Object.assign({ original_text: desc }, editor.fields), err.fields);
+            showNotice(errorBox, leftovers.length ? "Please fix: " + leftovers.join("; ") : "Some fields need attention; see the messages next to them.");
+          } else if (C.isAuthError(err)) { if (err.status === 401) api.setToken(null); showNotice(errorBox, authMessage(err)); }
+          else showNotice(errorBox, C.errorMessage(err));
+        }
+      };
+
+      confirmSection.hidden = false;
+      $("confirm-heading").focus();
+      confirmSection.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }
+
     loadListings();
   }
 
+  // Turn photo-derived attributes into PENDING proposals. They are removed
+  // from the normalized specs/category so nothing from the photo is part of
+  // the request until the user accepts it on the confirmation step. Prefers
+  // the server's photo_attributes when present (assumed optional response
+  // field); otherwise derives from the vision whitelist (category, type,
+  // color, pattern, style). A text-derived color would also become a
+  // proposal; accepting it is one click, and nothing is lost silently.
+  function markPhotoProposals(normalized, text) {
+    const n = Object.assign({}, normalized || manualNormalized(text, "The photo analyzer returned nothing. Fill in the fields yourself."));
+    const VISUAL = ["type", "color", "pattern", "style"];
+    let attrs = n.photo_attributes && typeof n.photo_attributes === "object" ? n.photo_attributes : null;
+    if (!attrs) {
+      attrs = {};
+      if (n.category) attrs.category = n.category;
+      VISUAL.forEach((k) => {
+        if ((n.required_specifications || {})[k] != null) attrs[k] = n.required_specifications[k];
+        else if ((n.preferred_specifications || {})[k] != null) attrs[k] = n.preferred_specifications[k];
+      });
+    }
+    const required = Object.assign({}, n.required_specifications || {});
+    const preferred = Object.assign({}, n.preferred_specifications || {});
+    const proposals = [];
+    Object.entries(attrs).forEach(([name, value]) => {
+      if (value == null || value === "") return;
+      proposals.push({ name, value, status: null });
+      if (name === "category") { if (n.category === value) n.category = null; }
+      else { delete required[name]; delete preferred[name]; }
+    });
+    const followUps = (n.follow_up_questions || []).filter((q) => !/confirm or edit all proposed visual attributes/i.test(String(q)));
+    if (!proposals.length) {
+      followUps.unshift("The photo was received, but nothing could be proposed from it (analysis unavailable or the item was unclear). Fill in the fields yourself.");
+    }
+    delete n.photo_attributes;
+    return Object.assign(n, {
+      reference_photo: true, photo_proposals: proposals,
+      required_specifications: required, preferred_specifications: preferred,
+      follow_up_questions: followUps, original_text: n.original_text || text || "",
+    });
+  }
+
+  // Direct creation from an interpretation that already has a mode (text
+  // requests that skip the confirmation step).
   async function createRequestFrom(text, normalized) {
     const modes = cleanModes(normalized.modes);
+    const service = modes.length === 1 && modes[0] === "service";
     const body = {
       original_text: text,
       normalized,
       modes: modes.length ? modes : DEFAULT_MODES.slice(),
       budget_cents: nonNegInt(normalized.budget_cents),
-      max_deposit_cents: nonNegInt(normalized.max_deposit_cents),
       needed_by: normalized.needed_by || null,
-      use_start: normalized.use_start || null,
-      use_end: normalized.use_end || null,
-      pickup_windows: [],
       area: typeof normalized.area === "string" ? normalized.area.slice(0, 80) : null,
     };
+    if (service) {
+      body.service_duration_minutes = Number.isInteger(normalized.service_duration_minutes) ? normalized.service_duration_minutes : null;
+      body.service_time_windows = Array.isArray(normalized.service_time_windows) ? normalized.service_time_windows : [];
+      normalized.max_deposit_cents = null;
+    } else {
+      body.max_deposit_cents = nonNegInt(normalized.max_deposit_cents);
+      body.use_start = normalized.use_start || null;
+      body.use_end = normalized.use_end || null;
+      body.pickup_windows = [];
+    }
     try {
       return (await api.post("/api/requests", body)).request;
     } catch (err) {
@@ -284,8 +602,18 @@
         use_start: request.use_start,
         use_end: request.use_end,
         area: request.area,
+        service_duration_minutes: request.service_duration_minutes,
+        service_time_windows: request.service_time_windows || [],
       };
-      const meta = { modesUnknown: !modesKnown, ambiguous };
+      // Only proposals the user ACCEPTED on the confirmation step are marked here.
+      const accepted = (n.photo_proposals || []).filter((p) => p && p.status === "accepted");
+      const photoAttrs = accepted.length ? Object.fromEntries(accepted.map((p) => [p.name, p.value])) : null;
+      if (photoAttrs) {
+        interpBody.append(C.notice("info", C.el("span", {},
+          C.el("strong", { text: "Reference photo. " }),
+          "Fields marked \"from photo (accepted)\" were proposed from your photo and confirmed by you. They are preferences you can still edit. The photo itself is private and was not stored.")));
+      }
+      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs, photoLabel: "from photo (accepted)", photoVariant: "neutral" };
 
       const form = C.el("form", { id: "interp-form", novalidate: true });
       const editor = buildInterpretationForm(form, values, meta);
@@ -302,31 +630,9 @@
         const read = editor.read();
         if (!read.ok) return;
         const v = read.values;
-        const body = {
-          modes: v.modes,
-          budget_cents: v.budget_cents,
-          max_deposit_cents: v.max_deposit_cents,
-          needed_by: v.needed_by,
-          use_start: v.use_start,
-          use_end: v.use_end,
-          area: v.area,
-          normalized: Object.assign({}, n, {
-            source: source === "stub" ? "manual" : source,
-            modes: v.modes,
-            category: v.category || null,
-            required_specifications: v.required_specifications,
-            preferred_specifications: v.preferred_specifications,
-            budget_cents: v.budget_cents,
-            max_deposit_cents: v.max_deposit_cents,
-            needed_by: v.needed_by,
-            use_start: v.use_start,
-            use_end: v.use_end,
-            area: v.area,
-            // The user has reviewed every field, so pending questions are resolved.
-            ambiguous_dates: [],
-            follow_up_questions: [],
-          }),
-        };
+        // The user has reviewed every field, so pending questions are resolved.
+        const body = requestBodyFrom(v, mergeNormalized(n, v, { source: source === "stub" ? "manual" : source }));
+        if (v.modes.includes("service")) { body.max_deposit_cents = null; body.use_start = null; body.use_end = null; }
         C.setBusy(submit, true, "Updating results");
         try {
           const data = await api.patch("/api/requests/" + enc(requestId), body);
@@ -453,16 +759,18 @@
     function criteriaChips() {
       const n = request.normalized || {};
       const chips = [];
-      const modes = request.modes || [];
-      if (modes.length === 2) chips.push("buy or borrow");
-      else if (modes.length === 1) chips.push(modes[0] === "sale" ? "buy" : "borrow");
+      const confirmed = cleanModes(n.modes);
+      const modes = confirmed.includes("service") ? confirmed : (request.modes || []);
+      const labels = modes.map((m) => (m === "sale" ? "buy" : m === "borrow" ? "borrow" : "service"));
+      if (labels.length) chips.push(labels.join(" or "));
       if (n.category) chips.push("category: " + n.category);
       Object.entries(n.required_specifications || {}).forEach(([k, v]) => chips.push(k.replace(/_/g, " ") + " = " + String(v) + " (required)"));
       if (request.budget_cents != null) chips.push("budget up to " + api.formatCents(request.budget_cents));
       if (request.max_deposit_cents != null) chips.push("deposit up to " + api.formatCents(request.max_deposit_cents));
       if (request.needed_by) chips.push("needed by " + api.formatTime(request.needed_by));
       if (request.use_start && request.use_end) chips.push("borrow " + api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end));
-      if (request.area) chips.push("pickup around " + request.area);
+      if (Number.isInteger(request.service_duration_minutes)) chips.push("session " + formatDuration(request.service_duration_minutes));
+      if (request.area) chips.push((isServiceRequest(request) ? "around " : "pickup around ") + request.area);
       return chips;
     }
 
@@ -630,7 +938,8 @@
       const listing = entry.listing || {};
       const owner = listing.owner || {};
       const allowed = listing.allowed_modes || [];
-      const mode = entry.mode || (allowed.length === 1 ? allowed[0] : null);
+      const service = isService(listing);
+      const mode = service ? "service" : (entry.mode || (allowed.length === 1 ? allowed[0] : null));
 
       const badges = [];
       if (mode) badges.push(C.modeBadge(mode));
@@ -640,8 +949,12 @@
 
       // Money: show only what the listing actually offers for the relevant mode(s).
       const money = C.el("div", { className: "stack--tight match-money" });
-      const showSale = allowed.includes("sale") && (mode === "sale" || !mode);
-      const showBorrow = allowed.includes("borrow") && (mode === "borrow" || !mode);
+      const showSale = !service && allowed.includes("sale") && (mode === "sale" || !mode);
+      const showBorrow = !service && allowed.includes("borrow") && (mode === "borrow" || !mode);
+      if (service) {
+        money.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.service_price_cents) }), C.el("span", { className: "muted", text: " per " + formatDuration(listing.service_duration_minutes) + " session" })));
+        money.append(C.el("div", { className: "muted", text: "No deposit or collateral for services." }));
+      }
       if (showSale) {
         money.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.sale_price_cents) }), C.el("span", { className: "muted", text: " to buy" })));
       }
@@ -650,7 +963,7 @@
         money.append(C.el("div", {}, C.el("span", { className: "price", text: fee })));
         money.append(C.el("div", { className: "muted" }, depositProposalText(listing)));
       }
-      if (!showSale && !showBorrow) money.append(C.el("div", { className: "muted", text: "Terms unknown" }));
+      if (!service && !showSale && !showBorrow) money.append(C.el("div", { className: "muted", text: "Terms unknown" }));
 
       const reasons = C.el("ul", { className: "reasons" });
       (entry.reasons || []).forEach((r) => reasons.append(C.el("li", { className: "reason reason--ok", text: String(r) })));
@@ -658,26 +971,39 @@
       (entry.shortcomings || []).forEach((s) => reasons.append(C.el("li", { className: "reason reason--warn", text: String(s) })));
       if (!reasons.children.length) reasons.append(C.el("li", { className: "reason reason--unknown", text: "No explanation was provided." }));
 
-      const specs = Object.entries(listing.specifications || {}).slice(0, 4);
+      const specs = service ? [] : Object.entries(listing.specifications || {}).slice(0, 4);
       const specList = specs.length ? C.el("dl", { className: "specs" }, specs.flatMap(([k, v]) => [C.el("dt", { text: k.replace(/_/g, " ") }), C.el("dd", { text: String(v) })])) : null;
+      const windows = service ? serviceWindowsNode(listing, 2) : null;
 
       const footer = [
         C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: owner.display_name || "Owner" }), C.profileBadge(owner)),
         C.el("span", { className: "cluster" },
           typeof entry.score === "number" ? C.badge("fit " + entry.score.toFixed(2), "neutral") : null,
-          C.button({ label: "View listing", size: "sm", variant: kind === "confirmed" ? "primary" : "default", href: "/listings/" + enc(listing.id || "") })),
+          C.button({ label: service ? "View service" : "View listing", size: "sm", variant: kind === "confirmed" ? "primary" : "default", href: "/listings/" + enc(listing.id || "") })),
       ];
 
       return C.card({
         variant: ["compact"].concat(kind === "needs" ? ["needs"] : []),
-        media: { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + (listing.title || "listing") : "" },
+        media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + (listing.title || "listing") : "" },
         title: listing.title || "Untitled listing",
-        subtitle: [listing.category, listing.condition ? "condition " + String(listing.condition).replace("_", " ") : "condition unknown"].filter(Boolean).join(" · "),
+        subtitle: service
+          ? serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes)
+          : [listing.category, listing.condition ? "condition " + String(listing.condition).replace("_", " ") : "condition unknown"].filter(Boolean).join(" · "),
         badges,
-        body: [money, specList, C.el("h4", { className: "reasons__title", text: kind === "confirmed" ? "Why it matches" : "What still needs checking" }), reasons],
+        body: [money, specList, windows, C.el("h4", { className: "reasons__title", text: kind === "confirmed" ? "Why it matches" : "What still needs checking" }), reasons],
         footer,
       });
     }
+  }
+
+  // Available time windows of a service listing (Eastern), optionally capped.
+  function serviceWindowsNode(listing, limit) {
+    const windows = Array.isArray(listing.service_available_windows) ? listing.service_available_windows : [];
+    if (!windows.length) return C.el("p", { className: "muted", text: "No time windows given." });
+    const shown = limit ? windows.slice(0, limit) : windows;
+    const list = C.el("ul", { className: "spot-list" }, shown.map((w) => C.el("li", { text: api.formatTime(w.start) + " to " + api.formatTime(w.end) })));
+    if (limit && windows.length > limit) list.append(C.el("li", { className: "muted", text: "+ " + (windows.length - limit) + " more" }));
+    return C.el("div", {}, C.el("div", { className: "muted", style: { fontSize: ".85rem", marginTop: "6px" }, text: "Available windows" }), list);
   }
 
   // Owner's deposit proposal in dollars and percent. Pure arithmetic on the
@@ -703,13 +1029,14 @@
 
     const modesErr = C.el("p", { className: "field__error", id: "modes-error", role: "alert" });
     const modesGroup = C.el("fieldset", {},
-      C.el("legend", {}, "Buy or borrow? ", meta.modesUnknown ? confirmBadge() : null),
+      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("required", "info") : null),
       C.el("p", { className: "field__hint", id: "modes-hint", text: meta.modesUnknown
-        ? "The interpreter did not say. Both are selected as a search preference; confirm or narrow it."
-        : "Pick at least one. Both is fine as a search preference." }),
+        ? "The interpreter did not say. Buy and borrow are selected as a search preference; confirm or narrow it."
+        : (meta.requireModes ? "Required. " : "") + "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person (tutoring, proofreading, moving help)." }),
       C.el("div", { className: "choices" },
-        choice("modes", "borrow", "Borrow", (values.modes || []).includes("borrow")),
-        choice("modes", "sale", "Buy", (values.modes || []).includes("sale"))),
+        choice("modes", "borrow", "Borrow an item", (values.modes || []).includes("borrow")),
+        choice("modes", "sale", "Buy an item", (values.modes || []).includes("sale")),
+        choice("modes", "service", "A service", (values.modes || []).includes("service"))),
       modesErr);
     F.modes = { control: modesGroup, setError(m) { modesErr.textContent = m || ""; }, clearError() { modesErr.textContent = ""; } };
 
@@ -719,10 +1046,15 @@
       F.category.control.append(C.el("option", { value: values.category, text: values.category }));
       F.category.control.value = values.category;
     }
+    const photoAttrs = meta.photoAttributes || {};
+    const photoLabel = meta.photoLabel || "from photo (accepted)";
+    const photoBadge = () => C.badge(photoLabel, meta.photoVariant || "neutral");
     if (!values.category) markLabel(F.category, unknownBadge());
+    else if (photoAttrs.category && photoAttrs.category === values.category) markLabel(F.category, photoBadge());
 
-    const requiredSpecs = kvEditor("Required specifications", "Must match exactly, e.g. jacket_size = 40R. Unknown required details become “needs confirmation”, never a confirmed match.", values.required_specifications || {});
-    const preferredSpecs = kvEditor("Preferred specifications", "Nice to have, e.g. color = navy. Used for ranking only.", values.preferred_specifications || {});
+    const flagged = new Set(Object.keys(photoAttrs).filter((k) => k !== "category"));
+    const requiredSpecs = kvEditor("Required specifications", "Must match exactly, e.g. jacket_size = 40R. Unknown required details become “needs confirmation”, never a confirmed match.", values.required_specifications || {}, { flagged, flagLabel: photoLabel, flagVariant: meta.photoVariant || "neutral" });
+    const preferredSpecs = kvEditor("Preferred specifications", "Nice to have, e.g. color = navy. Used for ranking only.", values.preferred_specifications || {}, { flagged, flagLabel: photoLabel, flagVariant: meta.photoVariant || "neutral" });
     F.required_specifications = requiredSpecs;
     F.preferred_specifications = preferredSpecs;
 
@@ -748,6 +1080,19 @@
     F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "unknown", value: values.area || "", attrs: { maxlength: 80 } });
     if (!values.area) markLabel(F.area, unknownBadge());
 
+    // Service-only fields (docs/contracts.md -> Service NeedRequest): optional
+    // session length and private time windows. Deposit and loan dates do not
+    // apply to services and are hidden (and sent as null) in service mode.
+    F.service_duration_minutes = C.field({ id: "f-service-duration", label: "Session length (minutes)", type: "number", optional: true,
+      value: Number.isInteger(values.service_duration_minutes) ? String(values.service_duration_minutes) : "",
+      attrs: { min: 1, max: 1440, step: 5, inputmode: "numeric" }, hint: "How long you need, 1 to 1440 minutes. Blank means unknown." });
+    const serviceWindows = timeWindowsEditor({
+      title: "Times that work for you", initial: values.service_time_windows || [],
+      hint: "Private; never shown publicly. Times are read in your browser's zone and shown in America/New_York. Leave empty if any time works.",
+    });
+    F.service_time_windows = serviceWindows;
+    const serviceOnly = C.el("div", {}, C.el("div", { className: "field-row" }, F.service_duration_minutes.root), serviceWindows.root);
+
     container.append(
       modesGroup,
       C.el("div", { className: "field-row" }, F.category.root, F.area.root),
@@ -755,26 +1100,69 @@
       preferredSpecs.root,
       C.el("div", { className: "field-row" }, F.budget_cents.root, F.max_deposit_cents.root),
       C.el("div", { className: "field-row" }, F.needed_by.root, F.use_start.root, F.use_end.root),
+      serviceOnly,
     );
+
+    // Service is exclusive with buy/borrow; the category list follows the kind.
+    const modeInputs = Array.from(modesGroup.querySelectorAll('input[name="modes"]'));
+    const isServiceMode = () => modeInputs.some((i) => i.value === "service" && i.checked);
+    function setCategoryOptions(list, placeholderLabel) {
+      const sel = F.category.control;
+      const current = sel.value;
+      C.clear(sel);
+      sel.append(C.el("option", { value: "", text: placeholderLabel }));
+      list.forEach(([value, label]) => { if (value) sel.append(C.el("option", { value, text: label })); });
+      if (current && list.some(([v]) => v === current)) sel.value = current;
+      else if (current && !isServiceMode()) { sel.append(C.el("option", { value: current, text: current })); sel.value = current; }
+    }
+    function syncKind(event) {
+      if (event && event.target.value === "service" && event.target.checked) modeInputs.forEach((i) => { if (i.value !== "service") i.checked = false; });
+      if (event && event.target.value !== "service" && event.target.checked) modeInputs.forEach((i) => { if (i.value === "service") i.checked = false; });
+      const service = isServiceMode();
+      F.max_deposit_cents.root.hidden = service;
+      F.use_start.root.hidden = service;
+      F.use_end.root.hidden = service;
+      serviceOnly.hidden = !service;
+      F.budget_cents.root.querySelector(".field__label span").textContent = service ? "Budget for the service" : "Purchase or rental budget";
+      F.area.root.querySelector(".field__label span").textContent = service ? "Campus area" : "Campus area for pickup";
+      setCategoryOptions(service ? SERVICE_CATEGORIES : CATEGORIES, service ? "Choose a service category" : "Unknown / not sure");
+    }
+    modeInputs.forEach((i) => i.addEventListener("change", syncKind));
+    syncKind();
 
     function read() {
       Object.values(F).forEach((f) => f.clearError && f.clearError());
       const modes = Array.from(container.querySelectorAll('input[name="modes"]:checked')).map((i) => i.value);
+      const service = modes.includes("service");
       let bad = false;
-      if (!modes.length) { F.modes.setError("Choose buy, borrow, or both."); bad = true; }
+      if (!modes.length) { F.modes.setError("Choose buy, borrow, or a service."); bad = true; }
+      if (service && modes.length > 1) { F.modes.setError("A service cannot be combined with buy or borrow."); bad = true; }
+      if (service && !isServiceCategory(F.category.value())) { F.category.setError("Choose tutoring, proofreading, or moving help."); bad = true; }
       const budget = C.dollarsToCents(F.budget_cents.value());
       if (budget.error) { F.budget_cents.setError(budget.error); bad = true; }
-      const deposit = C.dollarsToCents(F.max_deposit_cents.value());
+      const deposit = service ? { cents: null } : C.dollarsToCents(F.max_deposit_cents.value());
       if (deposit.error) { F.max_deposit_cents.setError(deposit.error); bad = true; }
       const dates = {};
       for (const key of ["needed_by", "use_start", "use_end"]) {
+        if (service && key !== "needed_by") { dates[key] = null; continue; }
         const iso = C.localToIso(F[key].value());
         if (iso === undefined) { F[key].setError("Enter a valid date and time."); bad = true; }
         dates[key] = iso || null;
       }
       if (dates.use_start && dates.use_end && dates.use_end <= dates.use_start) { F.use_end.setError("Must be after the start."); bad = true; }
-      if (modes.length === 1 && modes[0] === "sale" && (dates.use_start || dates.use_end)) {
+      if (modes.length && !modes.includes("borrow") && (dates.use_start || dates.use_end)) {
         F.use_start.setError("Borrowing dates only apply when borrowing is selected."); bad = true;
+      }
+      let duration = null;
+      let windows = { ok: true, values: [] };
+      if (service) {
+        const raw = F.service_duration_minutes.value().trim();
+        if (raw) {
+          duration = parseInt(raw, 10);
+          if (Number.isNaN(duration) || duration < 1 || duration > 1440) { F.service_duration_minutes.setError("Enter a length from 1 to 1440 minutes."); bad = true; duration = null; }
+        }
+        windows = serviceWindows.read();
+        if (!windows.ok) bad = true;
       }
       if (bad) {
         const first = (!modes.length && container.querySelector('input[name="modes"]')) || container.querySelector('[aria-invalid="true"]');
@@ -794,11 +1182,50 @@
           use_start: dates.use_start,
           use_end: dates.use_end,
           area: F.area.value().trim() || null,
+          service_duration_minutes: service ? duration : null,
+          service_time_windows: service ? windows.values : [],
         },
       };
     }
 
     return { fields: F, read };
+  }
+
+  // Merge confirmed form values into a normalized object and build the
+  // POST/PATCH body for /api/requests. Services omit deposit, loan dates, and
+  // pickup windows (the server rejects them) and add duration/time windows.
+  function mergeNormalized(base, v, extra) {
+    const service = v.modes.includes("service");
+    return Object.assign({}, base, {
+      modes: v.modes,
+      category: v.category || null,
+      required_specifications: v.required_specifications,
+      preferred_specifications: v.preferred_specifications,
+      budget_cents: v.budget_cents,
+      max_deposit_cents: service ? null : v.max_deposit_cents,
+      needed_by: v.needed_by,
+      use_start: service ? null : v.use_start,
+      use_end: service ? null : v.use_end,
+      area: v.area,
+      service_duration_minutes: service ? v.service_duration_minutes : null,
+      service_time_windows: service ? (v.service_time_windows || []) : [],
+      ambiguous_dates: [], follow_up_questions: [],
+    }, extra || {});
+  }
+  function requestBodyFrom(v, normalized, originalText) {
+    const service = v.modes.includes("service");
+    const body = { modes: v.modes, normalized, budget_cents: v.budget_cents, needed_by: v.needed_by, area: v.area };
+    if (originalText !== undefined) body.original_text = originalText;
+    if (service) {
+      body.service_duration_minutes = v.service_duration_minutes;
+      body.service_time_windows = v.service_time_windows || [];
+    } else {
+      body.max_deposit_cents = v.max_deposit_cents;
+      body.use_start = v.use_start;
+      body.use_end = v.use_end;
+      if (originalText !== undefined) body.pickup_windows = [];
+    }
+    return body;
   }
 
   function choice(name, value, label, checked) {
@@ -853,16 +1280,30 @@
       photoPreview.hidden = false;
     });
 
-    // ---- modes
+    // ---- modes (sale / borrow for items; service is exclusive)
     const modesErr = C.el("p", { className: "field__error", id: "l-modes-error", role: "alert" });
     const modeSale = choiceInput("allowed_modes", "sale", "For sale", false, "l-modes-hint l-modes-error");
     const modeBorrow = choiceInput("allowed_modes", "borrow", "To borrow", true, "l-modes-hint l-modes-error");
+    const modeService = choiceInput("allowed_modes", "service", "Service", false, "l-modes-hint l-modes-error");
     const modesGroup = C.el("fieldset", {},
-      C.el("legend", { text: "How can people get it?" }),
-      C.el("p", { className: "field__hint", id: "l-modes-hint", text: "Required. Pick one or both. Only the matching price fields are shown." }),
-      C.el("div", { className: "choices" }, modeSale.label, modeBorrow.label),
+      C.el("legend", { text: "What are you offering?" }),
+      C.el("p", { className: "field__hint", id: "l-modes-hint", text: "Required. An item can be for sale, to borrow, or both. A service (tutoring, proofreading, moving help) has its own price and time windows and no deposit." }),
+      C.el("div", { className: "choices" }, modeSale.label, modeBorrow.label, modeService.label),
       modesErr);
     F.allowed_modes = { control: modesGroup, setError(m) { modesErr.textContent = m || ""; }, clearError() { modesErr.textContent = ""; } };
+
+    // ---- service terms (assumed shape; see SERVICES block at the top)
+    F.service_category = C.field({ id: "l-service-category", label: "Service category", type: "select", required: true,
+      options: [{ value: "", label: "Choose a category" }].concat(SERVICE_CATEGORIES.map(([value, label]) => ({ value, label }))), hint: "Required." });
+    F.service_price_cents = C.field({ id: "l-service-price", label: "Price per session", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 25", hint: "Required. $0 is allowed for a free service. Payment is simulated in this prototype." });
+    F.service_duration_minutes = C.field({ id: "l-service-duration", label: "Session length (minutes)", type: "number", value: "60", attrs: { min: 1, max: 1440, step: 5, inputmode: "numeric" }, hint: "Required. 1 to 1440 minutes." });
+    const windowsEditor = timeWindowsEditor();
+    F.service_available_windows = windowsEditor;
+    const serviceGroup = C.el("fieldset", { id: "l-service-group" },
+      C.el("legend", { text: "Service terms" }),
+      F.service_category.root,
+      C.el("div", { className: "field-row" }, F.service_price_cents.root, F.service_duration_minutes.root),
+      windowsEditor.root);
 
     // ---- sale terms
     F.sale_price_cents = C.field({ id: "l-sale-price", label: "Asking sale price", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 90", hint: "Required for sale." });
@@ -914,21 +1355,38 @@
       }
     }
 
+    const itemOnly = C.el("div", {},
+      C.el("div", { className: "field-row" }, F.condition.root, F.photo.root),
+      specs.root, F.accessories.root, F.known_defects.root);
+    const previewBox = C.el("div", { id: "l-service-preview" });
     fieldsBox.append(
+      modesGroup,
       C.el("div", { className: "field-row" }, F.title.root, F.category.root),
       F.description.root,
-      C.el("div", { className: "field-row" }, F.condition.root, F.photo.root),
-      specs.root, F.accessories.root, F.known_defects.root,
-      modesGroup, saleGroup, borrowGroup, spotsGroup);
+      itemOnly,
+      saleGroup, borrowGroup, serviceGroup, spotsGroup, previewBox);
 
     // ---- live behavior
-    function syncModes() {
-      saleGroup.hidden = !modeSale.input.checked;
-      borrowGroup.hidden = !modeBorrow.input.checked;
-      if (modeSale.input.checked || modeBorrow.input.checked) F.allowed_modes.clearError();
+    const isServiceMode = () => modeService.input.checked;
+    function syncModes(event) {
+      // Service is exclusive: picking it clears sale/borrow and vice versa.
+      if (event && event.target === modeService.input && modeService.input.checked) { modeSale.input.checked = false; modeBorrow.input.checked = false; }
+      if (event && event.target !== modeService.input && event.target.checked) modeService.input.checked = false;
+      const service = isServiceMode();
+      saleGroup.hidden = service || !modeSale.input.checked;
+      borrowGroup.hidden = service || !modeBorrow.input.checked;
+      serviceGroup.hidden = !service;
+      spotsGroup.hidden = service;        // meeting_spot_ids is rejected for services
+      F.description.root.querySelector(".field__optional").hidden = service; // description is required for a service
+      itemOnly.hidden = service;          // condition, photo, specs, accessories, defects
+      F.category.root.hidden = service;   // item category is replaced by the service category
+      F.title.control.placeholder = service ? "e.g. STOR 155 tutoring" : "e.g. Navy suit, 40R";
+      if (service || modeSale.input.checked || modeBorrow.input.checked) F.allowed_modes.clearError();
+      if (!service) C.clear(previewBox);
     }
     modeSale.input.addEventListener("change", syncModes);
     modeBorrow.input.addEventListener("change", syncModes);
+    modeService.input.addEventListener("change", syncModes);
     syncModes();
 
     function updateDeposit() {
@@ -963,11 +1421,56 @@
 
       let bad = false;
       const title = F.title.value().trim();
-      if (!title) { F.title.setError("Give the item a title."); bad = true; }
+      if (!title) { F.title.setError(isServiceMode() ? "Give the service a title." : "Give the item a title."); bad = true; }
+
+      // ---- service branch (assumed shape; see SERVICES block)
+      if (isServiceMode()) {
+        const sCategory = F.service_category.value();
+        if (!sCategory) { F.service_category.setError("Choose a service category."); bad = true; }
+        const price = C.dollarsToCents(F.service_price_cents.value());
+        if (price.error) { F.service_price_cents.setError(price.error); bad = true; }
+        else if (price.cents == null) { F.service_price_cents.setError("Enter a price (0 for free)."); bad = true; }
+        const duration = parseInt(F.service_duration_minutes.value(), 10);
+        if (Number.isNaN(duration) || duration < 1 || duration > 1440) { F.service_duration_minutes.setError("Enter a length from 1 to 1440 minutes."); bad = true; }
+        if (!F.description.value().trim()) { F.description.setError("A description is required for a service."); bad = true; }
+        const windows = windowsEditor.read();
+        if (!windows.ok) bad = true;
+        else if (!windows.values.length) { windowsEditor.setError("Add at least one time window when you can provide the service."); bad = true; }
+        else if (!Number.isNaN(duration) && !windows.values.some((w) => (new Date(w.end) - new Date(w.start)) / 60000 >= duration)) {
+          windowsEditor.setError("At least one window must be long enough for a " + duration + "-minute session."); bad = true;
+        }
+        if (bad) {
+          showNotice(errorBox, "Some fields need attention; see the messages next to them.");
+          const first = form.querySelector('[aria-invalid="true"]');
+          if (first) first.focus();
+          return;
+        }
+        const serviceBody = {
+          allowed_modes: ["service"], title,
+          description: F.description.value().trim(),
+          category: sCategory, service_price_cents: price.cents, service_duration_minutes: duration, service_available_windows: windows.values,
+        };
+        submitting = true;
+        C.setBusy(submit, true, "Saving service");
+        status.textContent = "Saving service…";
+        try {
+          const listing = (await api.post("/api/listings", serviceBody)).listing;
+          window.location.href = "/listings/" + enc(listing.id) + "?created=1";
+        } catch (err) {
+          submitting = false; C.setBusy(submit, false); status.textContent = "";
+          if (err instanceof api.ApiError && err.code === "validation_error") {
+            const leftovers = C.applyFieldErrors({ title: F.title, description: F.description, category: F.service_category, service_price_cents: F.service_price_cents, service_duration_minutes: F.service_duration_minutes, service_available_windows: windowsEditor }, err.fields);
+            showNotice(errorBox, leftovers.length ? "Please fix: " + leftovers.join("; ") : "Some fields need attention; see the messages next to them.");
+          } else if (C.isAuthError(err)) { if (err.status === 401) api.setToken(null); showNotice(errorBox, authMessage(err)); }
+          else showNotice(errorBox, C.errorMessage(err));
+        }
+        return;
+      }
+
       const category = F.category.value();
       if (!category) { F.category.setError("Choose a category."); bad = true; }
       const modes = [modeSale.input.checked ? "sale" : null, modeBorrow.input.checked ? "borrow" : null].filter(Boolean);
-      if (!modes.length) { F.allowed_modes.setError("Pick sale, borrowing, or both."); bad = true; }
+      if (!modes.length) { F.allowed_modes.setError("Pick sale, borrowing, both, or service."); bad = true; }
 
       const body = {
         title, category,
@@ -1048,6 +1551,68 @@
     function lines(text) { return String(text || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean); }
   }
 
+  // Rows of start/end datetime-local inputs -> [{start, end}] in UTC.
+  function timeWindowsEditor(opts) {
+    opts = opts || {};
+    const rows = C.el("div", { className: "kv-rows" });
+    const error = C.el("p", { className: "field__error", role: "alert" });
+    const addRow = (start, end) => {
+      const s = C.el("input", { type: "datetime-local", "aria-label": "Window start" });
+      const e = C.el("input", { type: "datetime-local", "aria-label": "Window end" });
+      if (start) s.value = C.isoToLocal(start);
+      if (end) e.value = C.isoToLocal(end);
+      const row = C.el("div", { className: "kv-row" }, s, e, C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this time window" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
+      rows.append(row);
+      return row;
+    };
+    const initial = Array.isArray(opts.initial) ? opts.initial.filter((w) => w && w.start && w.end) : [];
+    if (initial.length) initial.forEach((w) => addRow(w.start, w.end)); else addRow();
+    const add = C.button({ label: "+ Add a window", size: "sm", onClick: () => { addRow().querySelector("input").focus(); } });
+    const root = C.el("fieldset", {}, C.el("legend", { text: opts.title || "Available time windows" }),
+      C.el("p", { className: "field__hint", text: opts.hint || "When you can provide the service. Required: at least one window, and one must be long enough for a session. Times are read in your browser's zone and shown in America/New_York." }),
+      rows, C.el("div", { style: { marginTop: "8px" } }, add), error);
+    const editor = {
+      root, control: rows,
+      read() {
+        editor.clearError();
+        const values = [];
+        let bad = false;
+        rows.querySelectorAll(".kv-row").forEach((row) => {
+          const [s, e] = row.querySelectorAll("input");
+          const start = C.localToIso(s.value), end = C.localToIso(e.value);
+          if (!s.value && !e.value) return;
+          if (start === undefined || end === undefined || !start || !end) { bad = true; editor.setError("Each window needs a valid start and end."); return; }
+          if (end <= start) { bad = true; editor.setError("A window must end after it starts."); return; }
+          values.push({ start, end });
+        });
+        return bad ? { ok: false } : { ok: true, values };
+      },
+      setError(m) { error.textContent = m || ""; },
+      clearError() { error.textContent = ""; },
+    };
+    return editor;
+  }
+
+  // Compact summary card for a service listing (used for the form preview).
+  function serviceSummaryCard(listing) {
+    const owner = listing.owner || {};
+    return C.card({
+      variant: ["compact", "sky"],
+      title: listing.title || "Untitled service",
+      subtitle: serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes),
+      badges: [C.modeBadge("service")],
+      body: [
+        listing.description ? C.el("p", { text: listing.description }) : null,
+        C.el("dl", { className: "kv-list" },
+          C.el("dt", { text: "Price per session" }), C.el("dd", { text: api.formatCents(listing.service_price_cents) }),
+          C.el("dt", { text: "Session length" }), C.el("dd", { text: formatDuration(listing.service_duration_minutes) }),
+          C.el("dt", { text: "Deposit" }), C.el("dd", { text: "none (services have no collateral)" })),
+        serviceWindowsNode(listing),
+      ],
+      footer: owner.display_name ? [C.el("span", { className: "muted", text: owner.display_name }), C.profileBadge(owner)] : null,
+    });
+  }
+
   function choiceInput(name, value, label, checked, describedBy) {
     const input = C.el("input", { type: "checkbox", name, value, "aria-describedby": describedBy || null });
     input.checked = !!checked;
@@ -1072,7 +1637,8 @@
           api.getToken() ? api.get("/api/me").catch(() => null) : Promise.resolve(null),
         ]);
         root.removeAttribute("aria-busy");
-        render(listing, spotsRes ? spotsRes.meeting_spots : null, me ? me.profile : null);
+        if (isService(listing)) renderService(listing, spotsRes ? spotsRes.meeting_spots : null, me ? me.profile : null);
+        else render(listing, spotsRes ? spotsRes.meeting_spots : null, me ? me.profile : null);
       } catch (err) {
         root.removeAttribute("aria-busy");
         if (err instanceof api.ApiError && err.status === 404) {
@@ -1171,6 +1737,54 @@
       const h1 = root.querySelector("h1"); h1.setAttribute("tabindex", "-1"); h1.focus();
     }
 
+    // Service detail: category, price, duration, time windows. No deposit section.
+    function renderService(listing, spots, me) {
+      C.clear(root);
+      document.title = listing.title + " · Campus Current";
+      const owner = listing.owner || {};
+      const isMine = me && me.id === listing.owner_id;
+      if (params.get("created") === "1") root.append(C.notice("leaf", C.el("span", {}, C.el("strong", { text: "Service published. " }), "It now appears in search results and on the home page.")));
+
+      const badges = [C.modeBadge("service"), C.statusBadge(listing.status)];
+      if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      if (isMine) badges.push(C.badge("Your listing", "info"));
+
+      const facts = C.el("div", { className: "stack" },
+        C.el("div", { className: "cluster" }, badges),
+        C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
+        C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "session: " + formatDuration(listing.service_duration_minutes) })),
+        listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
+        section("Available time windows", serviceWindowsNode(listing)));
+
+      const terms = C.el("dl", { className: "kv-list" },
+        C.el("dt", { text: "Price per session" }), C.el("dd", { text: api.formatCents(listing.service_price_cents) }),
+        C.el("dt", { text: "Session length" }), C.el("dd", { text: formatDuration(listing.service_duration_minutes) }),
+        C.el("dt", { text: "Category" }), C.el("dd", { text: serviceCategoryLabel(listing.category) }));
+
+      const spotIds = new Set(listing.meeting_spot_ids || []);
+      let spotsNode;
+      if (!spotIds.size) spotsNode = C.el("p", { className: "muted", text: "No preferred spots listed; agree a place when you book." });
+      else if (!spots) spotsNode = C.el("p", { className: "muted", text: spotIds.size + " preferred spot(s); details could not be loaded." });
+      else spotsNode = C.el("ul", { className: "spot-list" }, spots.filter((s) => spotIds.has(s.id)).map((s) => C.el("li", {}, C.el("strong", { text: s.label }), C.el("span", { className: "muted", text: " · " + s.public_area }))));
+
+      const startBtn = C.button({ label: "Request this service", variant: "primary", attrs: { disabled: true, "aria-describedby": "start-hint" } });
+      const startHint = C.el("p", { className: "muted", id: "start-hint", text: isMine ? "This is your own listing." : "Booking a service is coming with the exchange flow." });
+
+      const side = C.el("div", { className: "stack" },
+        C.el("section", { className: "card card--sky", "aria-labelledby": "terms-heading" },
+          C.el("h2", { id: "terms-heading", text: "Terms" }), terms,
+          C.el("p", { className: "muted", style: { marginTop: "var(--space-3)" }, text: "Services have no deposit, collateral, or agreed item value." }),
+          C.simulationNotice("Simulated: payment for services is not collected or charged in this prototype.")),
+        C.el("section", { className: "card", "aria-labelledby": "spots-heading" }, C.el("h2", { id: "spots-heading", text: "Meeting spots" }), spotsNode),
+        C.el("section", { className: "card card--leaf", "aria-labelledby": "owner-heading" },
+          C.el("h2", { id: "owner-heading", text: "Provider" }),
+          C.el("div", { className: "cluster" }, C.el("strong", { text: owner.display_name || "Unknown" }), C.profileBadge(owner)),
+          C.el("div", { style: { marginTop: "var(--space-3)" } }, startBtn), startHint));
+
+      root.append(C.el("div", { className: "detail-grid" }, C.el("div", { className: "card" }, facts), side));
+      const h1 = root.querySelector("h1"); h1.setAttribute("tabindex", "-1"); h1.focus();
+    }
+
     function section(title, node) { return C.el("section", {}, C.el("h2", { style: { fontSize: "1.05rem", marginBottom: "6px" }, text: title }), node); }
     function kv(obj, emptyText) {
       const entries = Object.entries(obj || {});
@@ -1180,6 +1794,176 @@
     function stringList(arr, emptyText) {
       if (!arr || !arr.length) return C.el("p", { className: "muted", text: emptyText });
       return C.el("ul", { style: { margin: 0, paddingLeft: "1.2em" } }, arr.map((s) => C.el("li", { text: String(s) })));
+    }
+  }
+
+  // ============================================================ MY LISTINGS
+  function initMyListings(root) {
+    document.title = "My listings · Campus Current";
+    document.body.dataset.page = "my-listings";
+    let me = null;
+    let listings = [];
+    let tab = "active";
+    const ACTIVE = ["available", "reserved"];       // "on loan" keeps the listing reserved
+    const PAST = ["sold", "withdrawn"];
+    const withdrawing = new Set();                  // ids with a withdraw in flight
+
+    document.addEventListener("campus:auth-changed", load);
+    load();
+
+    async function load() {
+      if (!api.getToken()) { window.location.replace("/sign-in"); return; }
+      root.setAttribute("aria-busy", "true");
+      C.state.loading(root, "Loading your listings…");
+      try {
+        me = (await api.get("/api/me")).profile;                      // identity from the token, never the page
+        listings = (await api.get("/api/listings?owner_id=" + enc(me.id) + "&status=all")).listings || [];
+        listings = listings.filter((l) => l.owner_id === me.id);    // defensive: never show someone else's
+        root.removeAttribute("aria-busy");
+        render();
+      } catch (err) {
+        root.removeAttribute("aria-busy");
+        if (C.isAuthError(err)) { if (err.status === 401) api.setToken(null); window.location.replace("/sign-in"); return; }
+        C.state.error(root, err, { title: "Could not load your listings", retry: load });
+      }
+    }
+
+    function render() {
+      C.clear(root);
+      const counts = { active: listings.filter((l) => ACTIVE.includes(l.status)).length, past: listings.filter((l) => PAST.includes(l.status)).length };
+      const tabs = C.el("div", { className: "tabs", role: "tablist", "aria-label": "Listing status" },
+        tabButton("active", "Active", counts.active), tabButton("past", "Past", counts.past));
+      root.append(
+        C.el("section", { className: "card" },
+          C.el("div", { className: "section__head" },
+            C.el("h1", { id: "mine-heading", tabindex: "-1", style: { margin: 0 }, text: "My listings" }),
+            C.button({ label: "Post a new listing", variant: "primary", size: "sm", href: "/listings/new" })),
+          C.el("p", { className: "lede", text: "Everything you have posted. Withdraw an available listing to hide it; reserved, on-loan, and sold items belong to an exchange and cannot be withdrawn here." }),
+          tabs),
+        C.el("div", { id: "mine-grid", className: "grid", role: "tabpanel", "aria-live": "polite" }));
+      renderGrid();
+      if (!root.dataset.focused) { root.dataset.focused = "1"; $("mine-heading").focus(); }
+    }
+
+    function tabButton(key, label, count) {
+      const selected = tab === key;
+      return C.el("button", {
+        type: "button", role: "tab", className: "tab" + (selected ? " tab--selected" : ""), "aria-selected": selected ? "true" : "false",
+        onClick: () => { tab = key; render(); root.querySelector('.tab[aria-selected="true"]').focus(); },
+        onKeydown: (e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { tab = tab === "active" ? "past" : "active"; render(); root.querySelector('.tab[aria-selected="true"]').focus(); } },
+      }, label + " ", C.badge(String(count), selected ? "info" : "neutral"));
+    }
+
+    function renderGrid() {
+      const grid = $("mine-grid");
+      C.clear(grid);
+      if (!listings.length) {
+        C.state.empty(grid, { title: "You haven't posted anything yet", message: "List an item for sale or to borrow, or offer a service.",
+          action: C.button({ label: "Post a new listing", variant: "primary", size: "sm", href: "/listings/new" }) });
+        return;
+      }
+      const shown = listings.filter((l) => (tab === "active" ? ACTIVE : PAST).includes(l.status));
+      if (!shown.length) {
+        C.state.empty(grid, { title: tab === "active" ? "No active listings" : "No past listings", message: tab === "active" ? "Withdrawn and sold listings are under Past." : "Sold and withdrawn listings will appear here." });
+        return;
+      }
+      shown.forEach((l) => grid.append(mineCard(l)));
+    }
+
+    function mineCard(listing) {
+      const service = isService(listing);
+      const badges = service ? [C.modeBadge("service")] : (listing.allowed_modes || []).map((m) => C.modeBadge(m));
+      badges.push(C.statusBadge(listing.status));
+      if (listing.status === "reserved" && listing.active_exchange_id) badges.push(C.badge("In an exchange", "info"));
+
+      const price = C.el("div", { className: "stack--tight" });
+      if (service) price.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.service_price_cents) }), C.el("span", { className: "muted", text: " per session" })));
+      if (!service && (listing.allowed_modes || []).includes("sale")) price.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.sale_price_cents) }), C.el("span", { className: "muted", text: " to buy" })));
+      if (!service && (listing.allowed_modes || []).includes("borrow")) price.append(C.el("div", {}, C.el("span", { className: "price", text: listing.rental_fee_cents === 0 ? "Free loan" : api.formatCents(listing.rental_fee_cents) + " fee" }), C.el("span", { className: "muted", text: " · value " + api.formatCents(listing.proposed_item_value_cents) })));
+
+      const actions = C.el("span", { className: "cluster" });
+      actions.append(C.button({ label: "View", size: "sm", href: "/listings/" + enc(listing.id) }));
+      if (listing.status === "available") {
+        const btn = C.button({ label: "Withdraw", size: "sm", variant: "danger", attrs: { "aria-describedby": "withdraw-hint" } });
+        btn.addEventListener("click", () => confirmWithdraw(listing, btn));
+        actions.append(btn);
+      } else if (listing.status === "reserved") {
+        actions.append(C.el("span", { className: "muted", text: "Reserved or on loan; manage it in the exchange." }));
+      } else if (listing.status === "withdrawn") {
+        const btn = C.button({ label: "Relist", size: "sm", variant: "leaf" });
+        btn.addEventListener("click", () => relist(listing, btn));
+        actions.append(btn);
+      }
+
+      return C.card({
+        variant: ["compact"],
+        media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + listing.title : "" },
+        title: C.el("a", { href: "/listings/" + enc(listing.id), text: listing.title }),
+        subtitle: service ? serviceCategoryLabel(listing.category) : listing.category,
+        badges,
+        body: [price, C.el("p", { className: "muted", style: { fontSize: ".85rem" }, text: "Updated " + api.formatTime(listing.updated_at) })],
+        footer: [C.el("span", { className: "visually-hidden", id: "withdraw-hint", text: "Withdrawing hides the listing; you will be asked to confirm." }), actions],
+      });
+    }
+
+    // Owners may set status back to "available" (docs/contracts.md, PATCH /api/listings/{id}).
+    async function relist(listing, btn) {
+      if (withdrawing.has(listing.id)) return;
+      withdrawing.add(listing.id);
+      C.setBusy(btn, true, "Relisting");
+      try {
+        const data = await api.patch("/api/listings/" + enc(listing.id), { status: "available" });
+        listings = listings.map((l) => (l.id === listing.id ? data.listing : l));
+        C.toast("Listing is available again.", "leaf");
+        tab = "active";
+        render();
+        root.querySelector('.tab[aria-selected="true"]').focus();
+      } catch (err) {
+        C.setBusy(btn, false);
+        C.toast(C.errorMessage(err), "error", 6000);
+      } finally {
+        withdrawing.delete(listing.id);
+      }
+    }
+
+    function confirmWithdraw(listing, opener) {
+      if (withdrawing.has(listing.id)) return;
+      const errorBox = C.el("div", { className: "notice notice--error", role: "alert", hidden: true });
+      const cancel = C.button({ label: "Keep it listed", onClick: () => dlg.close("cancel") });
+      const confirm = C.button({ label: "Withdraw listing", variant: "danger" });
+      const dlg = C.dialog({
+        title: "Withdraw this listing?",
+        body: C.el("div", {}, errorBox,
+          C.el("p", {}, C.el("strong", { text: listing.title }), " will no longer appear in search or on the home page. You can relist it later from the Past tab."),
+          C.el("p", { className: "muted", text: "Nothing is charged or refunded; there is no exchange attached to an available listing." })),
+        actions: [cancel, confirm],
+      });
+      dlg.open(opener);
+      confirm.focus();
+      confirm.addEventListener("click", async () => {
+        if (withdrawing.has(listing.id)) return;          // double-click guard
+        withdrawing.add(listing.id);
+        C.setBusy(confirm, true, "Withdrawing");
+        cancel.disabled = true;
+        try {
+          const data = await api.patch("/api/listings/" + enc(listing.id), { status: "withdrawn" });
+          listings = listings.map((l) => (l.id === listing.id ? data.listing : l));
+          dlg.close("done");
+          C.toast("Listing withdrawn.", "leaf");
+          tab = "past";
+          render();
+          root.querySelector('.tab[aria-selected="true"]').focus();
+        } catch (err) {
+          C.setBusy(confirm, false);
+          cancel.disabled = false;
+          if (err instanceof api.ApiError && err.code === "listing_locked") showNotice(errorBox, "This listing is reserved or sold and belongs to an exchange, so it cannot be withdrawn.");
+          else if (err instanceof api.ApiError && err.code === "forbidden") showNotice(errorBox, "Only the owner can withdraw a listing.");
+          else if (C.isAuthError(err)) { if (err.status === 401) api.setToken(null); showNotice(errorBox, authMessage(err)); }
+          else showNotice(errorBox, C.errorMessage(err));
+        } finally {
+          withdrawing.delete(listing.id);
+        }
+      });
     }
   }
 
@@ -1244,7 +2028,7 @@
       const mode = modeSel.value;
       const area = areaSel.value;
       const shown = requests.filter((r) =>
-        (!mode || (r.modes || []).includes(mode)) &&
+        (!mode || (mode === "service" ? isServiceRequest(r) : (r.modes || []).includes(mode))) &&
         (!area || (area === "__none__" ? !r.area : r.area === area)));
       C.clear(grid);
       if (!requests.length) {
@@ -1253,9 +2037,9 @@
           action: C.button({ label: "Post a request", variant: "primary", size: "sm", href: "/" }) });
         return;
       }
-      count.textContent = shown.length === requests.length
+      count.textContent = (shown.length === requests.length
         ? requests.length + (requests.length === 1 ? " open request" : " open requests")
-        : shown.length + " of " + requests.length + " open requests match";
+        : shown.length + " of " + requests.length + " open requests match");
       if (!shown.length) {
         C.state.empty(grid, { title: "No requests match these filters", message: "Try a different area or clear the buy/borrow filter.",
           action: C.button({ label: "Clear filters", size: "sm", onClick: () => { modeSel.value = ""; areaSel.value = ""; renderFeed(); modeSel.focus(); } }) });
@@ -1268,22 +2052,26 @@
     function requestCard(r) {
       const requester = r.requester || {};
       const mine = !!(me && requester.id && requester.id === me.id);
+      const service = isServiceRequest(r);
       const modes = r.modes || [];
-      const badges = modes.map((m) => C.badge(m === "sale" ? "Wants to buy" : "Wants to borrow", m === "sale" ? "sale" : "borrow"));
+      const badges = service
+        ? [C.badge("Needs a service", "service")]
+        : modes.map((m) => C.badge(m === "sale" ? "Wants to buy" : "Wants to borrow", m === "sale" ? "sale" : "borrow"));
       if (mine) badges.push(C.badge("Your request", "info"));
       if (requester.is_demo) badges.push(C.badge("Demo account", "fixture"));
 
       const specs = Object.entries(r.required_specifications || {});
       const prefs = Object.entries(r.preferred_specifications || {});
       const item = C.el("div", { className: "stack--tight" },
-        C.el("div", { className: "req-item", text: r.category ? capitalize(r.category) : "Item not specified" }),
+        C.el("div", { className: "req-item", text: r.category ? (service ? serviceCategoryLabel(r.category) : capitalize(r.category)) : (service ? "Service not specified" : "Item not specified") }),
         specs.length ? C.el("dl", { className: "specs" }, specs.flatMap(([k, v]) => [C.el("dt", { text: k.replace(/_/g, " ") }), C.el("dd", { text: String(v) })])) : C.el("p", { className: "muted", text: "No required details given." }),
         prefs.length ? C.el("p", { className: "muted", text: "Prefers " + prefs.map(([k, v]) => k.replace(/_/g, " ") + " " + String(v)).join(", ") }) : null);
 
       const facts = C.el("dl", { className: "kv-list kv-list--plain" },
         C.el("dt", { text: "Needed by" }), C.el("dd", { text: formatDateOnly(r.needed_by_date) }),
         C.el("dt", { text: "Campus area" }), C.el("dd", { text: r.area || "not given" }),
-        C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "up to " + api.formatCents(r.budget_cents) : "not given" }));
+        C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "up to " + api.formatCents(r.budget_cents) : "not given" }),
+        service ? C.el("dt", { text: "Session" }) : null, service ? C.el("dd", { text: formatDuration(r.service_duration_minutes) }) : null);
 
       let action;
       if (mine) {
@@ -1329,7 +2117,9 @@
       const v = C.el("input", { type: "text", placeholder: "value (e.g. 40R)", "aria-label": title + " attribute value", maxlength: 120 });
       if (key != null) k.value = key;
       if (value != null) v.value = typeof value === "object" ? JSON.stringify(value) : String(value);
-      const row = C.el("div", { className: "kv-row" }, k, v,
+      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "please confirm", opts.flagVariant || "warn") : null;
+      if (flag) v.setAttribute("aria-description", opts.flagLabel || "please confirm");
+      const row = C.el("div", { className: "kv-row" + (flag ? " kv-row--flag" : "") }, k, v, flag,
         C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this " + title.toLowerCase() + " row" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
       rows.append(row);
       return row;
@@ -1342,6 +2132,12 @@
     return {
       root,
       control: rows,
+      add(key, value) {
+        // Fill the first empty row if there is one, else append.
+        const empty = Array.from(rows.querySelectorAll(".kv-row")).find((r) => { const [k, v] = r.querySelectorAll("input"); return !k.value && !v.value; });
+        if (empty && key != null) { const [k, v] = empty.querySelectorAll("input"); k.value = key; v.value = String(value); return empty; }
+        return addRow(key, value);
+      },
       value() {
         const out = {};
         rows.querySelectorAll(".kv-row").forEach((row) => {
@@ -1384,6 +2180,22 @@
 
   function listingCard(listing) {
     const owner = listing.owner || {};
+    if (isService(listing)) {
+      const badges = [C.modeBadge("service")];
+      if (listing.status !== "available") badges.push(C.statusBadge(listing.status));
+      if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      return C.card({
+        variant: ["compact"], interactive: true,
+        title: C.el("a", { className: "card__link", href: "/listings/" + enc(listing.id), text: listing.title }),
+        badges,
+        body: [
+          C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "session: " + formatDuration(listing.service_duration_minutes) })),
+          C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.service_price_cents) }), C.el("span", { className: "muted", text: " per session · no deposit" })),
+          serviceWindowsNode(listing, 2),
+        ],
+        footer: [C.el("span", { className: "muted", text: owner.display_name || "Provider" }), C.profileBadge(owner)],
+      });
+    }
     const badges = [];
     (listing.allowed_modes || []).forEach((m) => badges.push(C.modeBadge(m)));
     if (listing.status !== "available") badges.push(C.statusBadge(listing.status));
