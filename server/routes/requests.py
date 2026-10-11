@@ -19,6 +19,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from ..auth import current_profile, optional_user, require_verified_user
 from ..idempotency import creation, commit_creation
+from ..community import listing_visibility
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..intelligence import ReferenceImageError, match_listings, normalize_reference_image, normalize_request
@@ -225,7 +226,7 @@ def get_matches(request_id: str):
     _require_requester(need)
     candidates = db.session.scalars(
         db.select(Listing)
-        .where(Listing.status == "available", Listing.owner_id != need.requester_id,
+        .where(listing_visibility(current_profile()), Listing.status == "available", Listing.owner_id != need.requester_id,
                db.or_(*(cast(Listing.allowed_modes, String).like(f'%"{mode}"%') for mode in need.modes)))
         .order_by(Listing.created_at.desc())
         .limit(200)

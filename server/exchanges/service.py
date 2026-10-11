@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from flask import jsonify
 
 from ..auth import current_profile
+from ..community import require_listing_access, require_exchange_members, initialize_club, reset_review, finalize_acceptance
 from ..idempotency import creation, commit_creation
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
@@ -30,6 +31,7 @@ def load_service(exchange_id: str) -> Exchange | None:
         return None
     if current_profile().id not in exchange.participant_ids:
         raise forbidden("Only participants can access this exchange")
+    require_exchange_members(exchange)
     return exchange
 
 
@@ -87,7 +89,9 @@ def list_for_caller():
 def create():
     body = json_body()
     existing,key,fingerprint=creation(Exchange,"requester_id",current_profile().id,body)
-    if existing: return jsonify({"exchange":existing.to_dict(),"current_offer":_current_offer(existing).to_dict() if _current_offer(existing) else None}),201
+    if existing:
+        require_exchange_members(existing)
+        return jsonify({"exchange":existing.to_dict(),"current_offer":_current_offer(existing).to_dict() if _current_offer(existing) else None}),201
     if body.get("mode") != "service":
         raise validation_error({"mode": "must be service"})
     for field in _ITEM_TERMS:
@@ -98,8 +102,7 @@ def create():
     source_id = string(body.get("source_request_id"), "source_request_id", errors, max_len=32)
     errors.raise_if_any()
     listing = db.session.get(Listing, listing_id)
-    if listing is None:
-        raise not_found("listing")
+    require_listing_access(listing, current_profile())
     if "service" not in (listing.allowed_modes or []) or listing.status != "available":
         raise ApiError(409, "listing_unavailable", "Service listing is unavailable")
     requester_id = current_profile().id
@@ -114,6 +117,7 @@ def create():
     exchange = Exchange(listing_id=listing.id, owner_id=listing.owner_id,
                         requester_id=requester_id, source_request_id=source_id,
                         mode="service", status="negotiating",creation_key=key,creation_fingerprint=fingerprint)
+    initialize_club(exchange, listing)
     db.session.add(exchange)
     exchange=commit_creation(exchange,"requester_id")
     return jsonify({"exchange": exchange.to_dict(), "current_offer": None}), 201
@@ -191,6 +195,7 @@ def offer(exchange_id: str):
     row = OfferRevision(exchange=exchange, version=version, created_by=current_profile().id,
                         service_price_cents=price, service_duration_minutes=duration,
                         service_scheduled_at=scheduled_at,service_delivery=delivery,service_meeting_spot_id=spot_id)
+    reset_review(exchange)
     exchange.current_offer_revision = version
     db.session.add(row)
     db.session.commit()
@@ -222,10 +227,7 @@ def accept(exchange_id: str):
     if getattr(row, field) is None:
         setattr(row, field, utcnow())
     if row.owner_accepted_at and row.requester_accepted_at and exchange.status == "negotiating":
-        if not reserve_listing(db.session, exchange.listing_id, exchange.id):
-            db.session.rollback()
-            raise ApiError(409, "reservation_conflict", "Service listing is already reserved")
-        exchange.status = "scheduled"
+        finalize_acceptance(exchange)
     db.session.commit()
     return jsonify({"exchange": exchange.to_dict(), "current_offer": row.to_dict()})
 

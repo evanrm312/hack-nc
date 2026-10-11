@@ -19,11 +19,12 @@ from ..exchanges.images import validated_image_stream
 from flask import Blueprint, current_app, jsonify, request
 
 from ..auth import current_profile, require_verified_user
+from ..community import listing_visibility, require_listing_access, membership
 from ..idempotency import creation, commit_creation
 from ..db import db
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..models import LISTING_MODES, LISTING_STATUSES, SERVICE_CATEGORIES, Listing, MeetingSpot
-from ..storage import get_storage
+from ..storage import get_storage, authorize_private_read
 from ..validation import (
     FieldErrors,
     choice_list,
@@ -43,6 +44,7 @@ _CONDITIONS = ("new", "like_new", "good", "fair", "worn")
 
 def _load_listing(listing_id: str) -> Listing:
     listing = db.session.get(Listing, listing_id)
+    require_listing_access(listing, current_profile())
     if listing is None or (listing.status == "draft" and (current_profile() is None or listing.owner_id != current_profile().id)):
         raise not_found("listing")
     return listing
@@ -69,6 +71,23 @@ def _apply_listing_fields(listing: Listing, body: dict, *, creating: bool) -> No
     def present(key: str) -> bool:
         return creating or key in body
 
+    if present("audience") or present("club_id"):
+        audience = body.get("audience", "public" if creating else listing.audience)
+        club_id = body.get("club_id", None if creating else listing.club_id)
+        if audience not in ("public", "club"):
+            errors.add("audience", "must be public or club")
+        elif audience == "public" and club_id is not None:
+            errors.add("club_id", "must be null for public listings")
+        elif audience == "club":
+            viewer = current_profile()
+            if not isinstance(club_id, str) or not membership(club_id, viewer.id if viewer else None):
+                errors.add("club_id", "choose one of your clubs")
+            elif not creating and (listing.club_id != club_id or listing.audience != audience):
+                errors.add("audience", "audience cannot change after creation")
+        if not creating and (listing.audience != audience or listing.club_id != club_id):
+            errors.add("audience", "audience cannot change after creation")
+        listing.audience = audience
+        listing.club_id = club_id
     if present("title"):
         listing.title = string(body.get("title"), "title", errors, required=True, max_len=120) or ""
     if present("category"):
@@ -177,6 +196,7 @@ def _apply_listing_fields(listing: Listing, body: dict, *, creating: bool) -> No
 def list_listings():
     query = db.select(Listing)
     viewer = current_profile() if request.headers.get("Authorization") else None
+    query = query.where(listing_visibility(viewer))
     query = query.where(db.or_(Listing.status != "draft", Listing.owner_id == viewer.id) if viewer else Listing.status != "draft")
     status = request.args.get("status", "available")
     if status != "all":
@@ -208,7 +228,9 @@ def list_listings():
 def create_listing():
     body = json_body()
     existing,key,fingerprint=creation(Listing,"owner_id",current_profile().id,body)
-    if existing: return jsonify({"listing":existing.to_dict()}),201
+    if existing:
+        require_listing_access(existing, current_profile())
+        return jsonify({"listing":existing.to_dict()}),201
     listing = Listing(owner_id=current_profile().id, status="draft", publication_required=True,
                       creation_key=key,creation_fingerprint=fingerprint)
     _apply_listing_fields(listing, body, creating=True)
@@ -263,22 +285,37 @@ def upload_listing_photo(listing_id: str):
     if upload is None:
         raise validation_error({"photo": "multipart field 'photo' is required"})
     storage = get_storage()
-    stored = storage.save("public", validated_image_stream(upload.stream, min(current_app.config["MAX_UPLOAD_BYTES"], 5 * 1024 * 1024)), current_app.config["MAX_UPLOAD_BYTES"])
+    scope = "private" if listing.club_id else "public"
+    stored = storage.save(scope, validated_image_stream(upload.stream, min(current_app.config["MAX_UPLOAD_BYTES"], 5 * 1024 * 1024)), current_app.config["MAX_UPLOAD_BYTES"])
     old = listing.public_photo_path
     listing.public_photo_path = stored.path
     try:
         db.session.commit()
     except Exception:
         db.session.rollback()
-        storage.delete("public", stored.path)
+        storage.delete(scope, stored.path)
         raise
     if old:
-        storage.delete("public", old)
+        storage.delete(scope, old)
     return jsonify({"listing": listing.to_dict()})
 
 
 @bp.get("/media/public/<path:path>")
 def public_media(path: str):
+    rows = db.session.scalars(db.select(Listing).where(Listing.public_photo_path == path)).all()
+    restricted = [row for row in rows if row.club_id]
+    if restricted:
+        viewer = current_profile()
+        visible = next((row for row in restricted if membership(row.club_id, viewer.id if viewer else None)), None)
+        if visible is None:
+            raise not_found("photo")
+        authorize_private_read(viewer.id, {viewer.id})
+        if request.args.get("preview") == "1":
+            from ..exchanges.images import private_preview
+            data = get_storage().send("private", path)
+            data.direct_passthrough = False
+            return jsonify({"data_url": private_preview(data.get_data())})
+        return get_storage().send("private", path)
     return get_storage().send("public", path)
 
 
@@ -307,7 +344,7 @@ def publish_listing(listing_id):
     # Revalidate persisted terms rather than trusting the client or a status PATCH.
     body = listing.to_dict()
     editable = {k: v for k, v in body.items() if k not in
-        ("id", "owner_id", "owner", "status", "active_exchange_id", "public_photo_url", "created_at", "updated_at")}
+        ("id", "owner_id", "owner", "club", "status", "active_exchange_id", "public_photo_url", "created_at", "updated_at")}
     _apply_listing_fields(listing, editable, creating=True)
     if not listing.description or not listing.description.strip():
         raise validation_error({"description": "required for publication"})
@@ -317,14 +354,15 @@ def publish_listing(listing_id):
     limit = min(current_app.config["MAX_UPLOAD_BYTES"], 5 * 1024 * 1024)
     stream = validated_image_stream(upload.stream, limit)
     storage = get_storage()
-    stored = storage.save("public", stream, limit)
+    scope = "private" if listing.club_id else "public"
+    stored = storage.save(scope, stream, limit)
     try:
         listing.public_photo_path = stored.path
         listing.status = "available"
         db.session.commit()
     except Exception:
         db.session.rollback()
-        storage.delete("public", stored.path)
+        storage.delete(scope, stored.path)
         raise
     return jsonify({"listing": listing.to_dict()})
 

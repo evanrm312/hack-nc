@@ -33,8 +33,8 @@
       else if ((item.allowed_modes || []).includes("borrow")) terms = item.rental_fee_cents === 0 ? "Free loan · deposit may apply" : api.formatCents(item.rental_fee_cents) + " rental fee · deposit separate";
       else terms = api.formatCents(item.sale_price_cents) + " to buy";
       list.append(C.el("li", {}, C.el("a", { href: "/listings/" + enc(item.id) },
-        item.public_photo_url ? C.el("img", { src: item.public_photo_url, alt: "", loading: "lazy" }) : catalogSymbol(),
-        C.el("span", {}, C.el("strong", { text: item.title }), C.el("small", { text: terms })) )));
+        item.public_photo_url ? (item.club ? C.protectedImage(item.public_photo_url, "Club listing photo") : C.el("img", { src: item.public_photo_url, alt: "", loading: "lazy" })) : catalogSymbol(),
+        C.el("span", {}, C.el("strong", { text: item.title }), C.el("small", { text: terms + (item.club ? " · Club only: " + item.club.name : "") })) )));
     });
     host.append(list);
   }
@@ -62,9 +62,20 @@
   const suggestions = document.getElementById("recommended-items");
   const history = document.getElementById("previous-buys");
   if (suggestions && history) {
-    message(suggestions, "Loading browsing suggestions…");
-    api.get("/api/listings").then(({ listings }) => renderRecommended(suggestions, { kind: "catalog", items: (listings || []).filter((l) => l.status === "available") }))
-      .catch(() => message(suggestions, "Browsing suggestions are temporarily unavailable."));
+    let suggestionGeneration = 0;
+    async function loadSuggestions() {
+      const current = ++suggestionGeneration, token = api.getToken();
+      message(suggestions, "Loading browsing suggestions…");
+      try {
+        const {listings} = await api.get("/api/listings");
+        if (current !== suggestionGeneration || token !== api.getToken()) return;
+        renderRecommended(suggestions, {kind: "catalog", items: (listings || []).filter(l => l.status === "available")});
+      } catch (_) {
+        if (current === suggestionGeneration && token === api.getToken()) message(suggestions, "Browsing suggestions are temporarily unavailable.");
+      }
+    }
+    document.addEventListener("campus:auth-changed", loadSuggestions);
+    loadSuggestions();
     let generation = 0;
     async function loadHistory() {
       const current = ++generation;

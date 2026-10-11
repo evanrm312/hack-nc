@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import UniqueConstraint, Boolean, JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, UniqueConstraint, Boolean, JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import db, iso_utc, new_id, utcnow
@@ -25,7 +25,11 @@ LISTING_STATUSES = ("available", "reserved", "sold", "withdrawn", "draft")
 class Listing(db.Model):
     __tablename__ = "listings"
 
-    __table_args__ = (UniqueConstraint("owner_id","creation_key",name="uq_listings_creation"),)
+    __table_args__ = (UniqueConstraint("owner_id","creation_key",name="uq_listings_creation"),
+        CheckConstraint("(audience = 'public' AND club_id IS NULL) OR (audience = 'club' AND club_id IS NOT NULL)", name="ck_listing_club_audience"),)
+    audience: Mapped[str] = mapped_column(String(16), nullable=False, default="public", server_default="public")
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("clubs.id"), index=True)
+    club = relationship("Club", lazy="joined")
     creation_key: Mapped[str | None] = mapped_column(String(80))
     creation_fingerprint: Mapped[str | None] = mapped_column(String(64))
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
@@ -67,6 +71,9 @@ class Listing(db.Model):
     def to_dict(self) -> dict:
         """Public listing shape (docs/contracts.md -> Listing)."""
         result = {
+            "audience": self.audience,
+            "club": self.club.to_dict() if self.club else None,
+            "club_id": self.club_id,
             "id": self.id,
             "owner_id": self.owner_id,
             "owner": self.owner.to_public_dict() if self.owner else None,

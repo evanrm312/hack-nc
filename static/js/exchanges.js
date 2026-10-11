@@ -531,6 +531,8 @@
       $("accept-help").textContent = exchange.status === "reserved"
         ? "Both participants accepted this revision. The item is reserved."
         : exchange.status !== "negotiating" ? "This exchange is no longer negotiating."
+          : exchange.club_review_state === "pending" ? "Waiting for club manager approval. The listing is not reserved yet."
+          : exchange.club_review_state === "changes_requested" ? "The manager requested changes. Propose a new offer, then both participants must accept it."
           : dirty ? "You have unsaved terms. Propose them or use current terms before accepting."
             : incomplete ? "Propose pickup details" + (borrow ? " and a return deadline/location" : "") + " before accepting."
               : accepted ? "Waiting for the other participant to accept this same revision."
@@ -540,7 +542,9 @@
       const exchange = detail.exchange, offer = detail.current_offer;
       const borrow = exchange.mode === "borrow", owner = profile.id === exchange.owner_id;
       $("room-title").textContent = listing.title + " · " + modeLabel(exchange.mode);
-      $("exchange-status").textContent = statusLabels[exchange.status] || exchange.status;
+      $("exchange-status").textContent = exchange.club_review_state === "pending" ? "Waiting for club manager approval" : (statusLabels[exchange.status] || exchange.status);
+      if (exchange.club) $("exchange-status").textContent += " · Club only: " + exchange.club.name;
+      if (exchange.club_review_state === "changes_requested") $("exchange-status").textContent += " · Manager requested changes: " + (exchange.club_review_note || "Propose a new offer");
       $("participants").textContent = detail.participants.owner.display_name + " (owner) · "
         + detail.participants.requester.display_name + (borrow ? " (borrower)" : " (buyer)")
         + ". You are the " + (owner ? "owner" : borrow ? "borrower" : "buyer") + ".";

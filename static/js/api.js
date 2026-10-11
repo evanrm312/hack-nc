@@ -53,6 +53,7 @@
     if (method !== "GET") return false;
     const route = path.split("?", 1)[0];
     return route === "/api/health" || route === "/api/meeting-spots" ||
+      /^\/api\/profiles\/[^/]+$/.test(route) ||
       /^\/api\/listings(?:\/[^/]+)?$/.test(route) ||
       /^\/api\/requests(?:\/[^/]+)?$/.test(route) ||
       route.startsWith("/media/public/");

@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import and_, or_, update
 
 from ..auth import current_profile, require_verified_user
+from ..community import require_listing_access, require_exchange_members, initialize_club, reset_review, finalize_acceptance, listing_visibility, membership
 from ..idempotency import creation, commit_creation
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
@@ -82,6 +83,7 @@ def _participant(exchange_id: str, *, lock: bool = False) -> Exchange:
         raise not_found("exchange")
     if user_id not in exchange.participant_ids:
         raise forbidden("Only participants can access this exchange")
+    require_exchange_members(exchange)
     return exchange
 
 
@@ -132,6 +134,8 @@ def list_exchanges():
         .where(or_(Exchange.owner_id == user_id, Exchange.requester_id == user_id))
         .order_by(Exchange.updated_at.desc(), Exchange.id)
     ).all()
+    rows = [(e, l, o) for e, l, o in rows if not e.club_id or all(
+        membership(e.club_id, pid) for pid in e.participant_ids)]
     if not rows:
         return jsonify({"exchanges": []})
     # Fetch dashboard records in batches, always scoped to the caller's exchanges.
@@ -185,7 +189,9 @@ def create_exchange():
     if body.get("mode") == "service":
         return service.create()
     existing,key,fingerprint=creation(Exchange,"requester_id",current_profile().id,body)
-    if existing: return jsonify({"exchange":existing.to_dict(),"current_offer":_current_offer(existing).to_dict()}),201
+    if existing:
+        require_exchange_members(existing)
+        return jsonify({"exchange":existing.to_dict(),"current_offer":_current_offer(existing).to_dict()}),201
     errors = FieldErrors()
     listing_id = string(body.get("listing_id"), "listing_id", errors, required=True, max_len=32)
     mode = body.get("mode")
@@ -194,8 +200,7 @@ def create_exchange():
     source_id = string(body.get("source_request_id"), "source_request_id", errors, max_len=32)
     errors.raise_if_any()
     listing = db.session.get(Listing, listing_id)
-    if listing is None:
-        raise not_found("listing")
+    require_listing_access(listing, current_profile())
     user_id = current_profile().id
     if listing.owner_id == user_id:
         raise forbidden("Start an exchange for another member's listing")
@@ -216,6 +221,7 @@ def create_exchange():
         source_request_id=source_id, mode=mode, status="negotiating", current_offer_revision=1,
         creation_key=key,creation_fingerprint=fingerprint,
     )
+    initialize_club(exchange, listing)
     db.session.add(exchange)
     db.session.flush()
     offer = OfferRevision(
@@ -315,6 +321,7 @@ def post_offer(exchange_id: str):
         price_reference_id=current.price_reference_id, pricing_range_version=current.pricing_range_version,
     )
     db.session.add(offer)
+    reset_review(exchange)
     exchange.current_offer_revision = offer.version
     db.session.commit()
     return jsonify({"offer": offer.to_dict(), "exchange": exchange.to_dict()}), 201
@@ -351,9 +358,7 @@ def accept_offer(exchange_id: str):
     if getattr(offer, field) is None:
         setattr(offer, field, utcnow())
     if offer.owner_accepted_at and offer.requester_accepted_at:
-        if not reserve_listing(db.session, exchange.listing_id, exchange.id):
-            raise ApiError(409, "reservation_conflict", "Another exchange reserved this item; no funds were charged")
-        exchange.status = "reserved"
+        finalize_acceptance(exchange)
     else:
         _available(db.session.get(Listing, exchange.listing_id, populate_existing=True))
     db.session.commit()

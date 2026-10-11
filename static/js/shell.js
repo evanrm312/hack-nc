@@ -56,11 +56,17 @@
 })();
 
 (function () {
-  if (location.pathname !== "/sign-in") {
-    document.querySelectorAll('a[href="/sign-in"]').forEach(a => {
-      a.href = "/sign-in?next=" + encodeURIComponent(location.pathname + location.search);
+  const accountLinks = Array.from(document.querySelectorAll('a[href="/sign-in"]'));
+  function updateAccountLinks() {
+    const signedIn = typeof window !== "undefined" && window.api && window.api.getToken();
+    accountLinks.forEach(a => {
+      a.href = signedIn || location.pathname === "/sign-in" ? "/sign-in"
+        : "/sign-in?next=" + encodeURIComponent(location.pathname + location.search);
     });
   }
+  document.addEventListener("campus:profile-ready", updateAccountLinks);
+  document.addEventListener("campus:auth-changed", updateAccountLinks);
+  updateAccountLinks();
 })();
 
 // Keyboard focus must remain above the fixed taskbar, including after resize.

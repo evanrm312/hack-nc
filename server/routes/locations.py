@@ -3,6 +3,7 @@ from datetime import timedelta
 from math import radians, sin, cos, asin, sqrt
 from flask import Blueprint, jsonify
 from ..auth import current_profile, require_verified_user
+from ..community import require_exchange_members
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..models import Exchange, ExchangeLocation, MeetingSpot, Profile
@@ -19,6 +20,7 @@ def participant(exchange_id):
     exchange=db.session.get(Exchange,exchange_id)
     if exchange is None: raise not_found('exchange')
     if current_profile().id not in exchange.participant_ids: raise forbidden('Only participants can access locations')
+    require_exchange_members(exchange)
     return exchange
 
 def distance(a,b):

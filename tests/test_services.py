@@ -349,7 +349,7 @@ def test_migration_adds_service_fields_to_existing_database(tmp_path):
     config = {"TESTING": True, "APP_ENV": "development",
               "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'service_migration.sqlite'}",
               "AUTH_MODE": "sandbox", "SANDBOX_USERS": ["alice@unc.edu"],
-              "UPLOAD_DIR": str(tmp_path / "uploads")}
+              "UPLOAD_DIR": str(tmp_path / "uploads"), "STORAGE_BACKEND": "local"}
     app = create_app(config)
     with app.app_context():
         upgrade()
@@ -370,7 +370,7 @@ def test_empty_sqlite_migrates_for_item_and_service_exchanges(tmp_path):
     })
     with app.app_context():
         upgrade()
-        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "c705exchangekeys"
+        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "c706community"
         columns = lambda table: {column["name"] for column in inspect(db.engine).get_columns(table)}
         assert {"service_price_cents", "service_duration_minutes", "service_available_windows", "publication_required", "creation_key"} <= columns("listings")
         assert {"recipient_id", "event_key", "read_at", "created_at"} <= columns("notifications")

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import db, iso_utc, new_id, utcnow
@@ -30,7 +30,16 @@ EVIDENCE_STAGES = ("pre_handoff", "handoff", "pre_return", "post_return")
 
 class Exchange(db.Model):
     __tablename__ = "exchanges"
-    __table_args__ = (UniqueConstraint("requester_id","creation_key",name="uq_exchanges_creation"),)
+    __table_args__ = (UniqueConstraint("requester_id","creation_key",name="uq_exchanges_creation"),
+        CheckConstraint("club_review_state IN ('not_required','awaiting_participants','pending','approved','changes_requested')", name="ck_exchange_club_review"),
+        CheckConstraint("(club_id IS NULL AND club_review_state = 'not_required') OR (club_id IS NOT NULL AND club_review_state != 'not_required')", name="ck_exchange_club_consistency"),)
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("clubs.id"), index=True)
+    club_review_state: Mapped[str] = mapped_column(String(24), nullable=False, default="not_required", server_default="not_required")
+    club_review_note: Mapped[str | None] = mapped_column(String(300))
+    club_reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("profiles.id"))
+    club_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    club_review_version: Mapped[int | None] = mapped_column(Integer)
+    club = relationship("Club", lazy="joined")
     creation_key: Mapped[str | None] = mapped_column(String(80))
     creation_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
@@ -61,6 +70,9 @@ class Exchange(db.Model):
 
     def to_dict(self) -> dict:
         result = {
+            "club": self.club.to_dict() if self.club else None,
+            "club_review_state": self.club_review_state,
+            "club_review_note": self.club_review_note,
             "id": self.id,
             "listing_id": self.listing_id,
             "owner_id": self.owner_id,
