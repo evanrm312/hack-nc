@@ -87,9 +87,16 @@ and provided IDs only.
 Known category or required-specification mismatches, unsupported modes, unavailable
 status/reservations, out-of-range dates, and prices exceeding budget are rejected.
 String comparison trims outer whitespace and ignores case; it does not guess size
-conversions, synonyms or missing attributes. Missing category or required specs go
+conversions or missing attributes. A bounded calculator vocabulary maps calculator /
+graphing calculator / scientific calculator categories to academic supplies while
+retaining a required item type. Calculator kinds bridge academic supplies and
+electronics, but known non-calculator types still conflict. The generic type
+calculator includes graphing/scientific calculators; a generic listing does not
+confirm a more specific requested kind. TI model whitespace/hyphen formatting is
+normalized; suffixes such as Plus/CE remain distinct. Missing category or required specs go
 to needs_confirmation with field names in unknown_required. Preferred differences
-only affect ranking and shortcomings.
+only affect ranking and shortcomings. Rejected entries report actual conflicts
+in shortcomings so an unknown model does not appear as an exclusion reason.
 
 Sale uses sale_price_cents; borrowing uses rental_fee_cents. Null fees are unknown,
 never assumed free. Explicit zero is accepted against a zero budget. An absent
@@ -465,3 +472,14 @@ All categories use the same existing service price, duration, private scheduling
 and lifecycle endpoints. No deposit or item terms are introduced. Services still
 cannot persist listing specification maps; required request details therefore need
 provider confirmation until the shared listing contract supports them.
+
+## Calculator matching repair
+
+An existing request with category calculator can now search academic-supplies and
+electronics listings without a false category conflict. Gemini receives the UI
+catalog categories, and Python applies the same bounded calculator mapping to
+new proposals and existing stored requests at match time. Listing prose never
+fills model or availability: a title-only TI-84 is a needs-confirmation option.
+Known alternative models, dates outside declared bounds, price limits, status,
+visibility, and own-listing exclusions remain enforced. No production catalog
+records, dates, models, or request requirements are rewritten.

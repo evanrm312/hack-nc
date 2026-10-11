@@ -16,6 +16,7 @@ from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..models.listing import SERVICE_CATEGORIES
+from .catalog_terms import ITEM_CATEGORIES, catalog_request
 
 logger = logging.getLogger(__name__)
 DEFAULT_MODELS = ('gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash')
@@ -119,7 +120,7 @@ class ServiceWindow(Structured):
 
 class Extraction(Structured):
     modes: list[Literal['sale', 'borrow', 'service']] | None
-    category: str | None = Field(description='Item category, or for service mode exactly one of: ' + ', '.join(SERVICE_CATEGORIES))
+    category: str | None = Field(description='For items use a catalog category: ' + ', '.join(ITEM_CATEGORIES) + '; for service mode exactly one of: ' + ', '.join(SERVICE_CATEGORIES))
     required_specifications: list[Specification]
     preferred_specifications: list[Specification]
     budget_dollars: str | None
@@ -171,6 +172,9 @@ Never invent missing information. Unknown scalars/modes are null; empty specific
 lists mean no known specifications. Buy maps to sale; rent maps to borrow; both only
 when explicitly acceptable. Suits use category formalwear, jacket_size (e.g. 40R),
 trouser_size, color, type. Size is required; colors are preferred unless mandatory.
+Use the catalog item categories: ITEM_CATEGORY_NAMES. Calculators use academic supplies,
+type calculator (or graphing calculator/scientific calculator when specified), and
+model only when supplied. Preserve TI model suffixes such as Plus and CE.
 For a service request, use only mode service and a category from SERVICE_CATEGORY_NAMES. Never assign a deposit, agreed item value, condition, or loan dates
 to a service. Do not mix service with sale or borrow modes.
 Extract service_duration_minutes only from an explicitly supplied duration, using
@@ -192,7 +196,7 @@ ISO offsets. Relative/vague dates, absent year/time, '2 a.m.', and ambiguous DST
 must be flagged in ambiguous_dates with original text, proposed timestamp (null if
 no defensible proposal), needs_confirmation true, and a confirmation question.
 No date mentioned means null dates. Ask useful missing compatibility questions,
-including trouser size for suits. All output is editable and requires user confirmation.'''.replace('SERVICE_CATEGORY_NAMES', ', '.join(SERVICE_CATEGORIES))
+including trouser size for suits. All output is editable and requires user confirmation.'''.replace('SERVICE_CATEGORY_NAMES', ', '.join(SERVICE_CATEGORIES)).replace('ITEM_CATEGORY_NAMES', ', '.join(ITEM_CATEGORIES))
 
 
 def manual(text):
@@ -333,6 +337,9 @@ def _to_request(extracted, text):
         result[field + '_cents'] = None if amount is None else int(Decimal(amount) * 100)
     for field in ('required_specifications', 'preferred_specifications'):
         result[field] = {s.name: s.value for s in getattr(extracted, field)}
+    if extracted.modes != ['service']:
+        result['category'], result['required_specifications'] = catalog_request(
+            result['category'], result['required_specifications'])
     missing = dict(modes='Would you like to buy, borrow, or request a service?',
                    category='What kind of item do you need?',
                    budget_cents='What is your purchase or rental fee budget in USD?',

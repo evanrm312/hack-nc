@@ -42,6 +42,86 @@ def test_correct_suit(need, suit):
     assert any('Proposed deposit: 6000 cents' in reason for reason in entry['reasons'])
 
 
+@pytest.fixture
+def calculator_need():
+    return dict(modes=['borrow'], budget_cents=2000, max_deposit_cents=None,
+                needed_by='2026-10-13T16:00:00Z', use_start=None, use_end=None,
+                normalized=dict(category='calculator', required_specifications={'model': 'TI84'},
+                                preferred_specifications={}))
+
+
+@pytest.fixture
+def calculator():
+    return dict(id='test-calculator', title='TI-84, Blue', category='academic supplies',
+                status='available', active_exchange_id=None, allowed_modes=['borrow', 'sale'],
+                specifications={'type': 'graphing calculator', 'model': 'TI-84'},
+                rental_fee_cents=1500, sale_price_cents=4500,
+                proposed_item_value_cents=4500, collateral_percent=100,
+                availability=dict(available_from='2026-10-10T00:00:00Z', available_until='2026-10-20T00:00:00Z'))
+
+
+@pytest.mark.parametrize('category', ['academic supplies', 'electronics', ' Electronics ', 'calculator', 'calculators'])
+def test_calculator_catalog_categories_and_model_formatting(calculator_need, calculator, category):
+    calculator['category'] = category
+    before = deepcopy((calculator_need, calculator))
+    only(calculator_need, calculator, 'confirmed')
+    assert (calculator_need, calculator) == before
+
+
+def test_title_only_ti84_stays_possible_with_unknowns(calculator_need, calculator):
+    calculator.update(specifications={}, availability={'available_from': None, 'available_until': None})
+    entry = only(calculator_need, calculator, 'needs_confirmation')
+    assert set(entry['unknown_required']) == {'type', 'model', 'availability'}
+    assert not any('Category mismatch' in reason for reason in entry['shortcomings'])
+    assert calculator['specifications'] == {}
+
+
+@pytest.mark.parametrize('specs', [
+    {'type': 'graphing calculator', 'model': 'GC-84 demo model'},
+    {'type': 'graphing calculator', 'model': 'TI-84 Plus'},
+    {'type': 'graphing calculator', 'model': 'TI-84 Plus CE'},
+    {'type': 'laptop', 'model': 'TI-84'},
+])
+def test_calculator_conflicts_are_still_rejected(calculator_need, calculator, specs):
+    calculator.update(category='electronics', specifications=specs)
+    only(calculator_need, calculator, 'rejected')
+
+
+def test_specific_calculator_type_needs_confirmation_for_broader_listing(calculator_need, calculator):
+    calculator_need['normalized']['category'] = 'graphing calculator'
+    calculator['specifications']['type'] = 'calculator'
+    assert 'type' in only(calculator_need, calculator, 'needs_confirmation')['unknown_required']
+    calculator['specifications']['type'] = 'scientific calculator'
+    only(calculator_need, calculator, 'rejected')
+
+
+def test_model_suffix_formatting_matches_without_dropping_variant(calculator_need, calculator):
+    calculator_need['normalized']['required_specifications']['model'] = 'TI84 Plus CE'
+    calculator['specifications']['model'] = 'TI-84 Plus CE'
+    only(calculator_need, calculator, 'confirmed')
+
+
+def test_model_name_does_not_override_listing_category(calculator_need, calculator):
+    calculator['category'] = 'formalwear'
+    only(calculator_need, calculator, 'rejected')
+
+
+def test_calculator_dates_and_budget_remain_hard_constraints(calculator_need, calculator):
+    calculator_need['use_end'] = '2026-10-21T16:00:00Z'
+    assert 'Listing is unavailable for the requested dates.' in only(calculator_need, calculator, 'rejected')['shortcomings']
+    calculator_need['use_end'] = None
+    calculator_need['budget_cents'] = 1000
+    assert any('exceeds' in s for s in only(calculator_need, calculator, 'rejected')['shortcomings'])
+
+
+def test_exclusion_summary_does_not_call_unknown_details_rejection_reasons(calculator_need, calculator):
+    calculator.update(category='formalwear', specifications={})
+    entry = only(calculator_need, calculator, 'rejected')
+    assert len(entry['shortcomings']) == 1
+    assert 'Category mismatch' in entry['shortcomings'][0]
+    assert 'model' in entry['unknown_required']
+
+
 @pytest.mark.parametrize('changes,reason', [
     ({'specifications': {'jacket_size': '42R'}}, 'jacket_size mismatch'),
     ({'category': 'electronics'}, 'Category mismatch'),

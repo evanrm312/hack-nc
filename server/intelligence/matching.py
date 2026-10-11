@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from .catalog_terms import calculator_type, catalog_request, specification_same
+
 
 def _same(left, right):
     if isinstance(left, str) and isinstance(right, str):
@@ -51,26 +53,35 @@ def _candidate(request, listing, mode):
     if ('service' in request_modes and request_modes != ['service']) or ('service' in listing_modes and listing_modes != ['service']):
         rejected.append('Service and item modes cannot be combined.')
 
-    category = request.get('category')
-    if category is None or listing.get('category') is None:
+    category, required_specs = catalog_request(request.get('category'), request.get('required_specifications'))
+    listing_category, specs = catalog_request(listing.get('category'), listing.get('specifications'))
+    calculator_categories = {'academic supplies', 'electronics'}
+    compatible_calculator_categories = (
+        category in calculator_categories and listing_category in calculator_categories
+        and (calculator_type(required_specs.get('type')) or calculator_type(specs.get('type')))
+    )
+    if category is None or listing_category is None:
         uncertain('category', 'Category needs confirmation.')
-    elif not _same(category, listing['category']):
+    elif not _same(category, listing_category) and not compatible_calculator_categories:
         rejected.append(f"Category mismatch: requested {category}, listing is {listing['category']}.")
+    elif not _same(category, listing_category):
+        reasons.append(f'Calculator catalog categories are compatible: {category} / {listing_category}.')
     else:
         reasons.append(f'Category matches: {category}.')
-    specs = listing.get('specifications') or {}
-    for name, expected in (request.get('required_specifications') or {}).items():
+    for name, expected in required_specs.items():
         actual = specs.get(name)
         if expected is None or actual is None:
             uncertain(name, f'Required specification {name} needs confirmation.')
-        elif not _same(expected, actual):
+        elif specification_same(name, expected, actual) is None:
+            uncertain(name, f'Required specification {name} needs confirmation; listing gives a broader item type.')
+        elif not specification_same(name, expected, actual):
             rejected.append(f'Required {name} mismatch: requested {expected}, listing has {actual}.')
         else:
             reasons.append(f'Required {name} matches: {actual}.')
     preference_count = 0
     for name, expected in (request.get('preferred_specifications') or {}).items():
         actual = specs.get(name)
-        if expected is not None and actual is not None and _same(expected, actual):
+        if expected is not None and actual is not None and specification_same(name, expected, actual) is True:
             preference_count += 1
             reasons.append(f'Preferred {name} matches: {actual}.')
         else:
@@ -175,7 +186,9 @@ def _candidate(request, listing, mode):
             except (ValueError, TypeError, AttributeError):
                 uncertain('availability', 'Invalid or timezone-less dates need confirmation.')
 
-    shortcomings.extend(rejected)
+    # Missing details are not exclusion reasons.
+    if rejected:
+        entry['shortcomings'] = rejected
     bucket = 'rejected' if rejected else 'needs_confirmation' if unknown else 'confirmed'
     # Each preference outweighs cost; cost breaks ties using a bounded component.
     entry['score'] = None if rejected else float(preference_count + (1 / (cost + 1) if cost is not None else 0))
