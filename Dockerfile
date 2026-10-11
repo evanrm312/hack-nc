@@ -7,6 +7,10 @@ COPY server ./server
 COPY migrations ./migrations
 COPY templates ./templates
 COPY static ./static
+COPY fixtures/demo_catalog/clothing_events.json fixtures/demo_catalog/electronics_academics.json fixtures/demo_catalog/dorm_outdoors.json fixtures/demo_catalog/services.json fixtures/demo_catalog/validate_catalog.py fixtures/demo_catalog/validate_images.py ./fixtures/demo_catalog/
+COPY fixtures/demo_catalog/image_manifests ./fixtures/demo_catalog/image_manifests
+COPY fixtures/demo_catalog/images ./fixtures/demo_catalog/images
+COPY deploy/render-release.sh ./deploy/render-release.sh
 COPY wsgi.py gunicorn.conf.py ./
 USER campus
 EXPOSE 8080

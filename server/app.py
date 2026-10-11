@@ -63,6 +63,36 @@ def create_app(overrides: dict | None = None) -> Flask:
 
 
 def _register_cli(app: Flask) -> None:
+    @app.cli.command("backend-diagnostics")
+    @click.option("--require-ready", is_flag=True, help="Exit nonzero unless database and schema are ready.")
+    def diagnostics(require_ready):
+        """Read-only deployment identity, key presence, counts and sanitized SQL errors."""
+        import json
+        from .backend_diagnostics import backend_diagnostics
+        report = backend_diagnostics()
+        click.echo(json.dumps(report, indent=2))
+        if require_ready and not report["ready"]:
+            raise click.ClickException("Backend database/schema is not ready")
+
+    @app.cli.command("import-demo-catalog")
+    @click.option("--dry-run", is_flag=True, help="Read-only inventory (the default).")
+    @click.option("--apply", "apply_changes", is_flag=True, help="Apply only an explicitly reviewed plan.")
+    @click.option("--plan", type=click.Path(exists=True, dir_okay=False), help="Reviewed dry-run JSON; required with --apply.")
+    def import_catalog(dry_run, apply_changes, plan):
+        """Import the selected 52 licensed demo listings; never broad-seed production."""
+        import json
+        from .catalog_import import plan_import, apply_import
+        if (apply_changes and (dry_run or not plan)) or (plan and not apply_changes):
+            raise click.UsageError("Use --dry-run, or --apply --plan reviewed.json")
+        try:
+            reviewed = json.loads(Path(plan).read_text()) if apply_changes else None
+            result = apply_import(reviewed) if apply_changes else plan_import()
+        except Exception as error:
+            # Expected validation errors are operator-safe; provider/SQL exceptions are not.
+            message = str(error) if isinstance(error, ValueError) else f"Catalog job failed ({type(error).__name__})"
+            raise click.ClickException(message) from None
+        click.echo(json.dumps(result, sort_keys=True, indent=2, default=str))
+
     @app.cli.command("purge-exchange-locations")
     def purge_exchange_locations():
         """Delete expired private locations. Schedule hourly in deployment."""

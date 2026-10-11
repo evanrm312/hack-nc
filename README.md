@@ -253,6 +253,27 @@ docker compose up -d web
 process liveness. Supabase Auth site URL/callback allowlist must use the final
 HTTPS origin. No web-worker scheduler or automatic seed runs.
 
+## Targeted Render backend repair
+
+The public app is `https://hack-nc.onrender.com`; Render settings and a fresh
+real login still require operator verification. The prepared migration gate,
+backup, 52-record import and approval sequence are documented in
+[docs/render-backend-repair.md](docs/render-backend-repair.md).
+
+```bash
+flask --app server.app backend-diagnostics
+flask --app server.app import-demo-catalog --dry-run > reviewed-catalog.json
+# Only after reviewing the target/schema/assets/changes and import approval:
+flask --app server.app import-demo-catalog --apply --plan reviewed-catalog.json
+```
+
+Dry-run is the default and makes no database or Storage writes. The Docker
+image packages the licensed assets and provenance; startup never imports them.
+The proposed Render predeploy command is `/bin/sh deploy/render-release.sh`.
+Never run the broad `seed-demo` command on production or a shared database.
+Merge, configuration, production migration, deployment and import remain
+separate approval gates.
+
 ## Layout
 
 ```
