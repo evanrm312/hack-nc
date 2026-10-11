@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 import pytest
 from server.intelligence import normalize as module
+from tests.conftest import publish_listing
 
 NOW = datetime(2026, 10, 10, 16, tzinfo=timezone.utc)
 
@@ -20,6 +21,7 @@ def payload(**changes):
 
 @pytest.fixture
 def sdk(monkeypatch):
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: None)
     monkeypatch.setenv('GEMINI_API_KEY', 'mock-secret')
     monkeypatch.delenv('GEMINI_MODEL', raising=False)
     client = MagicMock()
@@ -137,7 +139,7 @@ def test_primary_succeeds_and_logs_only_model(sdk, caplog):
     assert 'I need an item' not in caplog.text
 
 
-@pytest.mark.parametrize('code', [503, 429])
+@pytest.mark.parametrize('code', [500, 503, 504, 429, 408])
 def test_retryable_primary_falls_back(sdk, code):
     sdk[1].models.generate_content.side_effect = [api_error(code), SimpleNamespace(text=json.dumps(payload()))]
     assert normalize()['source'] == 'gemini'
@@ -150,7 +152,7 @@ def test_all_models_fail_manual(sdk):
     assert sdk[1].models.generate_content.call_count == 3
 
 
-@pytest.mark.parametrize('code', [400, 401, 403, 404, 504])
+@pytest.mark.parametrize('code', [400, 401, 403, 404])
 def test_non_retryable_does_not_cycle(sdk, code):
     sdk[1].models.generate_content.side_effect = api_error(code)
     assert_manual(normalize())
@@ -423,7 +425,7 @@ def test_service_normalization_create_and_match_integration(sdk, client, alice, 
         category='tutoring', allowed_modes=['service'], description='Calculus tutoring, synthetic test listing.',
         service_price_cents=2500, service_duration_minutes=60, service_available_windows=[window]), headers=bob)
     assert listing_response.status_code == 201, listing_response.get_json()
-    listing_id = listing_response.get_json()['listing']['id']
+    listing_id = publish_listing(client, bob, listing_response.get_json()['listing'])['id']
     sdk[2](payload(modes=['service'], category='tutoring', budget_dollars='30',
         service_duration_minutes=60, service_time_windows=None if deadline_only else [window],
         needed_by='2030-10-13T00:00:00Z', required_specifications=[dict(name='subject', value='calculus')] if subject_required else []))
