@@ -115,3 +115,21 @@ separate tasks (P4-2, P4-3).
   The completion branch adds service room UI and private notification/meeting integration.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.
+
+## Evan production follow-up (October 11)
+
+Latest assignment supersedes the original Emily/Sid ownership for remaining work:
+Evan owns their marketplace/exchange integration, notifications, recommendations,
+About and Docker release preparation. Aarush retains ratings/levels and intelligence.
+No work is waiting on Emily or Sid.
+
+- Completed on `production-readiness`: deterministic discovery, notification
+  visibility/sign-out polling and missing-target handling, compact About, time
+  controls/Eastern formatting, Docker/WSGI/readiness/quotas, browser-role isolation
+  and hourly cleanup units. No sample assets, seeds or fixtures changed.
+- Development DB migrated to c707browserroles with backup and preservation checks.
+- Release gates: Docker CI build/startup, accessible real UNC session, two
+  consenting real participants, domain/TLS/callback configuration and installing
+  the single-host cleanup timer. No public deployment or PR merge.
+- Aarush contract: `docs/handoffs/ratings-integration.md`; no active ownership files
+  were overwritten and ratings/levels are not ranking dependencies.
