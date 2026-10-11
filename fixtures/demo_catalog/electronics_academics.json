@@ -1,0 +1,529 @@
+{
+  "schema_version": 1,
+  "source_agent": "agent_2",
+  "owners": [
+    {
+      "key": "electronics-owner-1",
+      "display_name": "Demo Tech A (demo account)"
+    },
+    {
+      "key": "electronics-owner-2",
+      "display_name": "Demo Tech B (demo account)"
+    },
+    {
+      "key": "electronics-owner-3",
+      "display_name": "Demo Tech C (demo account)"
+    }
+  ],
+  "listings": [
+    {
+      "key": "demo-electronics-graphing-calculator",
+      "owner_key": "electronics-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Graphing calculator (demo)",
+        "category": "academics",
+        "description": "DEMO INVENTORY. Fictional item: Plot functions and check homework; no exam approval is claimed.",
+        "specifications": {
+          "type": "graphing calculator",
+          "model": "GC-84 demo model",
+          "compatibility": "standalone",
+          "connector": "mini-USB",
+          "included_accessories": "USB cable; slide cover"
+        },
+        "condition": "good",
+        "accessories": [
+          "USB cable",
+          "slide cover"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 500,
+        "proposed_item_value_cents": 8500,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-graphing-calculator",
+        "desired_image_description": "Original team photo of graphing calculator with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-graphing-calculator.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-desk-monitor",
+      "owner_key": "electronics-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "24-inch desk monitor (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: A compact desk display with a cosmetic scratch on its stand.",
+        "specifications": {
+          "type": "monitor",
+          "model": "M24 demo model",
+          "compatibility": "HDMI video sources",
+          "connector": "HDMI",
+          "included_accessories": "power adapter; HDMI cable"
+        },
+        "condition": "fair",
+        "accessories": [
+          "power adapter",
+          "HDMI cable"
+        ],
+        "known_defects": [
+          "small scratch on stand"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 6500,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-desk-monitor",
+        "desired_image_description": "Original team photo of 24-inch desk monitor with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-desk-monitor.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-usb-webcam",
+      "owner_key": "electronics-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "USB webcam with clip (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: A clip-on webcam; model and operating-system compatibility remain unknown.",
+        "specifications": {
+          "type": "webcam",
+          "model": null,
+          "compatibility": null,
+          "connector": "USB-A",
+          "included_accessories": "integrated clip"
+        },
+        "condition": "good",
+        "accessories": [
+          "integrated clip"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 1800,
+        "rental_fee_cents": 200,
+        "proposed_item_value_cents": 2500,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": null,
+          "available_until": null,
+          "notes": "Demo availability is unknown; confirm before arranging use."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-usb-webcam",
+        "desired_image_description": "Original team photo of usb webcam with clip with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-usb-webcam.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-hdmi-projector",
+      "owner_key": "electronics-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "HDMI presentation projector (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: For a small presentation; no room brightness or image-size guarantee is made.",
+        "specifications": {
+          "type": "projector",
+          "model": "P1080 demo model",
+          "compatibility": "HDMI video sources",
+          "connector": "HDMI",
+          "included_accessories": "power cable; HDMI cable; carrying case"
+        },
+        "condition": "good",
+        "accessories": [
+          "power cable",
+          "HDMI cable",
+          "carrying case"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 1800,
+        "proposed_item_value_cents": 30000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-hdmi-projector",
+        "desired_image_description": "Original team photo of hdmi presentation projector with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-hdmi-projector.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-dslr-camera",
+      "owner_key": "electronics-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "DSLR camera and standard lens (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: Practice photography with a standard lens; bring your own memory card.",
+        "specifications": {
+          "type": "DSLR camera",
+          "model": "D24 demo model",
+          "compatibility": "D-mount demo lenses",
+          "connector": "USB mini-B",
+          "included_accessories": "18–55 mm lens; battery; charger; strap"
+        },
+        "condition": "good",
+        "accessories": [
+          "18–55 mm lens",
+          "battery",
+          "charger",
+          "strap"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 2500,
+        "proposed_item_value_cents": 45000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-11T18:00:00Z",
+          "available_until": "2026-10-12T00:00:00Z",
+          "notes": "Short demo borrowing window; proposed return by 8 PM New York time."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-dslr-camera",
+        "desired_image_description": "Original team photo of dslr camera and standard lens with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-dslr-camera.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-camera-tripod",
+      "owner_key": "electronics-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Adjustable camera tripod (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: A lightweight tripod with leg scuffs; confirm camera fit before use.",
+        "specifications": {
+          "type": "tripod",
+          "model": "T150 demo model",
+          "compatibility": "1/4-inch threaded camera mount",
+          "connector": "1/4-inch mounting screw",
+          "included_accessories": "quick-release plate"
+        },
+        "condition": "fair",
+        "accessories": [
+          "quick-release plate"
+        ],
+        "known_defects": [
+          "scuffs on one leg"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 2200,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 3000,
+        "collateral_percent": 50,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-camera-tripod",
+        "desired_image_description": "Original team photo of adjustable camera tripod with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-camera-tripod.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-usb-microphone",
+      "owner_key": "electronics-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Desktop USB microphone (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: Record speech using the included desk stand and cable.",
+        "specifications": {
+          "type": "microphone",
+          "model": "U16 demo model",
+          "compatibility": "USB audio input",
+          "connector": "USB-C",
+          "included_accessories": "desk stand; USB-C to USB-A cable"
+        },
+        "condition": "good",
+        "accessories": [
+          "desk stand",
+          "USB-C to USB-A cable"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 3500,
+        "rental_fee_cents": 400,
+        "proposed_item_value_cents": 5000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-usb-microphone",
+        "desired_image_description": "Original team photo of desktop usb microphone with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-usb-microphone.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-arduino-compatible-kit",
+      "owner_key": "electronics-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Arduino-compatible learning kit (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: An introductory electronics kit; Arduino describes compatibility, with no affiliation claimed.",
+        "specifications": {
+          "type": "microcontroller kit",
+          "model": "UNO-compatible demo board",
+          "compatibility": "Arduino UNO-style 5 V learning projects",
+          "connector": "USB-B",
+          "included_accessories": "breadboard; jumper wires; LEDs; USB cable"
+        },
+        "condition": "good",
+        "accessories": [
+          "breadboard",
+          "jumper wires",
+          "LEDs",
+          "USB cable"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 2000,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-arduino-compatible-kit",
+        "desired_image_description": "Original team photo of arduino-compatible learning kit with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-arduino-compatible-kit.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-digital-multimeter",
+      "owner_key": "electronics-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Digital multimeter (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: For discussing low-voltage learning projects; no safety rating, calibration, or mains-use claim is made.",
+        "specifications": {
+          "type": "multimeter",
+          "model": null,
+          "compatibility": "low-voltage learning projects only",
+          "connector": "banana plug leads",
+          "included_accessories": "pair of test leads"
+        },
+        "condition": "fair",
+        "accessories": [
+          "pair of test leads"
+        ],
+        "known_defects": [
+          "worn display surround"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 1500,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 2200,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-digital-multimeter",
+        "desired_image_description": "Original team photo of digital multimeter with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-digital-multimeter.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-soldering-practice-kit",
+      "owner_key": "electronics-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Soldering practice kit (demo)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Fictional item: For a supervised practice demonstration; no electrical inspection or safety certification is claimed.",
+        "specifications": {
+          "type": "soldering kit",
+          "model": "SP-30 demo model",
+          "compatibility": "beginner practice boards",
+          "connector": "US power plug",
+          "included_accessories": "iron stand; practice board"
+        },
+        "condition": "fair",
+        "accessories": [
+          "iron stand",
+          "practice board"
+        ],
+        "known_defects": [
+          "cosmetic marks on handle"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 2500,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-soldering-practice-kit",
+        "desired_image_description": "Original team photo of soldering practice kit with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-soldering-practice-kit.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-electronics-presentation-clicker",
+      "owner_key": "electronics-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Wireless presentation clicker (demo)",
+        "category": "academics",
+        "description": "DEMO INVENTORY. Fictional item: Move through presentation slides; confirm application support before borrowing.",
+        "specifications": {
+          "type": "presentation clicker",
+          "model": "C2 demo model",
+          "compatibility": "USB HID presentation controls",
+          "connector": "USB-A receiver",
+          "included_accessories": "USB receiver; carrying pouch"
+        },
+        "condition": "good",
+        "accessories": [
+          "USB receiver",
+          "carrying pouch"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 300,
+        "proposed_item_value_cents": 3500,
+        "collateral_percent": 50,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo pickup timing must be confirmed with the demo owner."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "demo-electronics-presentation-clicker",
+        "desired_image_description": "Original team photo of wireless presentation clicker with its listed accessories on a plain desk; no people or affiliation claims.",
+        "local_filename": "demo-electronics-presentation-clicker.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    }
+  ]
+}

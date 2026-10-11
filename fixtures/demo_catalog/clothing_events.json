@@ -1,0 +1,509 @@
+{
+  "schema_version": 1,
+  "source_agent": "agent_1",
+  "owners": [
+    {
+      "key": "clothing-owner-1",
+      "display_name": "Demo Wardrobe A (demo account)"
+    },
+    {
+      "key": "clothing-owner-2",
+      "display_name": "Demo Wardrobe B (demo account)"
+    },
+    {
+      "key": "clothing-owner-3",
+      "display_name": "Demo Wardrobe C (demo account)"
+    }
+  ],
+  "listings": [
+    {
+      "key": "clothing-navy-suit-40r",
+      "owner_key": "clothing-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Navy two-piece suit, 40R (demo inventory)",
+        "category": "formalwear",
+        "description": "DEMO INVENTORY. A navy interview set with matching trousers; a small crease at the trouser hem. Fee and proposed security deposit are separate simulated terms. Reduced deposit proposal requires explicit lender acknowledgment before acceptance.",
+        "specifications": {
+          "type": "suit",
+          "jacket_size": "40R",
+          "trouser_waist": 33,
+          "trouser_inseam": 32,
+          "color": "navy",
+          "pattern": "solid"
+        },
+        "condition": "good",
+        "accessories": [
+          "garment bag"
+        ],
+        "known_defects": [
+          "small crease at the trouser hem"
+        ],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 1500,
+        "proposed_item_value_cents": 18000,
+        "collateral_percent": 30,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-navy-suit-40r",
+        "desired_image_description": "Original photo of navy two-piece suit and garment bag on a neutral background, no people or visible brands.",
+        "local_filename": "clothing-navy-suit-40r.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-charcoal-suit-44l",
+      "owner_key": "clothing-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Charcoal two-piece suit, 44L (demo inventory)",
+        "category": "formalwear",
+        "description": "DEMO INVENTORY. Long-cut jacket and trousers with visible wear at the cuffs; check the measurements before borrowing.",
+        "specifications": {
+          "type": "suit",
+          "jacket_size": "44L",
+          "trouser_waist": 38,
+          "trouser_inseam": 34,
+          "color": "charcoal",
+          "pattern": "solid"
+        },
+        "condition": "fair",
+        "accessories": [],
+        "known_defects": [
+          "missing one cuff button"
+        ],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 1000,
+        "proposed_item_value_cents": 11000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-charcoal-suit-44l",
+        "desired_image_description": "Original photo of charcoal suit, with a detail of one missing cuff button.",
+        "local_filename": "clothing-charcoal-suit-44l.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-black-suit-size-unknown",
+      "owner_key": "clothing-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Black suit with unconfirmed size (demo inventory)",
+        "category": "formalwear",
+        "description": "DEMO INVENTORY. Size label is missing; measurements and available dates need confirmation before use. Reduced deposit proposal requires explicit lender acknowledgment before acceptance.",
+        "specifications": {
+          "type": "suit",
+          "jacket_size": null,
+          "trouser_waist": null,
+          "trouser_inseam": null,
+          "color": "black"
+        },
+        "condition": "good",
+        "accessories": [
+          "hanger"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 1200,
+        "proposed_item_value_cents": 14000,
+        "collateral_percent": 75,
+        "availability": {
+          "available_from": null,
+          "available_until": null,
+          "notes": "Dates and measurements need confirmation."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-black-suit-size-unknown",
+        "desired_image_description": "Original photo of black jacket and trousers on hangers; no invented size label.",
+        "local_filename": "clothing-black-suit-size-unknown.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-handheld-steamer",
+      "owner_key": "clothing-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Handheld garment steamer (demo inventory)",
+        "category": "appliances",
+        "description": "DEMO INVENTORY. Compact steamer for interview clothes; inspect the cord and follow the supplied operating instructions.",
+        "specifications": {
+          "type": "garment steamer",
+          "connector": "US two-prong plug",
+          "capacity_ml": 120,
+          "color": "white"
+        },
+        "condition": "good",
+        "accessories": [
+          "water cup"
+        ],
+        "known_defects": [
+          "light scuff on handle"
+        ],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 500,
+        "proposed_item_value_cents": 3000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-handheld-steamer",
+        "desired_image_description": "Original photo of white handheld steamer and water cup on a table.",
+        "local_filename": "clothing-handheld-steamer.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-cream-blazer-6",
+      "owner_key": "clothing-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Cream interview blazer, size 6 (demo inventory)",
+        "category": "formalwear",
+        "description": "DEMO INVENTORY. Single-button blazer for an interview outfit; check fit before agreeing to buy.",
+        "specifications": {
+          "type": "blazer",
+          "size": "6",
+          "color": "cream",
+          "pattern": "solid"
+        },
+        "condition": "like_new",
+        "accessories": [],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 3200,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-cream-blazer-6",
+        "desired_image_description": "Original photo of cream single-button blazer on hanger with size label visible.",
+        "local_filename": "clothing-cream-blazer-6.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-blue-shirt-medium",
+      "owner_key": "clothing-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Light blue interview shirt, medium (demo inventory)",
+        "category": "clothing",
+        "description": "DEMO INVENTORY. Button-up shirt with a faint collar mark; suitable for inspecting as part of a complete interview outfit.",
+        "specifications": {
+          "type": "dress shirt",
+          "size": "M",
+          "color": "light blue",
+          "pattern": "solid"
+        },
+        "condition": "good",
+        "accessories": [],
+        "known_defects": [
+          "faint mark inside collar"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 1200,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-blue-shirt-medium",
+        "desired_image_description": "Original photo of light blue button-up shirt with separate detail of the collar mark.",
+        "local_filename": "clothing-blue-shirt-medium.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-black-trousers-32x30",
+      "owner_key": "clothing-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Black dress trousers, 32x30 (demo inventory)",
+        "category": "formalwear",
+        "description": "DEMO INVENTORY. Straight-leg trousers with belt loops; waist and inseam are recorded separately.",
+        "specifications": {
+          "type": "dress trousers",
+          "trouser_waist": 32,
+          "trouser_inseam": 30,
+          "color": "black"
+        },
+        "condition": "good",
+        "accessories": [],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 1800,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-black-trousers-32x30",
+        "desired_image_description": "Original photo of black straight-leg dress trousers laid flat beside a measuring tape.",
+        "local_filename": "clothing-black-trousers-32x30.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-event-tablecloths",
+      "owner_key": "clothing-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Two navy tablecloths for events (demo inventory)",
+        "category": "event supplies",
+        "description": "DEMO INVENTORY. Two rectangular cloths for a small event setup; one has a faded patch shown in the planned photo.",
+        "specifications": {
+          "type": "tablecloth set",
+          "color": "navy",
+          "quantity": 2,
+          "length_inches": 90,
+          "width_inches": 60
+        },
+        "condition": "fair",
+        "accessories": [],
+        "known_defects": [
+          "small faded patch on one cloth"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 1000,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-event-tablecloths",
+        "desired_image_description": "Original photo of two folded navy tablecloths and close-up of faded patch.",
+        "local_filename": "clothing-event-tablecloths.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-gray-suit-38s",
+      "owner_key": "clothing-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Gray two-piece suit, 38S (demo inventory)",
+        "category": "formalwear",
+        "description": "DEMO INVENTORY. Short-cut gray suit; rental fee is above a $20 search budget and should be filtered accordingly.",
+        "specifications": {
+          "type": "suit",
+          "jacket_size": "38S",
+          "trouser_waist": 31,
+          "trouser_inseam": 29,
+          "color": "gray",
+          "pattern": "subtle check"
+        },
+        "condition": "good",
+        "accessories": [
+          "garment bag"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 6500,
+        "rental_fee_cents": 2500,
+        "proposed_item_value_cents": 15000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-12T12:00:00Z",
+          "available_until": "2026-10-16T22:00:00Z",
+          "notes": "Unavailable October 11; handoff time needs confirmation."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-gray-suit-38s",
+        "desired_image_description": "Original photo of gray subtle-check suit and garment bag.",
+        "local_filename": "clothing-gray-suit-38s.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-folding-table",
+      "owner_key": "clothing-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Four-foot folding event table (demo inventory)",
+        "category": "event supplies",
+        "description": "DEMO INVENTORY. A compact table for poster displays or refreshments; surface scratches are cosmetic in this fictional demo record. Reduced deposit proposal requires explicit lender acknowledgment before acceptance.",
+        "specifications": {
+          "type": "folding table",
+          "length_inches": 48,
+          "width_inches": 24,
+          "color": "white",
+          "folding": "yes"
+        },
+        "condition": "fair",
+        "accessories": [],
+        "known_defects": [
+          "surface scratches"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 3500,
+        "rental_fee_cents": 800,
+        "proposed_item_value_cents": 5000,
+        "collateral_percent": 50,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-folding-table",
+        "desired_image_description": "Original photo of four-foot white folding table, legs visible, surface scratches shown.",
+        "local_filename": "clothing-folding-table.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "clothing-powered-speaker",
+      "owner_key": "clothing-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Small powered speaker with wired microphone (demo inventory)",
+        "category": "electronics",
+        "description": "DEMO INVENTORY. Compact speaker bundle for a presentation; confirm the source device connector and intended venue setup.",
+        "specifications": {
+          "type": "powered speaker",
+          "connector": "3.5 mm AUX and 6.35 mm microphone input",
+          "compatibility": "analog audio input",
+          "color": "black"
+        },
+        "condition": "good",
+        "accessories": [
+          "wired microphone",
+          "power cable",
+          "3.5 mm AUX cable"
+        ],
+        "known_defects": [
+          "small scuff on cabinet"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 6000,
+        "rental_fee_cents": 1500,
+        "proposed_item_value_cents": 9000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo schedule; confirm handoff time before agreeing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "clothing-powered-speaker",
+        "desired_image_description": "Original photo of black powered speaker, wired microphone and both cables, with no logos or claims of venue authorization.",
+        "local_filename": "clothing-powered-speaker.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    }
+  ]
+}

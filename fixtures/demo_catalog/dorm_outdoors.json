@@ -1,0 +1,514 @@
+{
+  "schema_version": 1,
+  "source_agent": "agent_3",
+  "owners": [
+    {
+      "key": "dorm-owner-1",
+      "display_name": "Demo Dorm A (demo account)"
+    },
+    {
+      "key": "dorm-owner-2",
+      "display_name": "Demo Dorm B (demo account)"
+    },
+    {
+      "key": "dorm-owner-3",
+      "display_name": "Demo Dorm C (demo account)"
+    }
+  ],
+  "listings": [
+    {
+      "key": "dorm-vacuum-compact",
+      "owner_key": "dorm-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Compact vacuum (DEMO inventory)",
+        "category": "dorm essentials",
+        "description": "DEMO INVENTORY. Free to borrow. Compact corded vacuum for a quick room cleanup; crevice attachment included. Fictional demo loan proposal: item value $45.00; rental fee $0.00; separate proposed deposit $45.00 (100% collateral). Simulated only; no funds are reserved or charged.",
+        "specifications": {
+          "type": "vacuum",
+          "color": "blue",
+          "power_source": "corded",
+          "connector": "US Type A"
+        },
+        "condition": "good",
+        "accessories": [
+          "crevice attachment"
+        ],
+        "known_defects": [
+          "scuff on housing"
+        ],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 4500,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "dorm-vacuum-compact",
+        "desired_image_description": "Original item-only photograph of compact vacuum, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "dorm-vacuum-compact.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "dorm-fan-desk-white",
+      "owner_key": "dorm-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "White desk fan (DEMO inventory)",
+        "category": "dorm essentials",
+        "description": "DEMO INVENTORY. Free to keep. Small desk fan with a gently yellowed base; speed settings should be checked at handoff.",
+        "specifications": {
+          "type": "fan",
+          "color": "white",
+          "diameter_inches": 9,
+          "power_source": "corded"
+        },
+        "condition": "fair",
+        "accessories": [],
+        "known_defects": [
+          "cosmetic yellowing on base"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 0,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "dorm-fan-desk-white",
+        "desired_image_description": "Original item-only photograph of white desk fan, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "dorm-fan-desk-white.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "dorm-toolkit-basic",
+      "owner_key": "dorm-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Basic hand toolkit (DEMO inventory)",
+        "category": "tools",
+        "description": "DEMO INVENTORY. Free to borrow. Hand tools for flat-pack furniture assembly; no power tools included. Fictional demo loan proposal: item value $30.00; rental fee $0.00; separate proposed deposit $15.00 (50% collateral). Simulated only; no funds are reserved or charged. Lower collateral requires explicit lender acknowledgment before acceptance.",
+        "specifications": {
+          "type": "toolkit",
+          "contents": "screwdriver, hex keys, tape measure",
+          "powered_tools": "none"
+        },
+        "condition": "good",
+        "accessories": [
+          "plastic carrying case"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 3000,
+        "collateral_percent": 50,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "dorm-toolkit-basic",
+        "desired_image_description": "Original item-only photograph of basic hand toolkit, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "dorm-toolkit-basic.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "dorm-air-mattress-twin",
+      "owner_key": "dorm-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Twin air mattress (DEMO inventory)",
+        "category": "dorm essentials",
+        "description": "DEMO INVENTORY. Twin air mattress for an overnight guest. External pump and storage sack included; check inflation together before handoff. Fictional demo loan proposal: item value $40.00; rental fee $5.00; separate proposed deposit $40.00 (100% collateral). Simulated only; no funds are reserved or charged.",
+        "specifications": {
+          "type": "air mattress",
+          "size": "twin",
+          "color": "gray",
+          "pump_type": "external electric"
+        },
+        "condition": "good",
+        "accessories": [
+          "electric pump",
+          "storage sack"
+        ],
+        "known_defects": [],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 2500,
+        "rental_fee_cents": 500,
+        "proposed_item_value_cents": 4000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "dorm-air-mattress-twin",
+        "desired_image_description": "Original item-only photograph of twin air mattress, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "dorm-air-mattress-twin.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "dorm-lamp-green",
+      "owner_key": "dorm-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Green desk lamp (DEMO inventory)",
+        "category": "dorm essentials",
+        "description": "DEMO INVENTORY. Free to keep. Green desk lamp with a scratched base. Bring a compatible bulb; none is included.",
+        "specifications": {
+          "type": "lamp",
+          "color": "green",
+          "connector": "US Type A",
+          "bulb_base": "E26"
+        },
+        "condition": "fair",
+        "accessories": [],
+        "known_defects": [
+          "scratched base",
+          "bulb not included"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 0,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "dorm-lamp-green",
+        "desired_image_description": "Original item-only photograph of green desk lamp, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "dorm-lamp-green.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "dorm-storage-bins-pair",
+      "owner_key": "dorm-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Pair of clear storage bins (DEMO inventory)",
+        "category": "dorm essentials",
+        "description": "DEMO INVENTORY. Free to keep. Two clear bins for organizing supplies; one lid has a chipped corner.",
+        "specifications": {
+          "type": "storage bins",
+          "quantity": 2,
+          "capacity_liters_each": 18,
+          "color": "clear"
+        },
+        "condition": "fair",
+        "accessories": [
+          "two lids"
+        ],
+        "known_defects": [
+          "one lid corner chipped"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 0,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "dorm-storage-bins-pair",
+        "desired_image_description": "Original item-only photograph of pair of clear storage bins, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "dorm-storage-bins-pair.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "outdoors-tent-two-person",
+      "owner_key": "dorm-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Two-person tent (DEMO inventory)",
+        "category": "outdoors",
+        "description": "DEMO INVENTORY. Free to borrow, or purchase for $65. Two-person tent with poles and rainfly; weather suitability must be confirmed before use. Fictional demo loan proposal: item value $100.00; rental fee $0.00; separate proposed deposit $100.00 (100% collateral). Simulated only; no funds are reserved or charged.",
+        "specifications": {
+          "type": "tent",
+          "capacity_people": 2,
+          "color": "olive",
+          "season_rating": null
+        },
+        "condition": "good",
+        "accessories": [
+          "rainfly",
+          "poles",
+          "eight stakes",
+          "carry bag"
+        ],
+        "known_defects": [
+          "small stain on carry bag"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 6500,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 10000,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "outdoors-tent-two-person",
+        "desired_image_description": "Original item-only photograph of two-person tent, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "outdoors-tent-two-person.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "outdoors-sleeping-bag-blue",
+      "owner_key": "dorm-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Blue sleeping bag (DEMO inventory)",
+        "category": "outdoors",
+        "description": "DEMO INVENTORY. Free to borrow, or purchase for $18. Blue sleeping bag with stuff sack; temperature rating is unknown, so confirm suitability for your plans. Fictional demo loan proposal: item value $35.00; rental fee $0.00; separate proposed deposit $35.00 (100% collateral). Simulated only; no funds are reserved or charged.",
+        "specifications": {
+          "type": "sleeping bag",
+          "color": "blue",
+          "length_inches": 75,
+          "temperature_rating": null
+        },
+        "condition": "fair",
+        "accessories": [
+          "stuff sack"
+        ],
+        "known_defects": [
+          "faded outer fabric"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 1800,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 3500,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "outdoors-sleeping-bag-blue",
+        "desired_image_description": "Original item-only photograph of blue sleeping bag, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "outdoors-sleeping-bag-blue.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "outdoors-hammock-striped",
+      "owner_key": "dorm-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Striped hammock (DEMO inventory)",
+        "category": "outdoors",
+        "description": "DEMO INVENTORY. Free to borrow, or purchase for $20. Striped hammock with pouch; straps are not included and load limit needs confirmation. Fictional demo loan proposal: item value $35.00; rental fee $0.00; separate proposed deposit $35.00 (100% collateral). Simulated only; no funds are reserved or charged.",
+        "specifications": {
+          "type": "hammock",
+          "color": "blue and gray",
+          "pattern": "striped",
+          "capacity_people": 1,
+          "load_limit": null
+        },
+        "condition": "good",
+        "accessories": [
+          "carry pouch"
+        ],
+        "known_defects": [
+          "hanging straps not included"
+        ],
+        "allowed_modes": [
+          "sale",
+          "borrow"
+        ],
+        "sale_price_cents": 2000,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 3500,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": null,
+          "available_until": null,
+          "notes": "Demo loan dates are unknown; confirm the requested interval before borrowing."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "outdoors-hammock-striped",
+        "desired_image_description": "Original item-only photograph of striped hammock, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "outdoors-hammock-striped.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "mobility-bike-pump-floor",
+      "owner_key": "dorm-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Floor bike pump (DEMO inventory)",
+        "category": "mobility",
+        "description": "DEMO INVENTORY. Free to borrow. Floor pump with dual-valve head; gauge markings are faded, so confirm the reading before relying on it. Fictional demo loan proposal: item value $25.00; rental fee $0.00; separate proposed deposit $25.00 (100% collateral). Simulated only; no funds are reserved or charged.",
+        "specifications": {
+          "type": "bike pump",
+          "valve_compatibility": "Presta and Schrader",
+          "color": "black",
+          "pressure_gauge": "analog"
+        },
+        "condition": "fair",
+        "accessories": [],
+        "known_defects": [
+          "faded markings on gauge"
+        ],
+        "allowed_modes": [
+          "borrow"
+        ],
+        "sale_price_cents": null,
+        "rental_fee_cents": 0,
+        "proposed_item_value_cents": 2500,
+        "collateral_percent": 100,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "mobility-bike-pump-floor",
+        "desired_image_description": "Original item-only photograph of floor bike pump, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "mobility-bike-pump-floor.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "mobility-helmet-display-only",
+      "owner_key": "dorm-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Retired helmet for display only (DEMO inventory)",
+        "category": "mobility",
+        "description": "DEMO INVENTORY. Free to keep. Retired red helmet for a display or prop only. Impact history and protective fitness are unknown; do not use it for riding or protection.",
+        "specifications": {
+          "type": "helmet",
+          "intended_use": "display only; not protective equipment",
+          "size": null,
+          "color": "red",
+          "impact_history": null
+        },
+        "condition": "worn",
+        "accessories": [],
+        "known_defects": [
+          "protective fitness unknown",
+          "not for riding or protective use"
+        ],
+        "allowed_modes": [
+          "sale"
+        ],
+        "sale_price_cents": 0,
+        "rental_fee_cents": null,
+        "proposed_item_value_cents": null,
+        "collateral_percent": null,
+        "availability": {
+          "available_from": "2026-10-10T12:00:00Z",
+          "available_until": "2026-10-15T22:00:00Z",
+          "notes": "Demo October 11 availability; confirm exact handoff time in the exchange."
+        },
+        "meeting_spot_ids": []
+      },
+      "image_manifest": {
+        "listing_key": "mobility-helmet-display-only",
+        "desired_image_description": "Original item-only photograph of retired helmet for display only, matching the listed color and included accessories, on a simple neutral background; no people, logos, text overlays, or unsupported condition claims.",
+        "local_filename": "mobility-helmet-display-only.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    }
+  ]
+}

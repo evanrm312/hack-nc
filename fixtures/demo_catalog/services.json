@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "source_agent": "agent_4",
+  "owners": [
+    {
+      "key": "services-owner-1",
+      "display_name": "Demo Study A (demo account)"
+    },
+    {
+      "key": "services-owner-2",
+      "display_name": "Demo Study B (demo account)"
+    },
+    {
+      "key": "services-owner-3",
+      "display_name": "Demo Study C (demo account)"
+    }
+  ],
+  "listings": [
+    {
+      "key": "demo-calculus-tutoring",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo calculus practice session",
+        "category": "tutoring",
+        "description": "DEMO INVENTORY. Work through introductory derivatives and limits using your own practice questions. This fictional session does not complete assessed work.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 2000,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T18:00:00Z",
+            "end": "2026-10-11T20:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-calculus-tutoring",
+        "desired_image_description": "A blank notebook with handwritten fictional derivative exercises beside a plain pencil; staged overhead desk photo.",
+        "local_filename": "demo-calculus-tutoring.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-python-tutoring",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo introductory Python tutoring",
+        "category": "tutoring",
+        "description": "DEMO INVENTORY. Discuss loops, functions, and debugging using small practice examples. Bring the concepts you want to review; no graded assignment completion.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1500,
+        "service_duration_minutes": 45,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T23:00:00Z",
+            "end": "2026-10-12T01:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-python-tutoring",
+        "desired_image_description": "A plain laptop displaying a short fictional Python loop beside an unbranded notebook; no personal information.",
+        "local_filename": "demo-python-tutoring.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-statistics-tutoring",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo statistics review session",
+        "category": "tutoring",
+        "description": "DEMO INVENTORY. Review probability and descriptive statistics with practice problems you supply. Scope and learning goals must be agreed before scheduling.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 3000,
+        "service_duration_minutes": 90,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T15:00:00Z",
+            "end": "2026-10-11T17:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-statistics-tutoring",
+        "desired_image_description": "A staged sheet of fictional probability exercises and a generic calculator on a tidy tabletop.",
+        "local_filename": "demo-statistics-tutoring.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-evening-essay-proofreading",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo evening essay proofreading",
+        "category": "proofreading",
+        "description": "DEMO INVENTORY. Read a draft together for grammar, punctuation, and clarity. Feedback only; the writer retains responsibility for content and course rules.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1500,
+        "service_duration_minutes": 45,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T23:00:00Z",
+            "end": "2026-10-12T01:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-evening-essay-proofreading",
+        "desired_image_description": "An unbranded pen beside a fictional essay page with a few punctuation edits; no names or institutional logos.",
+        "local_filename": "demo-evening-essay-proofreading.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-extended-proofreading",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo extended draft proofreading",
+        "category": "proofreading",
+        "description": "DEMO INVENTORY. A longer session for proofreading a draft and discussing recurring grammar issues. Document length and scope need agreement before booking.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 2500,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T23:00:00Z",
+            "end": "2026-10-12T01:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-extended-proofreading",
+        "desired_image_description": "Two pages of fictional sample prose with restrained proofreading marks on a neutral desk.",
+        "local_filename": "demo-extended-proofreading.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-late-proofreading",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo late proofreading session",
+        "category": "proofreading",
+        "description": "DEMO INVENTORY. Review spelling and sentence clarity in your draft. The offered late slot must fit the full agreed session; comments do not rewrite the work.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1200,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-12T00:30:00Z",
+            "end": "2026-10-12T01:30:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-late-proofreading",
+        "desired_image_description": "A fictional marked-up draft next to a simple desk clock and plain pencil, warmly lit tabletop with no faces.",
+        "local_filename": "demo-late-proofreading.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-box-moving-help",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo lightweight box moving help",
+        "category": "moving help",
+        "description": "DEMO INVENTORY. Help carry lightweight packed boxes on a short move. Discuss weight, stairs, and route first; no vehicle, appliance, or heavy lifting is offered.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1500,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-box-moving-help",
+        "desired_image_description": "Several plain closed cardboard boxes staged beside a clear hallway; no labels, addresses, people, or tools advertised as included.",
+        "local_filename": "demo-box-moving-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-packing-moving-help",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo packing and moving support",
+        "category": "moving help",
+        "description": "DEMO INVENTORY. Help organize small belongings and move manageable boxes. Supplies are not included; confirm the task and access before scheduling.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1000,
+        "service_duration_minutes": 45,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T19:00:00Z",
+            "end": "2026-10-11T21:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-packing-moving-help",
+        "desired_image_description": "A few small plain cardboard boxes and folded paper on an unbranded tabletop, staged as a moving-help illustration.",
+        "local_filename": "demo-packing-moving-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-afternoon-moving-help",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo afternoon small move helper",
+        "category": "moving help",
+        "description": "DEMO INVENTORY. Extra hands for a small move with lightweight belongings. No transport or heavy furniture handling; clarify scope and stairs in advance.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 2500,
+        "service_duration_minutes": 90,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-afternoon-moving-help",
+        "desired_image_description": "A staged arrangement of plain small moving boxes beside an open doorway, no identifying room numbers or people.",
+        "local_filename": "demo-afternoon-moving-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    }
+  ]
+}

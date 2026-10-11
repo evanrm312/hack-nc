@@ -1,0 +1,91 @@
+--- a/server/seed.py
++++ b/server/seed.py
+@@ -13,6 +13,7 @@
+ from pathlib import Path
+ from urllib.parse import urlparse
+ 
++from flask import current_app
+ from sqlalchemy.engine import make_url
+ 
+ from .config import PROJECT_ROOT
+@@ -65,8 +66,68 @@
+ ]
+ 
+ 
+-def seed_demo_data() -> list[str]:
+-    out: list[str] = []
++
++def _catalog_id(kind: str, key: str) -> str:
++    """Opaque stable IDs; never depend on an editable title."""
++    from uuid import NAMESPACE_URL, uuid5
++    return uuid5(NAMESPACE_URL, f"campus-current:demo-catalog:v1:{kind}:{key}").hex
++
++
++def _stage_demo_catalog() -> list[str]:
++    """Validate everything first, then stage only missing catalog rows."""
++    from fixtures.demo_catalog.validate_catalog import validate
++    from .routes.catalog import _apply_listing_fields
++
++    entries, owners, _counts = validate()
++    profiles = {}
++    candidates = []
++    # Preflight both collisions and the actual HTTP field validator before writes.
++    for key, spec in owners.items():
++        subject = f"sandbox:demo-catalog:v1:{key}"
++        profile_id = _catalog_id("owner", key)
++        existing = db.session.scalar(db.select(Profile).where(Profile.auth_subject == subject))
++        id_collision = db.session.get(Profile, profile_id)
++        if id_collision is not None and id_collision is not existing:
++            raise ValueError(f"Demo catalog profile ID collision: {key}")
++        if existing is not None:
++            if (not existing.is_demo or existing.verification_source != "sandbox"
++                    or "demo" not in existing.display_name.casefold()):
++                raise ValueError(f"Demo catalog profile is not labeled sandbox demo: {key}")
++            profiles[key] = existing
++        else:
++            profiles[key] = Profile(id=profile_id, auth_subject=subject,
++                display_name=spec["display_name"], confirmed_email_domain="unc.edu",
++                verification_source="sandbox", is_demo=True)
++    for entry in entries:
++        listing_id = _catalog_id("listing", entry["key"])
++        profile = profiles[entry["owner_key"]]
++        candidate = Listing(id=listing_id, owner_id=profile.id, status="available")
++        _apply_listing_fields(candidate, entry["listing"], creating=True)
++        existing = db.session.get(Listing, listing_id)
++        if existing is not None:
++            if (existing.owner_id != profile.id
++                    or "demo" not in existing.title.casefold()
++                    or "DEMO" not in (existing.description or "")):
++                raise ValueError(f"Demo catalog listing collision: {entry['key']}")
++            # Preserve customized price, title, availability, reservation and photos.
++            continue
++        candidates.append(candidate)
++    out = []
++    for key, profile in profiles.items():
++        if profile not in db.session:
++            db.session.add(profile)
++            out.append(f"demo catalog profile created: {key}")
++    db.session.flush()
++    for candidate in candidates:
++        db.session.add(candidate)
++        out.append(f"demo catalog listing created: {candidate.id}")
++    # Existing seed_demo_data owns the single final commit.
++    return out
++
++
++def seed_demo_data(*, allow_supabase_postgres_dev: bool = False) -> list[str]:
++    validate_demo_seed_target(current_app.config, allow_supabase_postgres_dev=allow_supabase_postgres_dev)
++    out: list[str] = _stage_demo_catalog()
+ 
+     spots: list[MeetingSpot] = []
+     for label, area, notes in MEETING_SPOTS:
+--- a/server/app.py
++++ b/server/app.py
+@@ -68,6 +68,6 @@
+         except ValueError as exc:
+             raise click.ClickException(str(exc)) from exc
+ 
+-        summary = seed_demo_data()
++        summary = seed_demo_data(allow_supabase_postgres_dev=allow_supabase_postgres_dev)
+         for line in summary:
+             click.echo(line)
