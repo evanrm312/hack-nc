@@ -14,14 +14,21 @@ is `aws-0-us-east-1.pooler.supabase.com:5432`, database `postgres`, user
 `c707browserroles`, without community tables/columns. The deployed-model query
 produces `ProgrammingError`, SQLSTATE `42P01` (undefined table).
 Counts: profiles 3, listings 2, requests 2; exchanges/messages/evidence/reviews 0.
-These findings support a schema mismatch, but Render's actual database,
-deployed SHA, environment and sanitized logs remain unconfirmed. Local
-`APP_ENV=development` does not establish Render's environment. Render API access
-and a connected browser/session were unavailable.
+Chrome DevTools inspection confirmed Render service `srv-db5iu4flk1mc73a5vvig`
+serves `dd363fd77b54efa527a121a8206105fb211e0aad` from `main` and uses exactly
+this database/project. Render logs contain repeated sanitized
+`Unhandled API error (ProgrammingError)` messages. Its pre-deploy command is
+empty, health check is `/api/health`, and automatic deploys are On Commit.
+The deployed `APP_ENV` is `development`; `AUTH_MODE` and `STORAGE_BACKEND` are
+both `supabase`. Gemini, Supabase and application secret keys are present.
+The application secret meets the production minimum length and is not a known
+development placeholder; no secret values were recorded. Production mode must
+be enabled during the approved configuration release.
 
 ## 1. Confirm target, backup, approve migration
 
-Identify the **existing** Render hack-nc service, runtime, plan and live commit.
+The existing Render service/database identity is confirmed above. Reconfirm its
+live commit and target immediately before the approved migration.
 Run the operator-only command in its environment using the reviewed build:
 
 ```bash
@@ -40,10 +47,15 @@ file 0600). SHA-256:
 The archive was restored into a separate local `render_backend_restore_test`
 PostgreSQL database. All original backed-up fields survived the c707→c708
 upgrade. Readiness, targeted import, catalog and recommendations passed there;
-that disposable database was removed afterward. This backup does **not** prove
-the actual Render database was backed up. Confirm a fresh recovery point for
-the actual target and encrypt/export the backup through the operator's backup
-system before approval. Postgres dumps exclude Auth and Storage objects.
+that disposable database was removed afterward. After confirming the Render
+target, a fresh backup was taken at 2026-10-11 07:35:15 UTC:
+`var/render-backend/confirmed-render-before-c708-20261011T073515Z.dump`.
+SHA-256: `5ca5e9de6be89b8cf087946df3d3bf5a86f6ef44e7f0a5f754f3401af1282390`.
+Its archive contents are readable. Target/count metadata and original-column
+record hashes are in `var/render-backend/confirmed-render-backup.json` and
+`confirmed-render-record-hashes.json`, with restricted local permissions.
+Encrypt/export the backup through the operator's backup system and confirm the
+hosted recovery point before upgrade. Postgres dumps exclude Auth and Storage objects.
 
 After the actual target and its fresh recoverable backup are confirmed, request
 approval for the single existing migration upgrade:
@@ -70,6 +82,7 @@ For the existing Render service, propose these settings:
 | --- | --- |
 | Pre-Deploy Command | `/bin/sh deploy/render-release.sh` |
 | Health Check Path | `/api/ready` |
+| APP_ENV | `production` |
 
 The script applies the pinned reviewed `c708communitymerge` revision, then
 requires readiness. Confirm it actually ran in deploy logs; the Procfile release
@@ -119,7 +132,16 @@ old pre-import snapshot safely refuses rather than duplicating inventory.
 
 ## 4. Auth and Gemini live gates
 
-Inspect Supabase URL settings/templates before proposing changes:
+Browser inspection confirmed the Site URL is currently `http://localhost:3000`
+and the redirect allowlist is empty. The default email templates are active;
+custom SMTP is not configured. The email-send quota is **2 per hour** and token
+verification is **30 requests per 5 minutes per IP**. The app shows "Too many
+sign-in requests" and has no saved session. A 403 `/verify` log explicitly says
+`ONE-TIME TOKEN NOT FOUND`; its referer is `http://localhost:3000`. The 405 entry
+used HEAD. These are distinct from the email quota; a 303 alone does not prove
+successful verification. No additional magic links were requested.
+
+Proposed Supabase URL corrections, pending approval:
 
 | Setting | Required value |
 | --- | --- |
@@ -138,7 +160,10 @@ remain unknown. Diagnose fallback through sanitized provider status/model/key
 presence, never request text, tokens, keys or photo bytes. Keep existing manual
 fallback/model order/timeouts unless evidence requires change. Sign out last
 and confirm a protected request returns 401. Fresh login and production Gemini
-remain unverified pending dashboard/session access.
+remain unverified pending corrected URLs, email quota availability and a fresh
+real session. Dashboard access now works through the user-provided Chrome
+DevTools endpoint. Do not increase the email quota or add an SMTP service without
+a separate team decision.
 
 ## Validation
 

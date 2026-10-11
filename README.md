@@ -255,8 +255,8 @@ HTTPS origin. No web-worker scheduler or automatic seed runs.
 
 ## Targeted Render backend repair
 
-The public app is `https://hack-nc.onrender.com`; Render settings and a fresh
-real login still require operator verification. The prepared migration gate,
+The public app is `https://hack-nc.onrender.com`; Render settings were inspected,
+and a fresh real login remains unverified. The prepared migration gate,
 backup, 52-record import and approval sequence are documented in
 [docs/render-backend-repair.md](docs/render-backend-repair.md).
 
