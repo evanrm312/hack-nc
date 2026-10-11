@@ -2,6 +2,7 @@
 from copy import deepcopy
 import pytest
 from server.intelligence.matching import match_listings
+from tests.conftest import publish_listing
 
 
 @pytest.fixture
@@ -191,17 +192,18 @@ def test_existing_route_hydrates_matches_and_enforces_access(client, alice, bob,
     listing_body = {key: value for key, value in suit.items()
                     if key not in ('id', 'status', 'active_exchange_id')}
     listing_body['title'] = 'Synthetic integration suit'
+    listing_body['description'] = 'Synthetic suit for matching integration.'
     created = client.post('/api/listings', json=listing_body, headers=bob)
     assert created.status_code == 201
-    listing_id = created.get_json()['listing']['id']
+    listing_id = publish_listing(client, bob, created.get_json()['listing'])['id']
     own = client.post('/api/listings', json=listing_body, headers=alice)
     assert own.status_code == 201
-    own_id = own.get_json()['listing']['id']
+    own_id = publish_listing(client, alice, own.get_json()['listing'])['id']
     wrong_body = deepcopy(listing_body)
     wrong_body['specifications']['jacket_size'] = '42R'
     wrong = client.post('/api/listings', json=wrong_body, headers=bob)
     assert wrong.status_code == 201
-    wrong_id = wrong.get_json()['listing']['id']
+    wrong_id = publish_listing(client, bob, wrong.get_json()['listing'])['id']
     created_request = client.post('/api/requests', json=dict(need, original_text='Synthetic suit request'), headers=alice)
     assert created_request.status_code == 201
     url = f"/api/requests/{created_request.get_json()['request']['id']}/matches"

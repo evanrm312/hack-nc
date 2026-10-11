@@ -50,11 +50,11 @@
 
   function meetingSpotCatalog(spots) {
     return C.el("div", { className: "meeting-catalog" },
-      C.el("p", { className: "field__hint", text: "All active catalog spots, unranked. The catalog has no coordinates or routing data." }),
+      C.el("p", { className: "field__hint", text: "Active campus meeting spots. Convenience estimates appear in private negotiations when both participants supply usable locations." }),
       C.el("ul", {}, (spots || []).map((spot) => C.el("li", {},
         C.el("strong", { text: spot.label }), C.el("span", { text: spot.public_area }),
         C.el("p", { text: spot.access_notes || "Access notes not recorded." })))),
-      C.el("p", { className: "field__hint", text: "These are recorded catalog notes, not live reports. Lighting, cameras, opening hours, and current activity are not provided as separate attributes. No location is guaranteed safe." }));
+      C.el("p", { className: "field__hint", text: "Catalog notes are not live safety reports. Unverified attributes remain unknown. No location is guaranteed safe." }));
   }
 
   window.campusDiscovery = { completedPurchases, renderRecommended, renderPreviousBuys, meetingSpotCatalog };
@@ -94,7 +94,7 @@
     const catalog = C.el("div", {});
     const disclosure = C.el("details", { className: "meetup-reference" },
       C.el("summary", { text: "Campus meetup spots" }),
-      C.el("p", { text: "Profile meetup preferences and private participant locations cannot be saved yet. For item exchanges, propose a catalog spot in the offer; both participants must accept it." }), catalog);
+      C.el("p", { text: "Your preference is saved above. Propose meeting spots in private exchange offers; both participants must accept the same location." }), catalog);
     account.append(disclosure);
     api.get("/api/meeting-spots").then(({ meeting_spots }) => {
       if (!meeting_spots.length) message(catalog, "No active campus spots in the catalog.");

@@ -13,9 +13,12 @@
 
 from __future__ import annotations
 
+from sqlalchemy import cast, String
+
 from flask import Blueprint, current_app, jsonify, request
 
 from ..auth import current_profile, optional_user, require_verified_user
+from ..idempotency import creation, commit_creation
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..intelligence import ReferenceImageError, match_listings, normalize_reference_image, normalize_request
@@ -176,10 +179,13 @@ def list_requests():
 @require_verified_user
 def create_request():
     body = json_body()
-    need = NeedRequest(requester_id=current_profile().id, visibility="private", status="draft")
+    existing,key,fingerprint=creation(NeedRequest,"requester_id",current_profile().id,body)
+    if existing: return jsonify({"request":existing.to_owner_dict(),"view":"owner"}),201
+    need = NeedRequest(requester_id=current_profile().id, visibility="private", status="draft",
+                       creation_key=key,creation_fingerprint=fingerprint)
     _apply_request_fields(need, body, creating=True)
     db.session.add(need)
-    db.session.commit()
+    need=commit_creation(need,"requester_id")
     return jsonify({"request": need.to_owner_dict(), "view": "owner"}), 201
 
 
@@ -219,7 +225,8 @@ def get_matches(request_id: str):
     _require_requester(need)
     candidates = db.session.scalars(
         db.select(Listing)
-        .where(Listing.status == "available", Listing.owner_id != need.requester_id)
+        .where(Listing.status == "available", Listing.owner_id != need.requester_id,
+               db.or_(*(cast(Listing.allowed_modes, String).like(f'%"{mode}"%') for mode in need.modes)))
         .order_by(Listing.created_at.desc())
         .limit(200)
     ).all()

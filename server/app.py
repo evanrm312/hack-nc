@@ -57,6 +57,15 @@ def create_app(overrides: dict | None = None) -> Flask:
 
 
 def _register_cli(app: Flask) -> None:
+    @app.cli.command("purge-exchange-locations")
+    def purge_exchange_locations():
+        """Delete expired private locations. Schedule hourly in deployment."""
+        from .models import ExchangeLocation
+        from .db import utcnow
+        result = db.session.execute(db.delete(ExchangeLocation).where(ExchangeLocation.expires_at <= utcnow()))
+        db.session.commit()
+        click.echo(f"Removed {result.rowcount} expired location records")
+
     @app.cli.command("seed-demo")
     @click.option("--allow-supabase-postgres-dev", is_flag=True, help="Explicitly seed the dedicated Supabase development database named postgres; requires APP_ENV=development.")
     def seed_demo(allow_supabase_postgres_dev: bool):

@@ -13,9 +13,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from sqlalchemy import cast, String
+from ..exchanges.images import validated_image_stream
+
 from flask import Blueprint, current_app, jsonify, request
 
 from ..auth import current_profile, require_verified_user
+from ..idempotency import creation, commit_creation
 from ..db import db
 from ..errors import ApiError, forbidden, not_found, validation_error
 from ..models import LISTING_MODES, LISTING_STATUSES, SERVICE_CATEGORIES, Listing, MeetingSpot
@@ -39,7 +43,7 @@ _CONDITIONS = ("new", "like_new", "good", "fair", "worn")
 
 def _load_listing(listing_id: str) -> Listing:
     listing = db.session.get(Listing, listing_id)
-    if listing is None:
+    if listing is None or (listing.status == "draft" and (current_profile() is None or listing.owner_id != current_profile().id)):
         raise not_found("listing")
     return listing
 
@@ -47,6 +51,15 @@ def _load_listing(listing_id: str) -> Listing:
 def _require_owner(listing: Listing) -> None:
     if listing.owner_id != current_profile().id:
         raise forbidden("Only the listing owner can modify this listing")
+
+
+def _lock_listing_for_edit(listing):
+    result = db.session.execute(db.update(Listing).where(Listing.id == listing.id,
+        Listing.owner_id == current_profile().id, Listing.status.notin_(("reserved", "sold")))
+        .values(updated_at=Listing.updated_at))
+    db.session.refresh(listing)
+    if result.rowcount != 1:
+        raise ApiError(409,"listing_locked",f"A {listing.status} listing cannot be edited")
 
 
 def _apply_listing_fields(listing: Listing, body: dict, *, creating: bool) -> None:
@@ -163,6 +176,8 @@ def _apply_listing_fields(listing: Listing, body: dict, *, creating: bool) -> No
 @bp.get("/api/listings")
 def list_listings():
     query = db.select(Listing)
+    viewer = current_profile() if request.headers.get("Authorization") else None
+    query = query.where(db.or_(Listing.status != "draft", Listing.owner_id == viewer.id) if viewer else Listing.status != "draft")
     status = request.args.get("status", "available")
     if status != "all":
         if status not in LISTING_STATUSES:
@@ -177,26 +192,39 @@ def list_listings():
     mode = request.args.get("mode")
     if mode and mode not in LISTING_MODES:
         raise validation_error({"mode": f"must be one of: {', '.join(LISTING_MODES)}"})
-    listings = db.session.scalars(query.order_by(Listing.created_at.desc()).limit(200)).all()
     if mode:
-        listings = [l for l in listings if mode in (l.allowed_modes or [])]
-    return jsonify({"listings": [l.to_dict() for l in listings]})
+        # Modes are a server-validated finite string vocabulary. Apply before limit.
+        query = query.where(cast(Listing.allowed_modes, String).like(f'%"{mode}"%'))
+    listings = db.session.scalars(query.order_by(Listing.created_at.desc()).limit(200)).all()
+    response = jsonify({"listings": [l.to_dict() for l in listings]})
+    if any(l.status == "draft" for l in listings):
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @bp.post("/api/listings")
 @require_verified_user
 def create_listing():
     body = json_body()
-    listing = Listing(owner_id=current_profile().id, status="available")
+    existing,key,fingerprint=creation(Listing,"owner_id",current_profile().id,body)
+    if existing: return jsonify({"listing":existing.to_dict()}),201
+    listing = Listing(owner_id=current_profile().id, status="draft", publication_required=True,
+                      creation_key=key,creation_fingerprint=fingerprint)
     _apply_listing_fields(listing, body, creating=True)
     db.session.add(listing)
-    db.session.commit()
+    listing=commit_creation(listing,"owner_id")
     return jsonify({"listing": listing.to_dict()}), 201
 
 
 @bp.get("/api/listings/<listing_id>")
 def get_listing(listing_id: str):
-    return jsonify({"listing": _load_listing(listing_id).to_dict()})
+    listing = _load_listing(listing_id)
+    response = jsonify({"listing": listing.to_dict()})
+    if listing.status == "draft":
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @bp.patch("/api/listings/<listing_id>")
@@ -204,13 +232,20 @@ def get_listing(listing_id: str):
 def update_listing(listing_id: str):
     listing = _load_listing(listing_id)
     _require_owner(listing)
+    _lock_listing_for_edit(listing)
     if listing.status in ("reserved", "sold"):
         raise ApiError(409, "listing_locked", f"A {listing.status} listing cannot be edited")
     body = json_body()
     _apply_listing_fields(listing, body, creating=False)
+    if listing.publication_required and listing.status != "draft" and not listing.description:
+        raise validation_error({"description":"required for published listings"})
     if "status" in body:
+        if listing.status == "draft":
+            raise validation_error({"status":"a draft stays private until photo publication"})
         if body["status"] not in ("available", "withdrawn"):
             raise validation_error({"status": "owner may only set 'available' or 'withdrawn'"})
+        if body["status"] == "available" and listing.publication_required and (listing.status == "draft" or not listing.public_photo_path):
+            raise validation_error({"status": "use the photo publication endpoint"})
         listing.status = body["status"]
     db.session.commit()
     return jsonify({"listing": listing.to_dict()})
@@ -221,14 +256,22 @@ def update_listing(listing_id: str):
 def upload_listing_photo(listing_id: str):
     listing = _load_listing(listing_id)
     _require_owner(listing)
+    _lock_listing_for_edit(listing)
+    if listing.status in ("reserved", "sold", "draft"):
+        raise ApiError(409, "listing_locked", "Use publication for drafts; reserved or sold photos cannot change")
     upload = request.files.get("photo")
     if upload is None:
         raise validation_error({"photo": "multipart field 'photo' is required"})
     storage = get_storage()
-    stored = storage.save("public", upload.stream, current_app.config["MAX_UPLOAD_BYTES"])
+    stored = storage.save("public", validated_image_stream(upload.stream, min(current_app.config["MAX_UPLOAD_BYTES"], 5 * 1024 * 1024)), current_app.config["MAX_UPLOAD_BYTES"])
     old = listing.public_photo_path
     listing.public_photo_path = stored.path
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        storage.delete("public", stored.path)
+        raise
     if old:
         storage.delete("public", old)
     return jsonify({"listing": listing.to_dict()})
@@ -245,3 +288,50 @@ def list_meeting_spots():
         db.select(MeetingSpot).where(MeetingSpot.is_active.is_(True)).order_by(MeetingSpot.label)
     ).all()
     return jsonify({"meeting_spots": [s.to_dict() for s in spots]})
+
+
+@bp.post("/api/listings/<listing_id>/publish")
+@require_verified_user
+def publish_listing(listing_id):
+    # Serialize retries and prevent two uploads publishing the same draft.
+    db.session.execute(db.update(Listing).where(Listing.id == listing_id,
+        Listing.owner_id == current_profile().id).values(updated_at=Listing.updated_at))
+    listing = _load_listing(listing_id)
+    db.session.refresh(listing)
+    _require_owner(listing)
+    if listing.status == "available" and listing.publication_required and listing.public_photo_path:
+        db.session.rollback()
+        return jsonify({"listing": listing.to_dict()})
+    if listing.status != "draft":
+        raise ApiError(409, "listing_locked", "Only a draft can be published")
+    # Revalidate persisted terms rather than trusting the client or a status PATCH.
+    body = listing.to_dict()
+    editable = {k: v for k, v in body.items() if k not in
+        ("id", "owner_id", "owner", "status", "active_exchange_id", "public_photo_url", "created_at", "updated_at")}
+    _apply_listing_fields(listing, editable, creating=True)
+    if not listing.description or not listing.description.strip():
+        raise validation_error({"description": "required for publication"})
+    upload = request.files.get("photo")
+    if upload is None:
+        raise validation_error({"photo": "an image is required for publication"})
+    limit = min(current_app.config["MAX_UPLOAD_BYTES"], 5 * 1024 * 1024)
+    stream = validated_image_stream(upload.stream, limit)
+    storage = get_storage()
+    stored = storage.save("public", stream, limit)
+    try:
+        listing.public_photo_path = stored.path
+        listing.status = "available"
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        storage.delete("public", stored.path)
+        raise
+    return jsonify({"listing": listing.to_dict()})
+
+
+@bp.after_request
+def private_owner_responses(response):
+    if request.headers.get("Authorization"):
+        response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response

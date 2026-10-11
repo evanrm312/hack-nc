@@ -9,7 +9,7 @@ from server.app import create_app
 from server.db import db
 from server.intelligence.normalize import Extraction, _to_request
 from server.models import NeedRequest
-from tests.conftest import auth, create_listing
+from tests.conftest import auth, create_listing, publish_listing
 
 
 WINDOW = {"start": "2030-10-12T12:00:00Z", "end": "2030-10-12T14:00:00Z"}
@@ -36,7 +36,7 @@ REQUEST = {
 def service_listing(client, alice):
     response = client.post("/api/listings", json=LISTING, headers=alice)
     assert response.status_code == 201, response.get_json()
-    return response.get_json()["listing"]
+    return publish_listing(client, alice, response.get_json()["listing"])
 
 
 def exchange_with_offer(client, alice, bob):
@@ -320,7 +320,7 @@ def test_service_listing_allows_only_one_active_booking_even_at_different_times(
         **LISTING, "service_available_windows": [WINDOW, later],
     }, headers=alice)
     assert response.status_code == 201, response.get_json()
-    listing_id = response.get_json()["listing"]["id"]
+    listing_id = publish_listing(client, alice, response.get_json()["listing"])["id"]
     exchanges = []
     for window in (WINDOW, later):
         created = client.post("/api/exchanges", json={
@@ -355,6 +355,7 @@ def test_migration_adds_service_fields_to_existing_database(tmp_path):
         upgrade()
     response = app.test_client().post("/api/listings", json=LISTING, headers=auth("alice@unc.edu"))
     assert response.status_code == 201, response.get_json()
+    publish_listing(app.test_client(), auth("alice@unc.edu"), response.get_json()["listing"])
     fresh = create_app(config)
     listing = fresh.test_client().get(f"/api/listings/{response.get_json()['listing']['id']}")
     assert listing.get_json()["listing"]["service_duration_minutes"] == 60
@@ -369,9 +370,14 @@ def test_empty_sqlite_migrates_for_item_and_service_exchanges(tmp_path):
     })
     with app.app_context():
         upgrade()
-        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "b6c28d1f9a04"
+        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "c705exchangekeys"
         columns = lambda table: {column["name"] for column in inspect(db.engine).get_columns(table)}
-        assert {"service_price_cents", "service_duration_minutes", "service_available_windows"} <= columns("listings")
+        assert {"service_price_cents", "service_duration_minutes", "service_available_windows", "publication_required", "creation_key"} <= columns("listings")
+        assert {"recipient_id", "event_key", "read_at", "created_at"} <= columns("notifications")
+        assert {"participant_id", "expires_at", "latitude", "landmark"} <= columns("exchange_locations")
+        assert {"latitude", "coordinate_source", "safety_attributes", "safety_checked_at"} <= columns("meeting_spots")
+        assert "preferred_meeting_spot_id" in columns("profiles")
+        assert {"service_delivery", "service_meeting_spot_id"} <= columns("offer_revisions")
         assert {"service_duration_minutes", "service_time_windows"} <= columns("need_requests")
         assert {"owner_service_confirmed_at", "requester_service_confirmed_at"} <= columns("exchanges")
         assert {"sale_price_cents", "deposit_cents", "service_price_cents", "service_scheduled_at"} <= columns("offer_revisions")
@@ -394,7 +400,7 @@ def test_all_supported_service_categories_create_filter_and_match(client, alice,
     created = client.post('/api/listings', json={**LISTING, 'category': category,
         'title': 'Demo ' + category}, headers=alice)
     assert created.status_code == 201, created.get_json()
-    listing = created.get_json()['listing']
+    listing = publish_listing(client, alice, created.get_json()['listing'])
     assert listing['category'] == category
     assert not {'condition', 'collateral_percent', 'sale_price_cents', 'rental_fee_cents'} & listing.keys()
     filtered = client.get('/api/listings', query_string={'mode': 'service', 'category': category})

@@ -8,7 +8,7 @@ from server.app import create_app
 from server.db import db
 from server.models import Listing
 from server.seed import DEMO_INCOMPATIBLE_SUIT_TITLE, DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE, validate_demo_seed_target
-from tests.conftest import LISTING_BODY, auth
+from tests.conftest import LISTING_BODY, auth, publish_listing
 
 
 def _migrated_app(tmp_path, database_name, *, app_env="development"):
@@ -33,7 +33,7 @@ def test_migration_and_listing_survive_new_app_instance(tmp_path):
         "/api/listings", json=LISTING_BODY, headers=auth("alice@unc.edu")
     )
     assert created.status_code == 201, created.get_json()
-    listing_id = created.get_json()["listing"]["id"]
+    listing_id = publish_listing(app.test_client(), auth("alice@unc.edu"), created.get_json()["listing"])["id"]
 
     fresh_app = create_app(config)
     response = fresh_app.test_client().get(f"/api/listings/{listing_id}")

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import UniqueConstraint, Boolean, JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import db, iso_utc, new_id, utcnow
@@ -19,12 +19,15 @@ SERVICE_CATEGORIES = (
     "tutoring", "proofreading", "moving help", "tech help",
     "repair and mending", "bike repair", "photography", "event help",
 )
-LISTING_STATUSES = ("available", "reserved", "sold", "withdrawn")
+LISTING_STATUSES = ("available", "reserved", "sold", "withdrawn", "draft")
 
 
 class Listing(db.Model):
     __tablename__ = "listings"
 
+    __table_args__ = (UniqueConstraint("owner_id","creation_key",name="uq_listings_creation"),)
+    creation_key: Mapped[str | None] = mapped_column(String(80))
+    creation_fingerprint: Mapped[str | None] = mapped_column(String(64))
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     owner_id: Mapped[str] = mapped_column(String(32), ForeignKey("profiles.id"), nullable=False, index=True)
 
@@ -51,6 +54,7 @@ class Listing(db.Model):
 
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="available", index=True)
     active_exchange_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    publication_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=db.false())
     public_photo_path: Mapped[str | None] = mapped_column(String(255))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

@@ -66,7 +66,7 @@ Keyboard focus, readable contrast, reduced motion, phone width. Reuse
 
 ### P4-1 negotiating → reserved — Person 4, `p4-exchanges`
 
-Status: implemented on `p4-exchanges`; PR #7 remains open. Acceptance: replace
+Status: implemented and merged through PR #7 and PR #14. Acceptance: replace
 the stubs in `server/exchanges/routes.py`:
 create exchange (requester only, listing available, mode allowed), private
 messages (participants only, polling), versioned offers (any term change =
@@ -111,8 +111,7 @@ separate tasks (P4-2, P4-3).
   run succeeded with `gemini-3.5-flash-lite`; authenticated request creation and
   live seeded-catalog matching remain unverified.
 - PR #8's services and PR #3's Person 1 integration are merged into main.
-  PR #7 contains persisted item exchanges and remains open. This branch
-  reconciles its item routes with the merged service routes; reviews and item
-  cancellation/general dispute remain `501` follow-up work.
+  PR #7 and PR #14 item exchanges, reviews, cancellation and disputes are merged.
+  The completion branch adds service room UI and private notification/meeting integration.
 - Built and tested on Python 3.14; requirements are pinned from that
   environment. If a teammate's Python cannot resolve a pin, tell Person 1.

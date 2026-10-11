@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import uuid
@@ -111,7 +112,14 @@ class LocalStorage:
         rel = Path(name[:2]) / f"{name}.{ext}"
         target = self._scope_dir(scope) / rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
+        try:
+            target.write_bytes(data)
+        except OSError:
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                logging.getLogger(__name__).warning("Partial upload cleanup failed; storage maintenance required")
+            raise
         return StoredFile(scope=scope, path=rel.as_posix(), content_type=content_type, size=len(data))
 
     def send(self, scope: str, path: str, content_type: str | None = None):
@@ -174,12 +182,21 @@ class SupabaseStorage:
         data, content_type, ext = read_image_upload(stream, max_bytes)
         name = uuid.uuid4().hex
         path = f"{name[:2]}/{name}.{ext}"
-        response = self._request(
-            "POST", f"{self.url}/object/{bucket}/{path}",
-            headers={**self._headers(), "Content-Type": content_type, "x-upsert": "false"},
-            data=data,
-        )
-        self._check(response)
+        try:
+            response = self._request(
+                "POST", f"{self.url}/object/{bucket}/{path}",
+                headers={**self._headers(), "Content-Type": content_type, "x-upsert": "false"},
+                data=data,
+            )
+            self._check(response)
+        except ApiError:
+            # A lost response may follow a successful provider write. Remove
+            # this generated object while preserving the safe original error.
+            try:
+                self.delete(scope, path)
+            except ApiError:
+                logging.getLogger(__name__).warning("Upload cleanup unavailable; storage maintenance required")
+            raise
         return StoredFile(scope=scope, path=path, content_type=content_type, size=len(data))
 
     def send(self, scope: str, path: str, content_type: str | None = None):

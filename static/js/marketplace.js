@@ -39,7 +39,7 @@
     ["tech help", "Tech help"], ["repair and mending", "Repair and mending"],
     ["bike repair", "Bike repair"], ["photography", "Photography"], ["event help", "Event help"],
   ];
-  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "unknown"])[1];
+  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "Unknown"])[1];
   const categoryLabel = (c) => ([...CATEGORIES, ...SERVICE_CATEGORIES].find(([v]) => v && v === c) || [c, c ? String(c) : "Uncategorized"])[1];
   const modeLabel = (m) => ({ sale: "Buy", borrow: "Borrow", service: "Service" })[m] || String(m);
   const isServiceCategory = (c) => SERVICE_CATEGORIES.some(([v]) => v === c);
@@ -120,6 +120,10 @@
         textarea.removeAttribute("aria-invalid");
       });
     });
+    try { textarea.value = sessionStorage.getItem("campus_request_draft") || textarea.value; } catch (_) {}
+    function saveQuery() { try {sessionStorage.setItem("campus_request_draft",textarea.value);} catch (_) {} }
+    textarea.addEventListener("input",saveQuery);
+    document.querySelectorAll("[data-example]").forEach(chip=>chip.addEventListener("click",saveQuery));
     textarea.addEventListener("input", () => { textError.textContent = ""; textarea.removeAttribute("aria-invalid"); });
 
     // ---- optional reference photo (validated here; sent only with the request)
@@ -226,9 +230,9 @@
 
       // Step 2: anything that still needs the user's decision stops here, on
       // the page, before a request exists: photo proposals to accept or
-      // dismiss, a missing description, or no buy/borrow choice.
+      // dismiss, ambiguous dates, a missing description, or no mode choice.
       const pendingProposals = (normalized.photo_proposals || []).length > 0;
-      if (pendingProposals || !text || !cleanModes(normalized.modes).length) {
+      if (pendingProposals || (normalized.ambiguous_dates || []).length || !text || !cleanModes(normalized.modes).length) {
         status.textContent = "";
         C.setBusy(submit, false);
         submitting = false;
@@ -245,7 +249,10 @@
         status.textContent = "";
         C.setBusy(submit, false);
         submitting = false;
-        if (C.isAuthError(err)) {
+        if (err instanceof api.ApiError && err.code === "validation_error") {
+          renderConfirmStep(text, normalized);
+          showNotice($("confirm-error"), C.errorMessage(err));
+        } else if (C.isAuthError(err)) {
           if (err.status === 401) api.setToken(null);
           showNotice(formError, authMessage(err));
         } else {
@@ -396,7 +403,7 @@
         creating = true;
         C.setBusy(findBtn, true, "Saving your request");
         try {
-          const request = (await api.post("/api/requests", requestBodyFrom(v, merged, descText))).request;
+          const request = (await postRequest(requestBodyFrom(v, merged, descText))).request;
           window.location.href = "/results/" + enc(request.id);
         } catch (err) {
           creating = false;
@@ -478,6 +485,13 @@
 
   // Direct creation from an interpretation that already has a mode (text
   // requests that skip the confirmation step).
+  const requestRetryKeys = new Map();
+  async function postRequest(body) {
+    const fingerprint = JSON.stringify(body);
+    if (!requestRetryKeys.has(fingerprint)) requestRetryKeys.set(fingerprint, crypto.randomUUID());
+    return api.post("/api/requests", body, { headers: { "Idempotency-Key": requestRetryKeys.get(fingerprint) } });
+  }
+
   async function createRequestFrom(text, normalized) {
     const modes = cleanModes(normalized.modes);
     const service = modes.length === 1 && modes[0] === "service";
@@ -499,25 +513,7 @@
       body.use_end = normalized.use_end || null;
       body.pickup_windows = [];
     }
-    try {
-      return (await api.post("/api/requests", body)).request;
-    } catch (err) {
-      if (!(err instanceof api.ApiError && err.code === "validation_error")) throw err;
-      // Interpreted values were rejected by the server. Keep the text, drop
-      // the rejected values, and tell the user on the results page.
-      const rejected = Object.keys(err.fields || {}).join(", ");
-      const retry = {
-        original_text: text,
-        normalized: Object.assign({}, normalized, {
-          budget_cents: null, max_deposit_cents: null, needed_by: null, use_start: null, use_end: null, area: null,
-          follow_up_questions: (normalized.follow_up_questions || []).concat(
-            "Some interpreted values were rejected by the server (" + (rejected || "unknown fields") + ") and were cleared. Please enter them."),
-        }),
-        modes: DEFAULT_MODES.slice(),
-        pickup_windows: [],
-      };
-      return (await api.post("/api/requests", retry)).request;
-    }
+    return (await postRequest(body)).request;
   }
 
   // =================================================================== RESULTS
@@ -1041,7 +1037,7 @@
     const pct = listing.collateral_percent;
     if (!Number.isInteger(value) || !Number.isInteger(pct)) return "Deposit proposal unknown (owner has not set value or percent)";
     const deposit = Math.round((value * pct) / 100);
-    return "Proposed deposit " + api.formatCents(deposit) + " (" + pct + "% of " + api.formatCents(value) + " agreed value). Simulated in this prototype.";
+    return "Proposed deposit " + api.formatCents(deposit) + " (" + pct + "% of " + api.formatCents(value) + " agreed value). ";
   }
 
   // ------------------------------------------------ interpretation form (shared)
@@ -1091,7 +1087,7 @@
       hint: "The most you would pay to buy, or as a rental fee." });
     F.max_deposit_cents = C.field({ id: "f-deposit", label: "Deposit you can afford", type: "text", prefix: "$", optional: true,
       attrs: { inputmode: "decimal" }, placeholder: "Unknown", value: C.centsToDollars(values.max_deposit_cents),
-      hint: "Separate from your budget. A free loan can still be unaffordable if the deposit is too high. Deposits are simulated in this prototype." });
+      hint: "Separate from your budget. A free loan can still be unaffordable if the deposit is too high." });
     if (values.budget_cents == null) markLabel(F.budget_cents, unknownBadge());
     if (values.max_deposit_cents == null) markLabel(F.max_deposit_cents, unknownBadge());
 
@@ -1104,6 +1100,16 @@
       if (ambiguousTargets.has(key) || ((meta.ambiguous || []).length && values[key])) markLabel(f, confirmBadge());
       else if (!values[key]) markLabel(f, unknownBadge());
     });
+
+    const dateReview = (meta.ambiguous || []).length ? C.el("input", { type: "checkbox", id: "f-date-review" }) : null;
+    const dateReviewError = C.el("p", { className: "field__error", role: "alert" });
+    const dateReviewPanel = dateReview ? C.el("fieldset", {},
+      C.el("legend", { text: "Confirm the dates" }),
+      C.el("ul", {}, (meta.ambiguous || []).map((a) => C.el("li", { text: String(a.text || "Ambiguous date") + (a.proposed ? " → " + api.formatTime(a.proposed) : " — choose a date or leave it unknown") }))),
+      C.el("label", { className: "choice" }, dateReview, C.el("span", { text: "I reviewed and corrected these dates, or left them unknown." })), dateReviewError) : null;
+    if (dateReview) {
+      [F.needed_by, F.use_start, F.use_end].forEach((f) => f.control.addEventListener("input", () => { dateReview.checked = false; }));
+    }
 
     F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "Unknown", value: values.area || "", attrs: { maxlength: 80 } });
     if (!values.area) markLabel(F.area, unknownBadge());
@@ -1128,6 +1134,7 @@
       preferredSpecs.root,
       C.el("div", { className: "field-row" }, F.budget_cents.root, F.max_deposit_cents.root),
       C.el("div", { className: "field-row" }, F.needed_by.root, F.use_start.root, F.use_end.root),
+      dateReviewPanel,
       serviceOnly,
     );
 
@@ -1163,6 +1170,12 @@
       const modes = Array.from(container.querySelectorAll('input[name="modes"]:checked')).map((i) => i.value);
       const service = modes.includes("service");
       let bad = false;
+      dateReviewError.textContent = "";
+      if (dateReview && !dateReview.checked) {
+        dateReviewError.textContent = "Review the dates, then confirm them.";
+        dateReview.setAttribute("aria-invalid", "true");
+        bad = true;
+      } else if (dateReview) dateReview.removeAttribute("aria-invalid");
       if (!modes.length) { F.modes.setError("Choose buy, borrow, or a service."); bad = true; }
       if (service && modes.length > 1) { F.modes.setError("A service cannot be combined with buy or borrow."); bad = true; }
       if (service && !isServiceCategory(F.category.value())) { F.category.setError("Choose a supported service category."); bad = true; }
@@ -1272,6 +1285,17 @@
     const authGate = $("auth-gate");
     let submitting = false;
     let unsaved = false;
+    let draftId = null;
+    let resumeSpots = [];
+    const listingCreationKey = crypto.randomUUID();
+    async function publishDraft(body) {
+      const draft = draftId ? (await api.patch("/api/listings/" + enc(draftId), body)).listing : (await api.post("/api/listings", body,{headers:{"Idempotency-Key":listingCreationKey}})).listing;
+      draftId = draft.id;
+      status.textContent = "Uploading and publishing…";
+      const result = await api.upload("/api/listings/" + enc(draftId) + "/publish", "photo", F.photo.control.files[0]);
+      unsaved = false;
+      window.location.href = "/listings/" + enc(result.listing.id) + "?created=1";
+    }
     form.addEventListener("input", () => { unsaved = true; });
     form.addEventListener("change", () => { unsaved = true; });
     window.addEventListener("beforeunload", (event) => {
@@ -1291,7 +1315,7 @@
     F.title = C.field({ id: "l-title", label: "Title (required)", required: true, placeholder: "e.g. Navy suit, 40R", attrs: { maxlength: 120 } });
     F.category = C.field({ id: "l-category", label: "Category (required)", type: "select", required: true,
       options: CATEGORIES.map(([value, label]) => ({ value, label: value ? label : "Choose a category" })) });
-    F.description = C.field({ id: "l-description", label: "Description", type: "textarea", optional: true, rows: 4, attrs: { maxlength: 4000 },
+    F.description = C.field({ id: "l-description", label: "Description (required)", type: "textarea", required: true, rows: 3, attrs: { maxlength: 4000 },
       placeholder: "What it is, how it has been used, anything a borrower or buyer should know." });
     F.condition = C.field({ id: "l-condition", label: "Condition", type: "select", options: CONDITIONS.map(([value, label]) => ({ value, label })), hint: "Leave as unknown if you are not sure." });
     const specs = kvEditor("Specifications", "Size, model, dimensions, color: anything a matcher should check exactly (e.g. jacket_size = 40R).", {}, { badge: false });
@@ -1300,8 +1324,8 @@
     F.known_defects = C.field({ id: "l-defects", label: "Known defects", type: "textarea", optional: true, rows: 2, placeholder: "One per line, e.g. missing one cuff button", hint: "One per line. Be honest; condition is confirmed at handoff." });
 
     // ---- photo
-    F.photo = C.field({ id: "l-photo", label: "Photo", type: "file", optional: true, attrs: { accept: "image/jpeg,image/png,image/webp" },
-      hint: "JPEG, PNG, or WebP up to 5 MB. Uploaded after the listing is created." });
+    F.photo = C.field({ id: "l-photo", label: "Photo (required)", type: "file", required: true, attrs: { accept: "image/jpeg,image/png,image/webp" },
+      hint: "JPEG, PNG, or WebP up to 5 MB. Your listing stays private until this succeeds." });
     const photoPreview = C.el("div", { className: "photo-preview", hidden: true }, C.el("img", { alt: "Preview of the chosen photo" }));
     F.photo.root.append(photoPreview);
     F.photo.control.addEventListener("change", () => {
@@ -1345,11 +1369,11 @@
 
     // ---- borrow terms
     F.rental_fee_cents = C.field({ id: "l-rental-fee", label: "Rental fee", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "0", value: "0",
-      hint: "$0 means an explicit free loan. This is payment for use, separate from the deposit." });
-    F.proposed_item_value_cents = C.field({ id: "l-item-value", label: "Agreed item value", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 200",
-      hint: "Required for borrowing. The reference value if the item is not returned; not a market guarantee." });
+      hint: "Payment for use; $0 is a free loan." });
+    F.proposed_item_value_cents = C.field({ id: "l-item-value", label: "Item value (required)", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 200",
+      hint: "Proposed value, separate from the deposit." });
     F.collateral_percent = C.field({ id: "l-percent", label: "Deposit you propose", type: "number", value: "100", attrs: { min: 0, max: 100, step: 1, inputmode: "numeric" },
-      hint: "Percent of the agreed value, 0 to 100. Default 100%. Lowering it is voluntary and leaves the rest of the value at your risk." });
+      hint: "Percentage of the proposed value, 0 to 100. Default 100%. A lower deposit leaves part of the value uncovered." });
     const slider = C.el("input", { type: "range", min: 0, max: 100, step: 1, value: 100, "aria-label": "Deposit percent slider", className: "range" });
     F.collateral_percent.root.insertBefore(slider, F.collateral_percent.root.querySelector(".field__error"));
     const depositCalc = C.el("div", { className: "deposit-calc", "aria-live": "polite" });
@@ -1384,19 +1408,19 @@
         C.clear(spotsBox);
         if (!meeting_spots.length) { C.state.empty(spotsBox, { title: "No meeting spots yet", message: "You can still post; spots can be agreed in the exchange." }); return; }
         spotsBox.append(C.el("div", { className: "choices" }, meeting_spots.map((s) =>
-          choiceInput("meeting_spot_ids", s.id, s.label + " (" + s.public_area + ")", false).label)));
+          choiceInput("meeting_spot_ids", s.id, s.label + " (" + s.public_area + ")", resumeSpots.includes(s.id)).label)));
       } catch (err) {
         C.state.error(spotsBox, err, { title: "Could not load meeting spots", retry: loadSpots });
       }
     }
 
     const itemOnly = C.el("div", { className: "listing-item-fields" },
-      F.condition.root,
+      F.condition.root, specs.root,
       C.el("details", { className: "listing-disclosure", id: "listing-optional-details" },
-        C.el("summary", { text: "Specifications, accessories, and defects" }),
-        specs.root, F.accessories.root, F.known_defects.root));
+        C.el("summary", { text: "Accessories and defects (optional)" }),
+        F.accessories.root, F.known_defects.root));
     const photosSection = C.el("details", { className: "listing-disclosure listing-photo-section" },
-      C.el("summary", { text: "Photos (optional)" }), F.photo.root);
+      C.el("summary", { text: "Photo (required)" }), F.photo.root);
     const previewBox = C.el("div", { id: "l-service-preview" });
     fieldsBox.append(
       modesGroup,
@@ -1420,10 +1444,10 @@
       borrowGroup.hidden = service || !modeBorrow.input.checked;
       serviceGroup.hidden = !service;
       spotsGroup.hidden = service;        // meeting_spot_ids is rejected for services
-      F.description.root.querySelector(".field__optional").hidden = service; // description is required for a service
-      F.description.root.querySelector(".field__label span").textContent = service ? "Description (required)" : "Description";
+      // Description and image are required for every mode.
+      F.description.root.querySelector(".field__label span").textContent = "Description (required)";
       itemOnly.hidden = service;          // condition, photo, specs, accessories, defects
-      photosSection.hidden = service;
+      photosSection.hidden = false;
       F.category.root.hidden = service;   // item category is replaced by the service category
       // Hidden fields keep their draft values but are never sent for this kind.
       [itemOnly, photosSection, saleGroup, borrowGroup, serviceGroup, spotsGroup, F.category.root].forEach((group) => {
@@ -1497,7 +1521,7 @@
       if (Number.isNaN(pct)) pct = null;
       C.clear(depositCalc);
       if (value.cents == null || pct == null || pct < 0 || pct > 100) {
-        depositCalc.append(C.el("p", { className: "muted", text: "Enter the agreed value and a percent to see the proposed deposit." }));
+        depositCalc.append(C.el("p", { className: "muted", text: "Enter a value and percentage to see the proposed deposit." }));
         lowNote.hidden = true;
         return;
       }
@@ -1514,6 +1538,28 @@
     F.proposed_item_value_cents.control.addEventListener("input", updateDeposit);
     updateDeposit();
 
+    const resumeId = new URLSearchParams(location.search).get("draft");
+    if (resumeId) {
+      submitting = true; C.setBusy(submit,true,"Loading draft");
+      api.get("/api/listings/"+enc(resumeId)).then(({listing:l})=>{
+        if (l.status!=="draft") throw new Error("This listing is no longer a draft.");
+        draftId=l.id;resumeSpots=l.meeting_spot_ids||[];
+        for (const key of ["title","description","condition","category","service_duration_minutes","collateral_percent"])
+          if(F[key])F[key].control.value=l[key]??"";
+        for(const key of ["sale_price_cents","rental_fee_cents","proposed_item_value_cents","service_price_cents"])
+          F[key].control.value=l[key]==null?"":l[key]/100;
+        F.service_category.control.value=l.category;
+        modeSale.input.checked=l.allowed_modes.includes("sale");modeBorrow.input.checked=l.allowed_modes.includes("borrow");modeService.input.checked=l.allowed_modes.includes("service");syncModes();
+        specs.setValues(l.specifications||{});windowsEditor.setValues(l.service_available_windows||[]);
+        F.accessories.control.value=(l.accessories||[]).join("\n");F.known_defects.control.value=(l.known_defects||[]).join("\n");
+        F.available_from.control.value=C.isoToLocal((l.availability||{}).available_from)||"";
+        F.available_until.control.value=C.isoToLocal((l.availability||{}).available_until)||"";
+        F.availability_notes.control.value=(l.availability||{}).notes||"";
+        spotsBox.querySelectorAll("input").forEach(i=>{i.checked=resumeSpots.includes(i.value);});
+        status.textContent="Private draft restored. Choose an image to publish.";
+      }).catch(err=>showNotice(errorBox,C.errorMessage(err))).finally(()=>{submitting=false;C.setBusy(submit,false);refreshGate();});
+    }
+
     // ---- submit
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1522,6 +1568,8 @@
       Object.values(F).forEach((f) => f.clearError && f.clearError());
 
       let bad = false;
+      if (!F.description.value().trim()) { F.description.setError("Add a description."); bad = true; }
+      if (!F.photo.control.files[0]) { F.photo.setError("Choose an image before publishing."); photosSection.open = true; bad = true; }
       const title = F.title.value().trim();
       if (!title) { F.title.setError(isServiceMode() ? "Give the service a title." : "Give the item a title."); bad = true; }
 
@@ -1556,8 +1604,7 @@
         C.setBusy(submit, true, "Saving service");
         status.textContent = "Saving service…";
         try {
-          const listing = (await api.post("/api/listings", serviceBody)).listing;
-          window.location.href = "/listings/" + enc(listing.id) + "?created=1";
+          await publishDraft(serviceBody);
         } catch (err) {
           submitting = false; C.setBusy(submit, false); status.textContent = "";
           if (err instanceof api.ApiError && err.code === "validation_error") {
@@ -1629,7 +1676,7 @@
       status.textContent = "Saving listing…";
       let listing;
       try {
-        listing = (await api.post("/api/listings", body)).listing;
+        await publishDraft(body);
       } catch (err) {
         submitting = false;
         C.setBusy(submit, false);
@@ -1645,13 +1692,7 @@
         }
         return;
       }
-      let photoFailed = false;
-      if (file) {
-        status.textContent = "Uploading photo…";
-        try { await api.upload("/api/listings/" + enc(listing.id) + "/photo", "photo", file); }
-        catch (err) { photoFailed = true; C.toast("Listing saved, but the photo upload failed: " + C.errorMessage(err), "error", 6000); }
-      }
-      window.location.href = "/listings/" + enc(listing.id) + (photoFailed ? "?photo=failed" : "?created=1");
+
     });
 
     function lines(text) { return String(text || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean); }
@@ -1679,6 +1720,7 @@
       rows, C.el("div", { style: { marginTop: "8px" } }, add), error);
     const editor = {
       root, control: rows,
+      setValues(windows) { rows.replaceChildren();if(windows.length)windows.forEach(w=>addRow(w.start,w.end));else addRow(); },
       read() {
         editor.clearError();
         const values = [];
@@ -1784,7 +1826,7 @@
       // Owner: add or replace the photo here; the server swaps the file and
       // the page reloads from the returned listing.
       let photoActions = null;
-      if (isMine) {
+      if (isMine && !["reserved","sold","draft"].includes(listing.status)) {
         const btn = C.button({ label: listing.public_photo_url ? "Replace photo" : "Add photo", size: "sm", variant: listing.public_photo_url ? "default" : "primary" });
         btn.addEventListener("click", () => openPhotoDialog(listing, btn, () => load()));
         photoActions = C.el("div", { className: "detail-photo-actions" }, btn,
@@ -1806,7 +1848,7 @@
       if (allowed.includes("sale")) row("Sale price", api.formatCents(listing.sale_price_cents));
       if (allowed.includes("borrow")) {
         row("Rental fee", listing.rental_fee_cents === 0 ? "Free loan ($0.00)" : api.formatCents(listing.rental_fee_cents));
-        row("Agreed item value", api.formatCents(listing.proposed_item_value_cents));
+        row("Proposed item value", api.formatCents(listing.proposed_item_value_cents));
         const value = listing.proposed_item_value_cents, pct = listing.collateral_percent;
         if (Number.isInteger(value) && Number.isInteger(pct)) {
           const deposit = Math.round((value * pct) / 100);
@@ -1837,7 +1879,7 @@
       const side = C.el("div", { className: "stack" },
         C.el("section", { className: "card card--sky", "aria-labelledby": "terms-heading" },
           C.el("h2", { id: "terms-heading", text: "Terms" }), terms,
-          C.simulationNotice()),
+          null),
         C.el("section", { className: "card", "aria-labelledby": "spots-heading" },
           C.el("h2", { id: "spots-heading", text: "Meeting spots" }), spotsNode),
         C.el("section", { className: "card card--leaf", "aria-labelledby": "owner-heading" },
@@ -1885,7 +1927,7 @@
         C.el("section", { className: "card card--sky", "aria-labelledby": "terms-heading" },
           C.el("h2", { id: "terms-heading", text: "Terms" }), terms,
           C.el("p", { className: "muted", style: { marginTop: "var(--space-3)" }, text: "Services have no deposit, collateral, or agreed item value." }),
-          C.simulationNotice("Simulated: payment for services is not collected or charged in this prototype.")),
+          null),
         C.el("section", { className: "card card--leaf", "aria-labelledby": "owner-heading" },
           C.el("h2", { id: "owner-heading", text: "Provider" }),
           C.el("div", { className: "cluster" }, C.el("strong", { text: owner.display_name || "Unknown" }), C.profileBadge(owner)),
@@ -1905,6 +1947,7 @@
       const MODE_LABEL = { sale: "Buy it", borrow: "Borrow it", service: "Book a session" };
       const allowed = (listing.allowed_modes || []).filter((m) => MODE_LABEL[m]);
       const isMine = auth.me && auth.me.id === listing.owner_id;
+      const exchangeCreationKey=crypto.randomUUID();
       const box = C.el("div", { className: "start-exchange stack--tight" });
       const hint = (text) => C.el("p", { className: "muted", id: "start-hint", text });
 
@@ -1991,7 +2034,7 @@
         const body = { listing_id: listing.id, mode };
         if (sourceId) body.source_request_id = sourceId;
         try {
-          const res = await api.post("/api/exchanges", body);
+          const res = await api.post("/api/exchanges",body,{headers:{"Idempotency-Key":exchangeCreationKey}});
           const id = res && res.exchange && res.exchange.id;
           if (!id) { fail("The server did not return an exchange id. Check My exchanges before trying again.", C.button({ label: "My exchanges", size: "sm", href: "/exchanges" })); return; }
           statusLine.textContent = "Opening your exchange…";
@@ -2155,7 +2198,7 @@
       if (!service && (listing.allowed_modes || []).includes("borrow")) price.append(C.el("div", {}, C.el("span", { className: "price", text: listing.rental_fee_cents === 0 ? "Free loan" : api.formatCents(listing.rental_fee_cents) + " fee" }), C.el("span", { className: "muted", text: " · value " + api.formatCents(listing.proposed_item_value_cents) })));
 
       const actions = C.el("span", { className: "cluster" });
-      actions.append(C.button({ label: "View", size: "sm", href: "/listings/" + enc(listing.id) }));
+      actions.append(C.button({ label: listing.status === "draft" ? "Finish publishing" : "View", size: "sm", href: listing.status === "draft" ? "/listings/new?draft="+enc(listing.id) : "/listings/" + enc(listing.id) }));
       // Photo: items only (services show their category icon). Add from the
       // placeholder, replace from the actions; both open the same dialog.
       const media = cardMedia(listing);
@@ -2165,11 +2208,11 @@
         const next = root.querySelector('[data-photo-for="' + updated.id + '"]');
         if (next) next.focus();
       };
-      if (!service && listing.public_photo_url) {
+      if (!["reserved", "sold", "draft"].includes(listing.status) && listing.public_photo_url) {
         const btn = C.button({ label: "Replace photo", size: "sm", attrs: { "data-photo-for": listing.id } });
         btn.addEventListener("click", () => openPhotoDialog(listing, btn, onUploaded));
         actions.append(btn);
-      } else if (!service) {
+      } else if (!["reserved", "sold", "draft"].includes(listing.status)) {
         const add = C.button({ label: "Add photo", size: "sm", variant: "primary", attrs: { className: "btn btn--sm btn--primary media-action", "data-photo-for": listing.id, "aria-label": "Add a photo to " + listing.title } });
         add.addEventListener("click", () => openPhotoDialog(listing, add, onUploaded));
         media.placeholder.action = add;
@@ -2422,10 +2465,20 @@
     if (entries.length) entries.forEach(([k, v]) => addRow(k, v)); else addRow();
     const add = C.button({ label: "+ Add another", size: "sm", onClick: () => { const r = addRow(); r.querySelector("input").focus(); } });
     const legend = C.el("legend", {}, title + " ", (entries.length || opts.badge === false) ? null : C.badge("None known", "neutral"));
-    const root = C.el("fieldset", {}, legend, C.el("p", { className: "field__hint", text: hint }), rows, C.el("div", { style: { marginTop: "8px" } }, add), error);
+    const summary = C.el("summary", {text:title});
+    const root = C.el("details", {className:"spec-disclosure"}, summary,
+      C.el("fieldset", {}, legend, C.el("p", { className: "field__hint", text: hint }), rows, add, error));
+    function updateSummary() {
+      const pairs = Array.from(rows.querySelectorAll(".kv-row")).map(r => {
+        const [k,v] = r.querySelectorAll("input");return k.value.trim() && v.value.trim() ? k.value.trim()+": "+v.value.trim() : "";
+      }).filter(Boolean);
+      summary.textContent = title + (pairs.length ? " — " + pairs.slice(0,2).join(", ") + (pairs.length>2?" +"+(pairs.length-2):"") : " (optional)");
+    }
+    root.addEventListener("input",updateSummary);root.addEventListener("click",()=>queueMicrotask(updateSummary));updateSummary();
     return {
       root,
       control: rows,
+      setValues(values) { rows.replaceChildren();const entries=Object.entries(values);if(entries.length)entries.forEach(([k,v])=>addRow(k,v));else addRow();updateSummary(); },
       add(key, value) {
         // Fill the first empty row if there is one, else append.
         const empty = Array.from(rows.querySelectorAll(".kv-row")).find((r) => { const [k, v] = r.querySelectorAll("input"); return !k.value && !v.value; });
@@ -2442,7 +2495,7 @@
         });
         return out;
       },
-      setError(m) { error.textContent = m || ""; },
+      setError(m) { error.textContent = m || ""; if(m) root.open=true; },
       clearError() { error.textContent = ""; },
     };
   }

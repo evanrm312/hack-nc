@@ -86,4 +86,16 @@ def create_listing(client, headers, **overrides):
     body = {**LISTING_BODY, **overrides}
     resp = client.post("/api/listings", json=body, headers=headers)
     assert resp.status_code == 201, resp.get_json()
-    return resp.get_json()["listing"]
+    return publish_listing(client, headers, resp.get_json()["listing"])
+
+
+def publish_listing(client, headers, listing):
+    from io import BytesIO
+    from PIL import Image
+    photo = BytesIO()
+    Image.new("RGB", (3, 3), "blue").save(photo, format="PNG")
+    photo.seek(0)
+    response = client.post(f"/api/listings/{listing['id']}/publish", headers=headers,
+                           data={"photo": (photo, "photo.png")})
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()["listing"]

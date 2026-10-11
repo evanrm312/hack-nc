@@ -7,15 +7,17 @@ from datetime import datetime, timedelta, timezone
 from flask import jsonify
 
 from ..auth import current_profile
+from ..idempotency import creation, commit_creation
 from ..db import db, utcnow
 from ..errors import ApiError, forbidden, not_found, validation_error
-from ..models import Exchange, Listing, Message, NeedRequest, OfferRevision
+from ..models import Exchange, Listing, Message, NeedRequest, OfferRevision, MeetingSpot, Profile
 from ..reservation import release_listing, reserve_listing
 from ..validation import FieldErrors, datetime_utc, json_body, money_cents, string
 
 
 _ITEM_TERMS = ("sale_price_cents", "rental_fee_cents", "agreed_item_value_cents",
                "deposit_cents", "collateral_percent", "lower_deposit_acknowledged",
+               "proposed_item_value_cents", "meeting_spot_id", "meeting_spot_ids", "pickup_windows", "return_windows",
                "condition", "condition_snapshot", "evidence", "evidence_ids",
                "handoff", "pickup", "return",
                "pickup_meeting_spot_id", "pickup_at", "return_meeting_spot_id",
@@ -40,7 +42,7 @@ def _require_service(exchange_id: str) -> Exchange:
 
 def _lock_service(exchange_id: str) -> Exchange:
     exchange = _require_service(exchange_id)
-    db.session.execute(db.select(Exchange).where(Exchange.id == exchange_id).with_for_update()).scalar_one()
+    db.session.execute(db.update(Exchange).where(Exchange.id == exchange_id).values(updated_at=Exchange.updated_at))
     db.session.refresh(exchange)
     return exchange
 
@@ -68,7 +70,9 @@ def _detail(exchange: Exchange) -> dict:
     offer = _current_offer(exchange)
     return {"fixture": False, "exchange": exchange.to_dict(),
             "current_offer": offer.to_dict() if offer else None,
-            "offers": [row.to_dict() for row in exchange.offers]}
+            "offers": [row.to_dict() for row in exchange.offers],
+            "listing": db.session.get(Listing,exchange.listing_id).to_dict(),
+            "participants": [db.session.get(Profile,p).to_public_dict() for p in exchange.participant_ids]}
 
 
 def list_for_caller():
@@ -82,6 +86,8 @@ def list_for_caller():
 
 def create():
     body = json_body()
+    existing,key,fingerprint=creation(Exchange,"requester_id",current_profile().id,body)
+    if existing: return jsonify({"exchange":existing.to_dict(),"current_offer":_current_offer(existing).to_dict() if _current_offer(existing) else None}),201
     if body.get("mode") != "service":
         raise validation_error({"mode": "must be service"})
     for field in _ITEM_TERMS:
@@ -107,9 +113,9 @@ def create():
             raise ApiError(409, "request_closed", "This request is closed")
     exchange = Exchange(listing_id=listing.id, owner_id=listing.owner_id,
                         requester_id=requester_id, source_request_id=source_id,
-                        mode="service", status="negotiating")
+                        mode="service", status="negotiating",creation_key=key,creation_fingerprint=fingerprint)
     db.session.add(exchange)
-    db.session.commit()
+    exchange=commit_creation(exchange,"requester_id")
     return jsonify({"exchange": exchange.to_dict(), "current_offer": None}), 201
 
 
@@ -132,9 +138,12 @@ def post_message(exchange_id: str):
     errors = FieldErrors()
     message = string(body.get("body"), "body", errors, required=True, max_len=4000)
     errors.raise_if_any()
-    row = Message(exchange_id=exchange.id, sender_id=current_profile().id, body=message)
+    existing,key,fingerprint=creation(Message,"sender_id",current_profile().id,{"exchange_id":exchange.id,"body":message})
+    if existing: return jsonify({"message":existing.to_dict()}),201
+    row = Message(exchange_id=exchange.id, sender_id=current_profile().id, body=message,
+                  creation_key=key,creation_fingerprint=fingerprint)
     db.session.add(row)
-    db.session.commit()
+    row=commit_creation(row,"sender_id")
     return jsonify({"message": row.to_dict()}), 201
 
 
@@ -154,14 +163,34 @@ def offer(exchange_id: str):
     scheduled_at = datetime_utc(body.get("service_scheduled_at"), "service_scheduled_at", errors)
     if scheduled_at is None and body.get("service_scheduled_at") is None:
         errors.add("service_scheduled_at", "required")
+    delivery = body.get("service_delivery", "remote")
+    spot_id = body.get("service_meeting_spot_id")
+    if delivery not in ("remote", "in_person"):
+        errors.add("service_delivery", "must be remote or in_person")
+    if delivery == "in_person":
+        spot = db.session.get(MeetingSpot, spot_id) if isinstance(spot_id,str) else None
+        if spot is None or not spot.is_active:
+            errors.add("service_meeting_spot_id", "choose an active catalog meeting spot")
+    elif spot_id is not None:
+        errors.add("service_meeting_spot_id", "not used for remote services")
     errors.raise_if_any()
     listing = db.session.get(Listing, exchange.listing_id)
     if not _fits_window(listing, scheduled_at, duration):
         raise validation_error({"service_scheduled_at": "must fit an available time window"})
+    current = _current_offer(exchange)
+    current_time = current.service_scheduled_at if current else None
+    if current_time is not None and current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    if current and (current.service_price_cents, current.service_duration_minutes,
+                    current_time, current.service_delivery or "remote", current.service_meeting_spot_id) == (
+                    price, duration, scheduled_at, delivery, spot_id):
+        # Retried unchanged terms preserve both acceptances and emit no event.
+        db.session.commit()
+        return jsonify({"offer": current.to_dict(), "exchange": exchange.to_dict()})
     version = exchange.current_offer_revision + 1
     row = OfferRevision(exchange=exchange, version=version, created_by=current_profile().id,
                         service_price_cents=price, service_duration_minutes=duration,
-                        service_scheduled_at=scheduled_at)
+                        service_scheduled_at=scheduled_at,service_delivery=delivery,service_meeting_spot_id=spot_id)
     exchange.current_offer_revision = version
     db.session.add(row)
     db.session.commit()
@@ -185,6 +214,10 @@ def accept(exchange_id: str):
     listing = db.session.get(Listing, exchange.listing_id)
     if not _fits_window(listing, row.service_scheduled_at, row.service_duration_minutes):
         raise ApiError(409, "schedule_unavailable", "Service availability changed; propose a new time")
+    if row.service_delivery == "in_person":
+        spot = db.session.get(MeetingSpot, row.service_meeting_spot_id)
+        if spot is None or not spot.is_active:
+            raise validation_error({"service_meeting_spot_id":"choose an active catalog spot"})
     field = "owner_accepted_at" if current_profile().id == exchange.owner_id else "requester_accepted_at"
     if getattr(row, field) is None:
         setattr(row, field, utcnow())

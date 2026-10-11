@@ -76,7 +76,9 @@
       body = JSON.stringify(body);
     }
 
-    const response = await fetch(path, { method, headers, body });
+    let response;
+    try { response = await fetch(path, { method, headers, body }); }
+    catch (_) { throw new ApiError(503,{error:{code:"network_unavailable",message:"Could not reach Campus Current. Your session is saved; try again."}}); }
     const text = await response.text();
     let data = null;
     if (text) {
@@ -95,6 +97,10 @@
     return data;
   }
 
+  if (window.addEventListener) window.addEventListener("storage", event => {
+    if (event.key === TOKEN_KEY) document.dispatchEvent(new CustomEvent("campus:auth-changed"));
+  });
+
   window.api = {
     ApiError,
     getToken,
@@ -102,7 +108,8 @@
     setSessionProvider,
     sessionToken,
     get: (path) => request("GET", path),
-    post: (path, body) => request("POST", path, { body: body === undefined ? {} : body }),
+    post: (path, body, options) => request("POST", path, Object.assign({},options,{body: body === undefined ? {} : body})),
+    put: (path, body) => request("PUT", path, {body}),
     patch: (path, body) => request("PATCH", path, { body }),
     del: (path) => request("DELETE", path),
     upload: (path, field, file) => {

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import logging
+import random
 import os
 import re
 import time
@@ -38,7 +39,7 @@ def _extract(text, local_now, timezone, key, *, contents=None, instruction=None,
     with genai.Client(api_key=key, http_options=types.HttpOptions(
             timeout=ATTEMPT_TIMEOUT_MS,
             retry_options=types.HttpRetryOptions(attempts=1))) as client:
-        for model in _model_order():
+        for attempt, model in enumerate(_model_order()):
             remaining_ms = int((deadline - time.monotonic()) * 1000)
             # Gemini rejects deadlines shorter than ten seconds.
             if remaining_ms < ATTEMPT_TIMEOUT_MS:
@@ -52,8 +53,10 @@ def _extract(text, local_now, timezone, key, *, contents=None, instruction=None,
                         response_json_schema=schema.model_json_schema(), temperature=0,
                         http_options=types.HttpOptions(timeout=min(ATTEMPT_TIMEOUT_MS, remaining_ms))))
             except errors.APIError as error:
-                if error.code not in (429, 503):
+                if error.code != 429 and error.code != 408 and not 500 <= error.code < 600:
                     raise
+                # Bounded backoff; the existing shared deadline still caps total work.
+                time.sleep(min(2 ** attempt, 2) + random.uniform(0, .2))
                 continue
             # Invalid structured output is non-retryable, including malformed JSON.
             extracted = schema.model_validate_json(response.text)

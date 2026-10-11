@@ -39,7 +39,6 @@
     </main>
     <footer class="aero-footer">
       <span>Buy, borrow, and share on campus.</span>
-      <span>Prototype. Payments and deposits are simulated.</span>
       <details class="asset-credits"><summary>Photo &amp; font credits</summary><p>Sky: <a href="https://www.pexels.com/photo/blue-skies-53594/">Pixabay / Pexels</a>. Leaves: <a href="https://www.pexels.com/photo/green-leaves-1154623/">Free Nature Stock / Pexels</a>. Both photographs are marked CC0 on their source pages. <a href="https://github.com/googlefonts/opensans">Open Sans by Steve Matteson and the Open Sans Project Authors</a>, SIL Open Font License 1.1.</p></details>
     </footer>
   </div>
@@ -63,8 +62,10 @@
       <a class="task-button" href="{{ href }}"{% if request.path == href or (href == '/exchanges' and request.path.startswith('/exchanges/')) %} aria-current="page"{% elif href == '/' and (request.path.startswith('/results/') or (request.path.startswith('/listings/') and request.path not in ['/listings/mine', '/listings/new'])) %} aria-current="location"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
       {% endfor %}
     </div>
+    <button type="button" id="notifications-toggle" aria-expanded="false" aria-controls="notifications-panel" hidden>Notifications</button>
     <a class="taskbar__account"{% if request.path == '/sign-in' %} aria-current="page"{% endif %} href="{{ url_for('pages.sign_in') }}">{{ icon('user') }}<span id="nav-sign-in">Sign In</span></a>
   </nav>
+  <section id="notifications-panel" class="notification-panel" aria-label="Notifications" hidden><h2>Notifications</h2><button type="button" data-read-all>Mark all read</button><p data-error role="status"></p><div data-notifications></div></section>
   <script>window.CAMPUS_CONFIG = {{ public_config | tojson }};</script>
   <script src="{{ url_for('static', filename='js/api.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
@@ -72,6 +73,9 @@
   <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
   <script src="{{ url_for('static', filename='js/marketplace.js') }}"></script>
   <script src="{{ url_for('static', filename='js/discovery.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/meetings.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/profile.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

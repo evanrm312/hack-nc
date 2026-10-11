@@ -430,3 +430,35 @@ dialog.dialog[open] { display: flex; flex-direction: column; }
   .brand { font-size: 21px; }
   .sidebar-nature { display: none; }
 }
+/* Completion pass: restrained chrome, compact work areas, real private panels. */
+.spec-disclosure { margin: .65rem 0; border: 1px solid #a6c8d4; border-radius: 12px; background: #f3fafbcf; }
+.spec-disclosure > summary { padding: .65rem .8rem; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.spec-disclosure fieldset { border: 0; padding: .5rem .8rem .8rem; margin: 0; }
+.spec-disclosure fieldset > legend { display: none; }
+.notification-panel { position: fixed; right: 1rem; bottom: 80px; width: min(440px,calc(100vw - 2rem)); max-height: min(550px,70vh); overflow: auto; z-index: 110; background: #edf8fbf5; border: 1px solid white; border-radius: 18px; padding: 1rem; box-shadow: 0 10px 30px #103f6066,inset 0 1px white; }
+.notification-panel h2 { margin: 0 0 .5rem; }
+.notification-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem 0; border-bottom: 1px solid #b6d2d9; }
+.notification-row .unread { font-weight: 700; }
+.notification-row button { font-size: .85rem; padding: .35rem .55rem; white-space: nowrap; }
+#notifications-toggle { font-size: .85rem; min-height: 40px; }
+.campus-map { position: relative; width: min(100%,420px); aspect-ratio: 1; background: #ddeddd; overflow: hidden; border: 1px solid #a5c5ce; border-radius: 16px; margin: .7rem 0; isolation: isolate; }
+.campus-map[data-unavailable]::after { content: 'Map tiles unavailable. Use the list below.'; position:absolute; top:0; left:0; right:0; background:white; padding:.5rem; z-index:4; }
+.map-credit { position:absolute; bottom:0; right:0; background:#fffffff5; padding:.2rem .35rem; font-size:.75rem; z-index:5; }
+.map-marker { position:absolute; transform:translate(-50%,-50%); width:32px; height:32px; padding:0; border-radius:50%; background:linear-gradient(#ecfaff,#1678a0); color:#062d42; border:2px solid white; box-shadow:0 2px 4px #143e5c66; z-index:3; }
+.map-marker[aria-pressed=true], .meeting-option button[aria-pressed=true] { outline:3px solid #277748; }
+.meeting-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:.7rem; }
+.meeting-option { padding:.7rem; border-bottom:1px solid #abcbd0; min-width:0; }
+.meeting-option h3 { font-size:1rem; margin:0 0 .25rem; }
+.meeting-option p { margin:.3rem 0; }
+.meeting-option details { font-size:.9rem; margin:.5rem 0; }
+#room-content .card { padding:1rem; }
+#profile-form { display:grid; gap:.4rem; }
+#profile-form button { justify-self:start; }
+@media(max-width:700px) { #notifications-toggle { max-width:90px; font-size:.72rem; padding:.3rem; } .notification-panel { bottom:calc(85px + env(safe-area-inset-bottom)); } .taskbar { gap:3px; } }
+html { scroll-padding-block-end: 110px; }
+main :is(input,select,textarea,button,a,summary) { scroll-margin-block: 90px; }
+.meeting-picker { display:grid; grid-template-columns:minmax(230px,.85fr) minmax(0,1.15fr); gap:.8rem; align-items:start; }
+.meeting-picker > p { grid-column:1/-1; }
+.meeting-picker .campus-map { width:100%; margin:0; }
+.meeting-picker .meeting-list { grid-template-columns:1fr; max-height:420px; overflow:auto; }
+@media(max-width:700px) { .meeting-picker { grid-template-columns:1fr; } .meeting-picker .campus-map { max-width:320px; justify-self:center; } .meeting-picker .meeting-list { max-height:none; } }

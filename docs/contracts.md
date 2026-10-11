@@ -83,8 +83,10 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 - `allowed_modes`: non-empty subset of `["sale", "borrow"]` for items, or exactly
   `["service"]` for a service. Services cannot be combined with item modes.
 - `condition`: one of `new`, `like_new`, `good`, `fair`, `worn`, or null.
-- `status`: `available` | `reserved` | `sold` | `withdrawn`. Only the reservation
-  helper moves a listing to `reserved`/`sold`; owners may set `available`/`withdrawn`.
+- `status`: `draft` | `available` | `reserved` | `sold` | `withdrawn`. New listings
+  remain private drafts until validated image publication. Only the reservation
+  helper moves a listing to `reserved`/`sold`; owners may set `available`/`withdrawn`
+  on editable published listings. PATCH cannot publish a draft.
 - `"sale"` requires `sale_price_cents`; `"borrow"` requires
   `proposed_item_value_cents`. For borrow, a missing `rental_fee_cents` becomes
   `0` (explicit free loan) and a missing `collateral_percent` becomes `100`.
@@ -116,7 +118,7 @@ body:
 }
 ```
 
-Example `201 {"listing": ...}` record:
+Example published `200 {"listing": ...}` record after photo publication:
 
 ```json
 {
@@ -432,32 +434,35 @@ Body `{"display_name": "Tar Heel"}` → `200 {"profile": Profile}`.
 
 ### `GET /api/listings` (public)
 
-Query: `status` (default `available`; `all` for every status), `category`,
-`mode` (`sale`|`borrow`), `owner_id`. → `200 {"listings": [Listing]}`.
+Query: `status` (default `available`; `all` for public statuses plus the caller’s private drafts), `category`,
+`mode` (`sale`|`borrow`|`service`), `owner_id`. → `200 {"listings": [Listing]}`.
 
 ### `POST /api/listings` (verified)
 
 Body: any Listing fields except `id`, `owner_id`, `owner`, `status`,
-`active_exchange_id`, `public_photo_url`, timestamps. Required: `title`,
-`category`, `allowed_modes`.
+`active_exchange_id`, `public_photo_url`, timestamps. Required for draft creation: `title`,
+`category`, `allowed_modes`, and applicable price/session terms. Publication also requires description and image (matrix below).
 
 ```json
 {"title": "Navy suit 40R", "category": "formalwear", "allowed_modes": ["borrow", "sale"], "sale_price_cents": 9000, "rental_fee_cents": 1500, "proposed_item_value_cents": 20000, "collateral_percent": 100, "specifications": {"type": "suit", "jacket_size": "40R"}, "condition": "good", "meeting_spot_ids": ["7d2e…"]}
 ```
 
-→ `201 {"listing": Listing}`; `400 validation_error` with per-field messages.
+→ `201 {"listing": Listing}` (private draft); `400 validation_error` with per-field messages.
 
-### `GET /api/listings/{id}` (public) → `200 {"listing": Listing}` | `404`.
+### `GET /api/listings/{id}` → `200 {"listing": Listing}` | `404`.
+
+Published records are public; drafts require the owner’s token and appear
+as `404` to everyone else.
 
 ### `PATCH /api/listings/{id}` (owner only)
 
-Same fields as create, partial; plus `"status": "available"|"withdrawn"`.
+Same fields as create, partial; published listings also accept `"status": "available"|"withdrawn"`. Drafts cannot change status through PATCH.
 → `200 {"listing": Listing}`; `403 forbidden` for a different user;
 `409 listing_locked` while reserved/sold.
 
 ### `POST /api/listings/{id}/photo` (owner only)
 
-Multipart field `photo` (JPEG/PNG/WebP by magic bytes, ≤ `MAX_UPLOAD_BYTES`).
+Multipart field `photo` (decoded JPEG/PNG/WebP, ≤ `min(MAX_UPLOAD_BYTES, 5 MiB)`). Reserved/sold/draft listings reject this replacement route.
 → `200 {"listing": Listing}`; `400 unsupported_image`; `413 payload_too_large`.
 
 ### `GET /media/public/{path}` (public) — listing photo bytes.
@@ -610,10 +615,10 @@ receive `403`. Exchange responses use `Cache-Control: private, no-store` and
 |---|---|---|---|
 | GET | `/api/exchanges` | — | `200 {"exchanges": [Exchange with listing summary]}` for all caller-owned or requested sale, borrow, and service exchanges; no mode parameter is needed |
 | POST | `/api/exchanges` | `{"listing_id":"…","mode":"sale"|"borrow"|"service","source_request_id":"…"?}` | `201 {"exchange": Exchange,"current_offer": OfferRevision}` for items; service starts with `current_offer: null` |
-| GET | `/api/exchanges/{id}` | — | Item: `exchange`, `current_offer`, `offers`, `simulation_notice`, `deposit_status`, `participants`, `confirmations`, `max_upload_bytes`; service: `fixture: false`, `exchange`, `current_offer`, `offers` |
+| GET | `/api/exchanges/{id}` | — | Item: `exchange`, `current_offer`, `offers`, `simulation_notice`, `deposit_status`, `participants`, `confirmations`, `max_upload_bytes`; service: `fixture: false`, `exchange`, `current_offer`, `offers`, `listing`, `participants` |
 | GET | `/api/exchanges/{id}/messages` | item: `?after=<iso>` optional | `200 {"messages":[Message]}` for items; service also includes `fixture:false` |
 | POST | `/api/exchanges/{id}/messages` | `{"body":"…"}` | `201 {"message":Message}` |
-| POST | `/api/exchanges/{id}/offers` | Item offer terms or service price, duration, scheduled UTC time | `201 {"offer":OfferRevision,"exchange":Exchange}`; a changed offer creates a revision and clears both acceptances |
+| POST | `/api/exchanges/{id}/offers` | Item offer terms or service price, duration, scheduled UTC time | `201 {"offer":OfferRevision,"exchange":Exchange}`; changed terms clear both acceptances; unchanged item/service terms return the existing revision with `200` |
 | POST | `/api/exchanges/{id}/accept` | `{"version":2,"lower_deposit_acknowledged":true?}` | `200 {"exchange":Exchange,"current_offer":OfferRevision}`; stale version `409 stale_offer`; competing reservation `409 reservation_conflict` |
 | POST | `/api/exchanges/{id}/complete` | Service only: `{"confirm":true}` | `200 {"exchange":Exchange}`; both independent confirmations complete a scheduled service; items get `409 invalid_transition` |
 | GET | `/api/exchanges/{id}/evidence` | — | Item: `200 {"evidence":[Evidence]}`; service: `409 invalid_transition` |
@@ -621,9 +626,9 @@ receive `403`. Exchange responses use `Cache-Control: private, no-store` and
 | GET | `/api/exchanges/{id}/evidence/{evidence_id}` | Item only: `?preview=1` optional | Private image bytes, or authenticated JSON `{"data_url":"data:image/jpeg;base64,..."}` preview; service: `409 invalid_transition` |
 | POST | `/api/exchanges/{id}/handoff` | Item only: `{"confirm":true,"accept_condition":true}` | After pickup evidence and both confirmations: sale → `completed`, borrow → `on_loan`; service: `409 invalid_transition` |
 | POST | `/api/exchanges/{id}/return` | Borrow only: `{"action":"initiate"|"accept"|"issue","reason":"…"?}` | Borrower before-return and owner after-return evidence precede mutual completion; issue → `disputed`; sale/service: `409 invalid_transition` |
-| POST | `/api/exchanges/{id}/cancel` | Service: `{"reason":"…"}` | Service `negotiating` or `scheduled` → `cancelled`; item endpoint remains `501 not_implemented` |
-| POST | `/api/exchanges/{id}/dispute` | Service: `{"reason":"…"}` | Service `scheduled` or `completed` → `disputed`; item endpoint remains `501 not_implemented` |
-| POST | `/api/exchanges/{id}/review` | — | `501 not_implemented` for now |
+| POST | `/api/exchanges/{id}/cancel` | Service: `{"reason":"…"}` | Service `negotiating` or `scheduled` → `cancelled`; items may cancel while negotiating/reserved before either pickup confirmation |
+| POST | `/api/exchanges/{id}/dispute` | Service: `{"reason":"…"}` | Service `scheduled` or `completed` → `disputed`; borrow items may dispute in return_pending with a specific reason |
+| POST | `/api/exchanges/{id}/review` | `stars`, five `structured_answers`, optional `comment` | Completed item exchange only, participant only; one review per participant, `201 {"review":Review}` |
 
 If `source_request_id` is supplied, it must identify the caller's request,
 have status `draft` or `open`, and include the selected exchange mode. Missing
@@ -718,3 +723,126 @@ def evaluate_price(price_cents: int, reference: dict | None) -> dict:
   `api.sessionToken()`, `api.formatCents`, `api.formatTime`; errors are
   `api.ApiError {status, code, fields}`. API calls await the current Supabase
   session on every page; `getToken()` is only a synchronous snapshot.
+
+## Completion branch contracts
+
+### Listing publication and required fields
+
+New listings are private `draft` records, invisible to other users and matching.
+Existing inventory is grandfathered without changing records, IDs or photos.
+`POST /api/listings` returns `201 {"listing":Listing}` with `status:"draft"`.
+A draft's detail and `status=all` owner collection require the owner's token;
+private draft responses are `private, no-store` with `nosniff`.
+
+| Kind | Required to publish | Optional |
+|---|---|---|
+| Sale | Title, category, description, sale price in integer cents, image | Unknown condition, specifications, accessories/defects, meeting preferences |
+| Borrow | Title, category, description, proposed item value in cents, image | Fee defaults explicitly to 0; collateral defaults to 100%; condition/specifications, accessories/defects, availability and meeting preferences |
+| Sale + borrow | Both sets of monetary requirements, title, category, description, image | Same item optional fields |
+| Service | Title, description, one of the eight service categories defined above, service price in cents, duration 1–1440 minutes, nonempty availability windows with one fitting the duration, image | No physical-item fields |
+
+Unknown condition/specifications remain unknown. Zero prices are valid.
+
+1. Create a validated draft with the existing JSON shape.
+2. `POST /api/listings/{id}/publish`, owner only, multipart `photo`.
+   All persisted terms are revalidated. The server reads at most
+   `min(MAX_UPLOAD_BYTES,5 MiB)+1` bytes and decodes actual JPEG/PNG/WebP
+   content (still images, maximum 16 megapixels). Only then is the image stored
+   and the listing made available. Success: `200 {"listing":Listing}`.
+3. Retrying publication of the same successfully published draft returns that
+   listing. Failed image validation leaves the draft private; commit failure
+   deletes the newly stored file. Partial local writes are removed; uncertain
+   remote upload results trigger deletion of that generated path. Storage
+   outages can prevent cleanup (maintenance required); the listing stays private.
+   The form keeps its values and draft ID. My Listings → Finish publishing restores
+   saved fields at `/listings/new?draft={id}`; a file must be selected again after navigation.
+
+`PATCH` cannot publish a draft or relist a new record without an image.
+`POST /photo` is for replacement on editable published listings; drafts use
+`/publish`. Both field edits and photo replacement take a listing lock and
+reject `reserved`/`sold` with `409 listing_locked`, preserving agreed records.
+An available/withdrawn listing may replace its image; the previous file is
+removed after successful commit. Existing sample listings remain supported.
+
+Creation endpoints (`/api/listings`, `/api/requests`, `/api/exchanges`, and
+exchange `/messages`) accept an optional `Idempotency-Key` of 8–80 letters,
+digits, hyphens or underscores. Keys belong to the authenticated creator.
+Identical retries return the same record; changed payloads with the same key
+return `409 idempotency_conflict`. Clients retain the key after a failed/lost
+response and generate a new one for a new action. Keys are not public fields.
+Mode filtering occurs before the 200-record limit in catalog and matching.
+
+### Account and private meeting context
+
+`PATCH /api/me` accepts either/both `display_name` (nonempty, maximum 80) and
+`preferred_meeting_spot_id` (active catalog ID or null). The preference appears
+in the caller's `/api/me`, never the public profile. It is shared as a preference
+with exchange participants, without identifying a home/current location.
+
+`GET /api/meeting-spots` retains IDs, labels, areas and recorded notes, adding
+nullable coordinates, coordinate provenance, and `safety_attributes` keys
+`lighting`, `cameras`, `staffing`, `public_access`, `opening_hours`; unverified
+values are null. `safety_source` and `safety_checked_at` are nullable. Recorded
+seed notes are explicitly distinguished from independently checked attributes.
+UNC map reference coordinates are documented in `server/meeting_sources.py`;
+Union/Davis points identify buildings, not verified entrance positions.
+No source establishes camera coverage or live crowds. No safety scores exist.
+
+Participant-only endpoints, `private, no-store` and `nosniff`:
+
+- `GET /api/exchanges/{id}/locations` returns `locations`, every active
+  `meeting_spots`, and `ranking:"unranked"|"straight_line_estimate"`.
+- `PUT /api/exchanges/{id}/locations/me` accepts `{"landmark":"Near Davis"}`
+  and optional numeric `latitude`/`longitude` within the campus bounds
+  35.89–35.93, −79.08–−79.02. Coordinates are rounded to four decimals.
+  Each participant can change only their own record; supplying `participant_id`
+  is rejected. Response: `200 {"location":...}`.
+- `DELETE /api/exchanges/{id}/locations/me` clears only the caller's record.
+
+Locations expire in 24 hours, disappear from reads on expiry, and are deleted
+when the exchange completes/cancels/disputes. Schedule
+`flask --app server.app purge-exchange-locations` hourly for physical deletion
+of expired records. Manual landmarks work without coordinates; no routing is
+invented. With both positions supplied, catalog spots rank by maximum then
+combined straight-line distance. Distances are estimates, never walking times.
+The map and keyboard list propose the same spots; selecting does not accept.
+
+Item offers still require agreed active pickup/return catalog spots as appropriate.
+Services add independent offer fields `service_delivery:"remote"|"in_person"`
+(default remote for existing contracts) and `service_meeting_spot_id`.
+Example in-person offer:
+
+```json
+{"service_price_cents":2500,"service_duration_minutes":60,"service_scheduled_at":"2030-10-12T12:00:00Z","service_delivery":"in_person","service_meeting_spot_id":"7d2e0000000000000000000000000001"}
+```
+
+In-person services require an active spot at offer creation and acceptance;
+remote services reject a meeting spot. New revisions reset both acceptances,
+including location changes. Resubmitting identical service terms returns the same
+revision with acceptances intact and creates no duplicate notification. Both accept the current revision before scheduling;
+both confirm completion separately. Services still reject all item evidence,
+pickup, handoff, collateral and return fields/transitions. Single active service
+reservation capacity remains unchanged. No calendar capacity redesign.
+
+### Persistent notifications
+
+Verified-user routes, recipient scoped, `private, no-store` and `nosniff`:
+
+- `GET /api/notifications` → `{"notifications":[{"id":"…","kind":"message","exchange_id":"…","url":"/exchanges/…","created_at":"…","read_at":null}],"unread_count":1}`.
+  Latest 100 notifications; unread count includes older unread records.
+- `POST /api/notifications/{id}/read` → `{"notification":...}`; foreign IDs 404.
+- `POST /api/notifications/read-all` → `{"ok":true}`; caller only.
+
+Events cover creation, messages, offer revisions/acceptances, reservation or
+scheduling, condition evidence/confirmations, loan/return/service completion,
+cancellation and disputes. Events commit in the domain transaction, roll back
+on failure, exclude the actor, and deduplicate by recipient/event identity.
+Message notifications contain no message text. Existing exchanges are not
+backfilled with fabricated history. The UI polls every 20 seconds while visible.
+
+Ambiguous interpreted dates stop the homepage before request creation. The user
+reviews/edits the proposed dates and explicitly acknowledges them; editing a date
+invalidates that acknowledgement. Visual photo proposals still require Accept or
+Dismiss. Confirmed request creation retains its retry key after a lost response.
+Server validation failures return to editable review rather than silently clearing
+terms or changing the selected mode.

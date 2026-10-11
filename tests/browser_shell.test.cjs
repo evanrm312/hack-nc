@@ -21,7 +21,7 @@ function harness() {
   menu.contains = (el) => el === menu || el === link;
   menu.querySelector = () => link;
   document = { activeElement: outside, getElementById(id) { return { 'start-toggle': toggle, 'start-menu': menu, 'request-text': text }[id]; }, querySelectorAll() { return examples; }, addEventListener(k,fn) { const previous = events[k]; events[k] = (event) => { if (previous) previous(event); fn(event); }; } };
-  vm.runInNewContext(source, { document });
+  vm.runInNewContext(source, { document, location: {pathname:"/", search:""}, encodeURIComponent });
   return { document, events, toggle, menu, link, outside, text, examples };
 }
 test('launcher opens with destination focus and closes with Escape restoring opener', () => {

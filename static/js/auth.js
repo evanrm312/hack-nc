@@ -3,6 +3,14 @@
   const cfg = window.CAMPUS_CONFIG || {};
   const $ = (id) => document.getElementById(id);
   let supabaseClient = null;
+  const safeDestination = (value) => typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !/[\\\r\n]/.test(value) && !value.startsWith("/sign-in") ? value : null;
+  window.campusSafeDestination = safeDestination;
+  const destination = typeof URLSearchParams !== "undefined" ? safeDestination(new URLSearchParams(location.search).get("next")) : null;
+  if (destination && window.sessionStorage) window.sessionStorage.setItem("campus_return_to", destination);
+  if (location.hash && /error=/.test(location.hash)) {
+    showError("This sign-in link is invalid or expired. Request a new link when you are ready.");
+    history.replaceState(null, "", location.pathname + location.search);
+  }
 
   function showError(message) {
     const el = $("sign-in-error");
@@ -41,6 +49,11 @@
       if (meJson) { meJson.textContent = JSON.stringify(profile, null, 2); $("me-card").hidden = false; }
       const signOut = $("sign-out");
       if (signOut) signOut.hidden = false;
+      document.dispatchEvent(new CustomEvent("campus:profile-ready", {detail: profile}));
+      if (location.pathname === "/sign-in" && window.sessionStorage) {
+        const next = safeDestination(window.sessionStorage.getItem("campus_return_to"));
+        if (next) { window.sessionStorage.removeItem("campus_return_to"); location.assign(next); }
+      }
     } catch (err) {
       clearProfile();
       const sessionSaved = !!api.getToken();
@@ -94,6 +107,9 @@
       catch (_) { throw new api.ApiError(503, { error: { code: "auth_unavailable", message: "Sign-in service is unavailable. Try again." } }); }
       const { data, error } = result;
       if (error) {
+        if (error.status === 429 || error.status >= 500 || error.name === "AuthRetryableFetchError") {
+          throw new api.ApiError(503, {error: {code: "auth_unavailable", message: "Sign-in service is temporarily unavailable. Your session is saved."}});
+        }
         api.setToken(null);
         try { await client.auth.signOut({ scope: "local" }); } catch (_) { /* expired locally */ }
         throw new api.ApiError(401, { error: { code: "session_expired", message: "Session expired. Please sign in again." } });
@@ -107,18 +123,28 @@
 
     const magicForm = $("magic-link-form");
     if (magicForm) {
+      let sending = false;
       magicForm.addEventListener("submit", async (event) => {
         event.preventDefault();
+        if (sending) return;
         showError("");
+        const email = $("email").value.trim();
+        if (email.split("@").length !== 2 || email.split("@")[1].toLowerCase() !== cfg.allowed_email_domain) {
+          showError("Use your @" + cfg.allowed_email_domain + " email address."); return;
+        }
+        sending = true;
+        const button = magicForm.querySelector("button");
+        if (button) button.disabled = true;
         try {
           const client = await clientReady;
           const { error } = await client.auth.signInWithOtp({
             email: $("email").value.trim(),
             options: { emailRedirectTo: location.origin + "/sign-in" },
           });
-          if (error) { showError(error.message); return; }
+          if (error) { showError(error.status === 429 ? "Too many sign-in requests. Wait before requesting another link." : "Could not send the link. Try again shortly."); return; }
           $("magic-link-hint").textContent = "Check your inbox for the sign-in link.";
         } catch (_) { showError("Sign-in service is unavailable. Try again shortly."); }
+        finally { sending = false; if (button) button.disabled = false; }
       });
     }
   }
@@ -127,19 +153,22 @@
   if (signOut) {
     signOut.addEventListener("click", async () => {
       showError("");
+      signOut.disabled = true;
       try {
         if (cfg.auth_mode === "supabase") {
           const client = supabaseClient;
           if (!client) throw new Error("Sign-in service is unavailable");
-          const { error } = await client.auth.signOut();
+          const { error } = await client.auth.signOut({ scope: "local" });
           if (error) throw error;
         }
-      } catch (_) {
-        showError("Sign-out could not be completed with the sign-in service. Please try again.");
-      } finally {
         api.setToken(null);
         clearProfile();
-        refreshSessionStatus();
+        if(window.sessionStorage) window.sessionStorage.removeItem("campus_request_draft");
+        await refreshSessionStatus();
+      } catch (_) {
+        showError("You are still signed in. Sign-out failed; please try again.");
+      } finally {
+        signOut.disabled = false;
       }
     });
   }

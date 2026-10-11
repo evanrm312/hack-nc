@@ -9,7 +9,7 @@
     <a href="{{ url_for('pages.my_exchanges') }}">← My Exchanges</a>
     <div class="exchange-heading"><h1 id="room-title">Exchange room</h1><span id="exchange-status" class="exchange-status"></span></div>
     <p id="participants"></p>
-    <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
+
     <p id="page-status" role="status">Loading your private exchange…</p>
     <p id="page-error" class="exchange-error" role="alert"></p>
     <p id="sign-in-hint" hidden><a href="{{ url_for('pages.sign_in') }}">Sign in</a> with a participant account to access this exchange.</p>
@@ -180,5 +180,6 @@
 <noscript><p class="card">Enable JavaScript to view your private exchange.</p></noscript>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/service-exchanges.js') }}"></script>
 <script src="{{ url_for('static', filename='js/exchanges.js') }}"></script>
 {% endblock %}

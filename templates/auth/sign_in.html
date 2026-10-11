@@ -39,7 +39,8 @@
 </section>
 
 <section class="card" id="me-card" hidden>
-  <h2>Signed in as</h2>
+  <h2>Your profile</h2>
+  <form id="profile-form"><label for="profile-name">Display name</label><input id="profile-name" maxlength="80" required><label for="profile-spot">Preferred campus meetup spot (optional)</label><select id="profile-spot"></select><p class="field__hint">A meeting preference, not your current location. Shared with participants in your exchanges; not shown on public listings.</p><button type="submit">Save profile</button><p id="profile-status" role="status"></p></form>
   <p>Your account information is shown below. Verification confirms an email address, not student status.</p><details><summary>View account information</summary><pre class="json" id="me-json"></pre></details>
 </section>
 </div></div>
