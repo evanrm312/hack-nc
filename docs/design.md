@@ -119,14 +119,28 @@ Dates: `datetime-local` → `components.localToIso()` → ISO with `Z`
 
 CSS: `.card` with gloss highlight; modifiers `--compact`, `--hero`, `--sky`,
 `--leaf`, `--glass` (short text only), `--interactive` (hover lift). Parts:
-`.card__media` (4:3, `--empty` shows "No photo yet"), `.card__header`,
-`.card__title`, `.card__subtitle`, `.card__body`, `.card__footer`,
-`a.card__link` (makes the whole card clickable, link text still readable).
+`.card__media` (4:3; without `src` it becomes `--empty` and shows
+`components.mediaPlaceholder`), `.card__header`, `.card__title`,
+`.card__subtitle`, `.card__body`, `.card__footer`, `a.card__link` (makes the
+whole card clickable, link text still readable).
 
 ```js
 components.card({ title: "Navy suit 40R", subtitle: "formalwear", badges: [components.modeBadge("borrow")],
   media: { src: listing.public_photo_url, alt: "Photo of …" }, body: [...], footer: [...], variant: ["compact"], interactive: true });
+// no photo: media: { placeholder: { category: "formalwear", kind: "item"|"service", label, action } }
 ```
+
+**Photo placeholder** (`components.categoryIcon`, `components.mediaPlaceholder`):
+a glossy sky/leaf bubble (`.media-icon`, teal-tinted for `--service`) with a
+simple stroke icon chosen from a fixed whitelist of category keys
+(formalwear, clothing, electronics, textbooks, calculators, furniture,
+appliances, sports, tools, kitchen, tutoring, proofreading, moving help;
+anything else gets a box), a `.media-label` ("No photo yet", or the service
+category), and an optional owner `action` node rendered above a card's
+stretched link (`.media-action`). Service cards use the same 4:3 media box
+so item and service cards line up in the grid. Photos are only ever the
+listing's own `public_photo_url`; nothing is fetched from the web or
+generated.
 
 ### 4. Dialog
 
@@ -470,6 +484,24 @@ button, and an error with retry.
   `/api/meeting-spots`; owner card with the server's badge text and the
   exchange entry point (below). States: loading, 404 "Listing not found",
   error with retry.
+
+## Listing photos: add or replace (implemented)
+
+`openPhotoDialog(listing, opener, onUploaded)` in `marketplace.js` opens a
+`components.dialog` with a file field (accept JPEG/PNG/WebP; client checks
+MIME and size against `min(CAMPUS_CONFIG.max_upload_bytes, 5 MiB)`), a
+preview from an object URL (revoked on close), the current photo when
+replacing, an upload button disabled until a valid file is chosen, and an
+in-flight guard. Upload goes through `api.upload("/api/listings/{id}/photo",
+"photo", file)`; the server swaps the file and returns the listing. Errors:
+`unsupported_image` / `payload_too_large` / `validation_error` on the field,
+`forbidden`, 404, auth (sign-in link), other. Entry points: My listings (an
+**Add photo** button inside the placeholder, or **Replace photo** in the card
+actions; the list re-renders from the returned listing and focus returns to
+that card's button) and the owner's listing detail page (button under the
+media; the page reloads). Services have no upload control; their media box is
+the category icon. No endpoint removes a photo, and none is needed for this
+scope.
 
 ## Exchange entry points (implemented)
 

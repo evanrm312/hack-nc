@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from server.app import create_app
 from server.db import db
 from server.models import Listing
-from server.seed import DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE, validate_demo_seed_target
+from server.seed import DEMO_INCOMPATIBLE_SUIT_TITLE, DEMO_SUIT_AVAILABILITY, DEMO_SUIT_TITLE, validate_demo_seed_target
 from tests.conftest import LISTING_BODY, auth
 
 
@@ -16,7 +16,7 @@ def _migrated_app(tmp_path, database_name, *, app_env="development"):
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / database_name}",
         "AUTH_MODE": "sandbox",
-        "SANDBOX_USERS": ["alice@unc.edu"],
+        "SANDBOX_USERS": ["alice@unc.edu", "bob@unc.edu"],
         "UPLOAD_DIR": str(tmp_path / "uploads"),
         "APP_ENV": app_env,
     }
@@ -52,12 +52,13 @@ def test_demo_seed_requires_dev_target_and_is_idempotent(tmp_path):
         original_id = suit.id
         suit.specifications = {**{key: value for key, value in suit.specifications.items() if key != "type"}, "custom_fit": "keep"}
         suit.availability = {"available_from": "2026-10-11T12:00:00Z", "available_until": None, "notes": "custom pickup note"}
-        charcoal = db.session.scalar(select(Listing).where(Listing.title.contains("Charcoal suit")))
+        charcoal = db.session.scalar(select(Listing).where(Listing.title == DEMO_INCOMPATIBLE_SUIT_TITLE))
         charcoal.specifications = {key: value for key, value in charcoal.specifications.items() if key != "type"}
         db.session.commit()
     assert runner.invoke(args=["seed-demo"]).exit_code == 0
     with app.app_context():
-        assert db.session.scalar(select(func.count()).select_from(Listing)) == 2
+        # Five demo rows (Alice x3, Bob, Carol); a second run adds none.
+        assert db.session.scalar(select(func.count()).select_from(Listing)) == 5
         suit = db.session.scalar(select(Listing).where(Listing.title == DEMO_SUIT_TITLE))
         assert suit.id == original_id
         assert suit.specifications["type"] == "suit"
@@ -65,7 +66,7 @@ def test_demo_seed_requires_dev_target_and_is_idempotent(tmp_path):
         assert suit.availability["available_from"] == "2026-10-11T12:00:00Z"
         assert suit.availability["available_until"] == DEMO_SUIT_AVAILABILITY["available_until"]
         assert suit.availability["notes"] == "custom pickup note"
-        charcoal = db.session.scalar(select(Listing).where(Listing.title.contains("Charcoal suit")))
+        charcoal = db.session.scalar(select(Listing).where(Listing.title == DEMO_INCOMPATIBLE_SUIT_TITLE))
         assert charcoal.specifications["type"] == "suit"
 
     other_app = create_app({
@@ -103,10 +104,11 @@ def test_seeded_suit_matches_dated_interview_request(tmp_path):
     client = app.test_client()
     listings = client.get("/api/listings").get_json()["listings"]
     suit = next(item for item in listings if item["title"] == DEMO_SUIT_TITLE)
-    charcoal = next(item for item in listings if "Charcoal suit" in item["title"])
+    charcoal = next(item for item in listings if item["title"] == DEMO_INCOMPATIBLE_SUIT_TITLE)
     assert suit["specifications"]["type"] == "suit"
     assert suit["specifications"]["jacket_size"] == "40R"
     assert charcoal["specifications"]["type"] == "suit"
+    assert charcoal["specifications"]["jacket_size"] == "44L"
     assert {key: suit["availability"][key] for key in DEMO_SUIT_AVAILABILITY} == DEMO_SUIT_AVAILABILITY
 
     request_body = {
@@ -121,13 +123,14 @@ def test_seeded_suit_matches_dated_interview_request(tmp_path):
         "area": "Central campus",
     }
 
+    # Bob asks; Alice owns the seeded suit (a requester never matches their own listings).
     def matches_for(max_deposit_cents):
-        created = client.post("/api/requests", json={**request_body, "max_deposit_cents": max_deposit_cents}, headers=auth("alice@unc.edu"))
+        created = client.post("/api/requests", json={**request_body, "max_deposit_cents": max_deposit_cents}, headers=auth("bob@unc.edu"))
         assert created.status_code == 201, created.get_json()
         need = created.get_json()["request"]
         assert need["max_deposit_cents"] == max_deposit_cents
         assert all(need[key] == value for key, value in request_body.items())
-        response = client.get(f"/api/requests/{need['id']}/matches", headers=auth("alice@unc.edu"))
+        response = client.get(f"/api/requests/{need['id']}/matches", headers=auth("bob@unc.edu"))
         assert response.status_code == 200
         return response.get_json()
 
@@ -141,10 +144,13 @@ def test_seeded_suit_matches_dated_interview_request(tmp_path):
     assert any("Required jacket_size matches: 40R." == reason for reason in entry["reasons"])
     assert "Listing availability covers the requested dates." in entry["reasons"]
     assert any("deposit negotiation required" in shortcoming for shortcoming in entry["shortcomings"])
-    assert [entry["listing_id"] for entry in affordable_80["rejected"]] == [charcoal["id"]]
+    # The 44L suit is rejected (other-category demo rows are rejected too); the suit never is.
+    rejected_80 = [entry["listing_id"] for entry in affordable_80["rejected"]]
+    assert charcoal["id"] in rejected_80 and suit["id"] not in rejected_80
 
     assert [entry["listing_id"] for entry in affordable_200["confirmed"]] == [suit["id"]]
     assert affordable_200["needs_confirmation"] == []
     assert affordable_200["confirmed"][0]["unknown_required"] == []
     assert not any("deposit negotiation" in shortcoming for shortcoming in affordable_200["confirmed"][0]["shortcomings"])
-    assert [entry["listing_id"] for entry in affordable_200["rejected"]] == [charcoal["id"]]
+    rejected_200 = [entry["listing_id"] for entry in affordable_200["rejected"]]
+    assert charcoal["id"] in rejected_200 and suit["id"] not in rejected_200
