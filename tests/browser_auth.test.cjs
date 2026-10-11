@@ -18,6 +18,7 @@ function harness({ signInPage = false } = {}) {
   let session = null;
   let sessionError = null;
   let signOutCalls = 0;
+  let signOutError = null;
   let apiFailure = null;
   let apiFailureStatus = 401;
   const element = (id) => {
@@ -41,7 +42,7 @@ function harness({ signInPage = false } = {}) {
   const client = { auth: {
     onAuthStateChange(callback) { authCallback = callback; },
     async getSession() { return { data: { session }, error: sessionError }; },
-    async signOut() { signOutCalls++; session = null; authCallback?.('SIGNED_OUT', null); return { error: null }; },
+    async signOut() { signOutCalls++; if (signOutError) return {error:signOutError}; session = null; authCallback?.('SIGNED_OUT', null); return { error: null }; },
     async signInWithOtp() { return { error: null }; },
   } };
   const context = {
@@ -74,6 +75,7 @@ function harness({ signInPage = false } = {}) {
     setSessionError(value) { sessionError = value; },
     setApiFailure(value, status = 401) { apiFailure = value; apiFailureStatus = status; },
     signOutCalls: () => signOutCalls,
+    setSignOutError(value) { signOutError = value; },
   };
 }
 
@@ -132,4 +134,25 @@ test('database failure on /api/me does not make a saved session look signed out'
   assert.equal(h.element('sign-out').hidden, false);
   assert.match(h.element('session-status').textContent, /Session saved/);
   assert.equal(h.signOutCalls(), 0);
+});
+
+ test('failed sign-out preserves actual authorization and shows retry message', async () => {
+  const h = harness({signInPage:true});
+  h.setSession({access_token:'existing-session'});
+  h.setSignOutError({message:'unavailable'});
+  await new Promise(resolve=>setImmediate(resolve));
+  await h.element('sign-out').click();
+  assert.equal(h.api.getToken(),'existing-session');
+  assert.match(h.element('sign-in-error').textContent,/still signed in/i);
+  assert.equal(h.element('sign-out').hidden,false);
+ });
+
+test('intended destinations are internal, never protocol-relative or backslash URLs', () => {
+  // Pure redirect validator exposed for the shared callback and navigation flow.
+  const h=harness();
+  // Auth harness runs without URLSearchParams, so no navigation occurs during setup.
+  const s=authSource.match(/const safeDestination = (.*);/)[1];
+  const validate=vm.runInNewContext(s);
+  assert.equal(validate('/exchanges/abc?tab=offer'),'/exchanges/abc?tab=offer');
+  for(const value of ['https://elsewhere.example','//elsewhere.example','/\\elsewhere.example','/sign-in','javascript:alert(1)'])assert.equal(validate(value),null);
 });
