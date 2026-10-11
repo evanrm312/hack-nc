@@ -20,21 +20,21 @@
   }
 
   function renderRecommended(host, data) {
-    // Future personalized data must be explicitly identified by its provider.
-    // This application currently supplies only ordinary catalog suggestions.
+    // The backend supplies explicit reasons and modes; scores stay server-side.
     C.clear(host);
     const items = data.items || [];
     if (!items.length) { message(host, "No browsing suggestions available."); return; }
     const list = C.el("ul", { className: "sidebar-list" });
-    items.slice(0, 3).forEach((item) => {
+    items.slice(0, 3).forEach((entry) => {
+      const item = entry.listing || entry;
       const service = (item.allowed_modes || []).includes("service");
       let terms;
       if (service) terms = api.formatCents(item.service_price_cents) + " per session";
-      else if ((item.allowed_modes || []).includes("borrow")) terms = item.rental_fee_cents === 0 ? "Free loan · deposit may apply" : api.formatCents(item.rental_fee_cents) + " rental fee · deposit separate";
+      else if (entry.mode === "borrow" || (!entry.mode && (item.allowed_modes || []).includes("borrow"))) terms = item.rental_fee_cents === 0 ? "Free loan · deposit may apply" : api.formatCents(item.rental_fee_cents) + " rental fee · deposit separate";
       else terms = api.formatCents(item.sale_price_cents) + " to buy";
       list.append(C.el("li", {}, C.el("a", { href: "/listings/" + enc(item.id) },
         item.public_photo_url ? C.el("img", { src: item.public_photo_url, alt: "", loading: "lazy" }) : catalogSymbol(),
-        C.el("span", {}, C.el("strong", { text: item.title }), C.el("small", { text: terms })) )));
+        C.el("span", {}, C.el("strong", { text: item.title }), C.el("small", { text: terms }), entry.reason ? C.el("small", {text:entry.reason}) : null))));
     });
     host.append(list);
   }
@@ -62,13 +62,21 @@
   const suggestions = document.getElementById("recommended-items");
   const history = document.getElementById("previous-buys");
   if (suggestions && history) {
-    message(suggestions, "Loading browsing suggestions…");
-    api.get("/api/listings").then(({ listings }) => renderRecommended(suggestions, { kind: "catalog", items: (listings || []).filter((l) => l.status === "available") }))
-      .catch(() => message(suggestions, "Browsing suggestions are temporarily unavailable."));
     let generation = 0;
+    async function loadRecommendations(version, token) {
+      message(suggestions, "Loading suggestions…");
+      try {
+        const data = await api.get("/api/recommendations");
+        if (version !== generation || token !== api.getToken()) return;
+        renderRecommended(suggestions, data);
+        const caption = document.getElementById("recommendation-caption");
+        if (caption) caption.textContent = data.personalized ? "Based on your requests and completed exchanges." : "Browsing suggestions, not personalized.";
+      } catch (_) { if (version === generation && token === api.getToken()) message(suggestions, "Suggestions are temporarily unavailable."); }
+    }
     async function loadHistory() {
       const current = ++generation;
       const token = api.getToken();
+      loadRecommendations(current, token);
       // Clear private content immediately when identity changes.
       message(history, token ? "Loading your purchases…" : "Sign in to see your completed purchases.");
       if (!token) return;
