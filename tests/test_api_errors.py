@@ -1,4 +1,4 @@
-"""Every /api/* failure uses {"error": {"code", "message", "fields"}}; Person 4 stubs are labeled."""
+"""Every /api/* failure uses {"error": {"code", "message", "fields"}}."""
 
 
 def _assert_error_shape(resp, status, code=None):
@@ -43,20 +43,17 @@ def test_healthz_and_pages_render(client):
     assert b"service_role" not in sign_in
 
 
-def test_exchange_stubs_are_labeled_fixtures_and_writes_501(client, alice):
-    assert client.get("/api/exchanges").status_code == 401
-    listed = client.get("/api/exchanges", headers=alice).get_json()
-    assert listed["fixture"] is True
-    assert listed["exchanges"][0]["id"].startswith("fixture-")
+def test_exchange_auth_and_errors_use_real_records(client, alice):
+    _assert_error_shape(client.get("/api/exchanges"), 401, "auth_required")
+    listed = client.get("/api/exchanges", headers=alice)
+    assert listed.status_code == 200
+    assert listed.get_json() == {"exchanges": []}
 
-    detail = client.get("/api/exchanges/anything", headers=alice).get_json()
-    assert detail["fixture"] is True
-    assert "no real funds" in detail["simulation_notice"].lower()
-    assert detail["current_offer"]["uncovered_value_cents"] == 14000
-
-    messages = client.get("/api/exchanges/anything/messages", headers=alice).get_json()
-    assert messages["fixture"] is True
-
+    for suffix in ("", "/messages", "/evidence", "/evidence/missing-photo"):
+        _assert_error_shape(client.get(f"/api/exchanges/anything{suffix}", headers=alice), 404, "not_found")
     for suffix in ("messages", "offers", "accept", "evidence", "handoff", "return", "review", "cancel", "dispute"):
-        _assert_error_shape(client.post(f"/api/exchanges/anything/{suffix}", json={}, headers=alice), 501, "not_implemented")
-    _assert_error_shape(client.post("/api/exchanges", json={}, headers=alice), 501, "not_implemented")
+        _assert_error_shape(client.post(f"/api/exchanges/anything/{suffix}", json={}, headers=alice), 404, "not_found")
+
+    invalid_create = client.post("/api/exchanges", json={}, headers=alice)
+    _assert_error_shape(invalid_create, 400, "validation_error")
+    assert set(invalid_create.get_json()["error"]["fields"]) == {"listing_id", "mode"}

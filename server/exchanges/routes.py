@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
-from sqlalchemy import or_, update
+from sqlalchemy import and_, or_, update
 
 from ..auth import current_profile, require_verified_user
 from ..db import db, utcnow
@@ -14,11 +14,14 @@ from ..models import (
     Evidence,
     Exchange,
     Listing,
+    MeetingSpot,
     Message,
     NeedRequest,
     OfferRevision,
     Profile,
+    Review,
 )
+from ..models.review import REVIEW_FIELDS
 from ..reservation import mark_listing_sold, release_listing, reserve_listing
 from ..storage import authorize_private_read, get_storage
 from ..validation import FieldErrors, datetime_utc, json_body, string
@@ -36,6 +39,15 @@ from .lifecycle import (
 
 bp = Blueprint("exchanges", __name__, url_prefix="/api/exchanges")
 SIMULATION_NOTICE = "Simulated: no real funds are reserved or charged."
+
+
+def _deposit_status(exchange):
+    state = "simulated_pending"
+    if exchange.mode == "borrow" and exchange.status in ("reserved", "on_loan", "return_pending", "disputed"):
+        state = "simulated_held"
+    elif exchange.status in ("completed", "cancelled"):
+        state = "simulated_released"
+    return {"state": state, "label": SIMULATION_NOTICE}
 
 
 def _transaction(view):
@@ -106,18 +118,53 @@ def _private_response(response):
 def list_exchanges():
     user_id = current_profile().id
     rows = db.session.execute(
-        db.select(Exchange, Listing).join(Listing, Exchange.listing_id == Listing.id)
+        db.select(Exchange, Listing, OfferRevision).join(Listing, Exchange.listing_id == Listing.id)
+        .outerjoin(OfferRevision, and_(OfferRevision.exchange_id == Exchange.id,
+                                      OfferRevision.version == Exchange.current_offer_revision))
         .where(or_(Exchange.owner_id == user_id, Exchange.requester_id == user_id))
         .order_by(Exchange.updated_at.desc(), Exchange.id)
     ).all()
+    if not rows:
+        return jsonify({"exchanges": []})
+    # Fetch dashboard records in batches, always scoped to the caller's exchanges.
+    exchange_ids = [exchange.id for exchange, _, _ in rows]
+    participant_ids = {user_id for exchange, _, _ in rows for user_id in exchange.participant_ids}
+    profiles = {profile.id: profile.to_public_dict() for profile in db.session.scalars(
+        db.select(Profile).where(Profile.id.in_(participant_ids))
+    )}
+    photos_by_exchange = {exchange_id: [] for exchange_id in exchange_ids}
+    for photo in db.session.scalars(db.select(Evidence).where(Evidence.exchange_id.in_(exchange_ids))
+                                   .order_by(Evidence.created_at, Evidence.id)):
+        photos_by_exchange[photo.exchange_id].append(photo)
+    reviews = {review.exchange_id: review.to_dict() for review in db.session.scalars(
+        db.select(Review).where(Review.exchange_id.in_(exchange_ids), Review.reviewer_id == user_id)
+    )}
+    spot_ids = {spot_id for _, _, offer in rows if offer is not None
+                for spot_id in (offer.pickup_meeting_spot_id, offer.return_meeting_spot_id) if spot_id}
+    spots = {spot.id: spot.to_dict() for spot in db.session.scalars(
+        db.select(MeetingSpot).where(MeetingSpot.id.in_(spot_ids))
+    )}
     exchanges = []
-    for exchange, listing in rows:
+    for exchange, listing, offer in rows:
         data = exchange.to_dict()
         listing_data = listing.to_dict()
         data["listing"] = {
             key: listing_data[key]
             for key in ("id", "title", "status", "public_photo_url")
         }
+        photos = photos_by_exchange[exchange.id]
+        data.update({
+            "current_offer": offer.to_dict() if offer is not None else None,
+            "participants": {"owner": profiles[exchange.owner_id], "requester": profiles[exchange.requester_id]},
+            "pickup_meeting_spot": spots.get(offer.pickup_meeting_spot_id) if offer is not None else None,
+            "return_meeting_spot": spots.get(offer.return_meeting_spot_id) if offer is not None else None,
+            "confirmations": confirmations_for(exchange, "handoff", photos=photos)
+                             + confirmations_for(exchange, "return", photos=photos),
+            "evidence": [photo.to_dict() for photo in photos],
+            "deposit_status": _deposit_status(exchange),
+            "my_review": reviews.get(exchange.id),
+            "can_review": exchange.status == "completed" and exchange.id not in reviews,
+        })
         exchanges.append(data)
     return jsonify({"exchanges": exchanges})
 
@@ -173,17 +220,12 @@ def get_exchange(exchange_id: str):
         db.select(OfferRevision).where(OfferRevision.exchange_id == exchange.id)
         .order_by(OfferRevision.version)
     ).all()
-    state = "simulated_pending"
-    if exchange.mode == "borrow" and exchange.status in ("reserved", "on_loan", "return_pending", "disputed"):
-        state = "simulated_held"
-    elif exchange.status in ("completed", "cancelled"):
-        state = "simulated_released"
     return jsonify({
         "exchange": exchange.to_dict(),
         "current_offer": _current_offer(exchange).to_dict(),
         "offers": [offer.to_dict() for offer in offers],
         "simulation_notice": SIMULATION_NOTICE,
-        "deposit_status": {"state": state, "label": SIMULATION_NOTICE},
+        "deposit_status": _deposit_status(exchange),
         "confirmations": confirmations_for(exchange, "handoff") + confirmations_for(exchange, "return"),
         "max_upload_bytes": current_app.config["MAX_UPLOAD_BYTES"],
         "participants": {
@@ -322,9 +364,19 @@ def get_evidence_file(exchange_id: str, evidence_id: str):
     return response
 
 
-def _later_milestone(exchange_id: str, action: str):
-    _participant(exchange_id)
-    raise ApiError(501, "not_implemented", f"{action} is a separate follow-up milestone")
+def _record_return_issue(exchange, body):
+    errors = FieldErrors()
+    reason = string(body.get("reason"), "reason", errors, required=True, max_len=2000)
+    errors.raise_if_any()
+    if exchange.mode != "borrow":
+        raise invalid_transition()
+    if exchange.status == "disputed" and exchange.dispute_reason == reason:
+        return
+    if exchange.status != "return_pending":
+        raise invalid_transition()
+    exchange.dispute_reason = reason
+    exchange.status = "disputed"
+    exchange.updated_at = utcnow()
 
 
 @bp.post("/<exchange_id>/evidence")
@@ -416,16 +468,9 @@ def confirm_return(exchange_id: str):
         if exchange.status == "on_loan":
             exchange.status = "return_pending"
     elif action == "issue":
-        errors = FieldErrors()
-        reason = string(body.get("reason"), "reason", errors, required=True, max_len=2000)
-        errors.raise_if_any()
-        if exchange.status == "disputed" and exchange.dispute_reason == reason:
-            db.session.commit()
-            return jsonify({"exchange": exchange.to_dict()})
-        if exchange.status != "return_pending":
-            raise invalid_transition()
-        exchange.dispute_reason = reason
-        exchange.status = "disputed"
+        _record_return_issue(exchange, body)
+        db.session.commit()
+        return jsonify({"exchange": exchange.to_dict()})
     else:
         if exchange.status == "completed" and any(
             record["participant_id"] == user_id for record in confirmations_for(exchange, "return")
@@ -447,17 +492,67 @@ def confirm_return(exchange_id: str):
 
 @bp.post("/<exchange_id>/review")
 @require_verified_user
+@_transaction
 def post_review(exchange_id: str):
-    return _later_milestone(exchange_id, "Reviews")
+    exchange = _participant(exchange_id, lock=True)
+    if exchange.status != "completed":
+        raise ApiError(409, "exchange_not_completed", "Reviews are available only after the exchange is completed")
+    user_id = current_profile().id
+    if db.session.scalar(db.select(Review).where(Review.exchange_id == exchange.id, Review.reviewer_id == user_id)):
+        raise ApiError(409, "already_reviewed", "You already reviewed this exchange")
+    body = json_body()
+    errors = FieldErrors()
+    stars = body.get("stars")
+    if isinstance(stars, bool) or not isinstance(stars, int) or not 1 <= stars <= 5:
+        errors.add("stars", "must be an integer from 1 to 5")
+    answers = body.get("structured_answers")
+    if not isinstance(answers, dict):
+        errors.add("structured_answers", "must contain all five structured answers")
+        answers = {}
+    for field in REVIEW_FIELDS:
+        if answers.get(field) not in ("yes", "no", "not_applicable"):
+            errors.add("structured_answers." + field, "must be yes, no, or not_applicable")
+    if exchange.mode == "sale" and answers.get("returned_on_time") != "not_applicable":
+        errors.add("structured_answers.returned_on_time", "must be not_applicable for a sale")
+    comment = string(body.get("comment"), "comment", errors, max_len=2000)
+    errors.raise_if_any()
+    review = Review(
+        exchange_id=exchange.id, reviewer_id=user_id,
+        reviewee_id=exchange.requester_id if user_id == exchange.owner_id else exchange.owner_id,
+        stars=stars, structured_answers={field: answers[field] for field in REVIEW_FIELDS}, comment=comment,
+    )
+    db.session.add(review)
+    db.session.commit()
+    return jsonify({"review": review.to_dict()}), 201
 
 
 @bp.post("/<exchange_id>/cancel")
 @require_verified_user
+@_transaction
 def cancel_exchange(exchange_id: str):
-    return _later_milestone(exchange_id, "Cancellation")
+    exchange = _participant(exchange_id, lock=True)
+    errors = FieldErrors()
+    reason = string(json_body().get("reason"), "reason", errors, required=True, max_len=2000)
+    errors.raise_if_any()
+    if exchange.status == "cancelled" and exchange.cancellation_reason == reason:
+        db.session.commit()
+        return jsonify({"exchange": exchange.to_dict()})
+    if exchange.status not in ("negotiating", "reserved") or confirmations_for(exchange, "handoff"):
+        raise ApiError(409, "invalid_transition", "Cancellation is available only before either participant confirms pickup")
+    if exchange.status == "reserved" and not release_listing(db.session, exchange.listing_id, exchange.id):
+        raise ApiError(409, "reservation_conflict", "This exchange no longer holds the item reservation")
+    exchange.cancellation_reason = reason
+    exchange.status = "cancelled"
+    exchange.updated_at = utcnow()
+    db.session.commit()
+    return jsonify({"exchange": exchange.to_dict()})
 
 
 @bp.post("/<exchange_id>/dispute")
 @require_verified_user
+@_transaction
 def dispute_exchange(exchange_id: str):
-    return _later_milestone(exchange_id, "Disputes")
+    exchange = _participant(exchange_id, lock=True)
+    _record_return_issue(exchange, json_body())
+    db.session.commit()
+    return jsonify({"exchange": exchange.to_dict()})

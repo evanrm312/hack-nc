@@ -20,8 +20,9 @@ def photos_for(exchange, stages):
     ))
 
 
-def confirmations_for(exchange, stage):
-    photos = photos_for(exchange, PICKUP_STAGES if stage == "handoff" else RETURN_STAGES)
+def confirmations_for(exchange, stage, *, photos=None):
+    stages = PICKUP_STAGES if stage == "handoff" else RETURN_STAGES
+    photos = photos_for(exchange, stages) if photos is None else [photo for photo in photos if photo.stage in stages]
     if not photos:
         return []
     confirmations = []

@@ -75,6 +75,17 @@
       <p id="dispute-reason"></p>
       <p>The item remains reserved for manual review. A dispute never automatically triggers a charge. No real funds are reserved or charged.</p>
     </section>
+    <section class="card" id="cancel-card" hidden>
+      <h2 id="cancel-heading">Cancel before pickup</h2>
+      <p id="cancel-help">Either participant can cancel before anyone confirms pickup. An unused reservation is released. No cancellation charge is triggered.</p>
+      <form id="cancel-form">
+        <fieldset id="cancel-fields">
+          <div class="exchange-field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" maxlength="2000" rows="2" required></textarea></div>
+          <button type="submit" id="cancel-exchange">Cancel exchange</button>
+        </fieldset>
+      </form>
+      <p id="cancel-error" class="exchange-error" role="alert"></p>
+    </section>
     <div class="exchange-layout">
       <div>
         <section class="card">
