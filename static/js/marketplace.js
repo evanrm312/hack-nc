@@ -574,8 +574,8 @@
         interpBadges.append(C.badge("Manual entry", "warn"));
         interpBody.append(C.notice("warn", "Nothing was guessed for this request. Fill in the fields you know and update the results."));
       } else {
-        interpBadges.append(C.badge("Proposed by Gemini", "info"));
-        interpBody.append(C.notice("info", "These are proposals from the interpreter, not facts. Edit anything that is wrong; blank means unknown."));
+        interpBadges.append(C.badge(source === "gemini" ? "Proposed by Gemini" : "Review details", "info"));
+        interpBody.append(C.notice("info", source === "gemini" ? "These are proposals from the interpreter, not facts. Edit anything that is wrong; blank means unknown." : "Review and correct these details. Blank means unknown; no interpreter source was recorded."));
       }
 
       const questions = (n.follow_up_questions || []).filter(Boolean);
@@ -713,7 +713,7 @@
           C.el("h2", { id: "confirmed-heading", text: "Confirmed matches" }),
           C.badge(confirmed.length + (confirmed.length === 1 ? " match" : " matches"), confirmed.length ? undefined : "neutral")));
       if (confirmed.length) {
-        confirmedSection.append(C.el("div", { className: "grid" }, confirmed.map((e) => matchCard(e, "confirmed"))));
+        confirmedSection.append(C.el("div", { className: "grid catalog-list" }, confirmed.map((e) => matchCard(e, "confirmed"))));
       } else {
         confirmedSection.append(C.state.block("empty", {
           title: needs.length ? "No confirmed matches yet" : "No matches yet",
@@ -731,7 +731,7 @@
             C.el("h2", { id: "needs-heading", text: "Needs confirmation before it counts" }),
             C.badge(needs.length + (needs.length === 1 ? " option" : " options"), "warn")),
           C.el("p", { className: "muted", style: { marginBottom: "var(--space-3)" }, text: "These are not confirmed matches. A required detail is unknown or has not been checked. Confirm it with the owner before relying on it." }),
-          C.el("div", { className: "grid" }, needs.map((e) => matchCard(e, "needs"))));
+          C.el("div", { className: "grid catalog-list" }, needs.map((e) => matchCard(e, "needs"))));
         matchesBox.append(needsSection);
       }
 
@@ -1355,16 +1355,19 @@
       }
     }
 
-    const itemOnly = C.el("div", {},
+    const itemOnly = C.el("div", { className: "listing-item-fields" },
       C.el("div", { className: "field-row" }, F.condition.root, F.photo.root),
       specs.root, F.accessories.root, F.known_defects.root);
     const previewBox = C.el("div", { id: "l-service-preview" });
     fieldsBox.append(
       modesGroup,
-      C.el("div", { className: "field-row" }, F.title.root, F.category.root),
-      F.description.root,
-      itemOnly,
-      saleGroup, borrowGroup, serviceGroup, spotsGroup, previewBox);
+      C.el("div", { className: "listing-editor-layout" },
+        C.el("section", { className: "listing-details-pane", "aria-label": "Listing details" },
+          C.el("h2", { text: "Details" }),
+          C.el("div", { className: "field-row" }, F.title.root, F.category.root),
+          F.description.root, itemOnly),
+        C.el("section", { className: "listing-terms-pane", "aria-label": "Terms and availability" },
+          saleGroup, borrowGroup, serviceGroup, spotsGroup, previewBox)));
 
     // ---- live behavior
     const isServiceMode = () => modeService.input.checked;
@@ -1840,7 +1843,7 @@
             C.button({ label: "Post a new listing", variant: "primary", size: "sm", href: "/listings/new" })),
           C.el("p", { className: "lede", text: "Everything you have posted. Withdraw an available listing to hide it; reserved, on-loan, and sold items belong to an exchange and cannot be withdrawn here." }),
           tabs),
-        C.el("div", { id: "mine-grid", className: "grid", role: "tabpanel", "aria-live": "polite" }));
+        C.el("div", { id: "mine-grid", className: "grid catalog-list", role: "tabpanel", "aria-live": "polite" }));
       renderGrid();
       if (!root.dataset.focused) { root.dataset.focused = "1"; $("mine-heading").focus(); }
     }

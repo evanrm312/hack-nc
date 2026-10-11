@@ -12,7 +12,7 @@
     return_pending: "Return pending", completed: "Completed",
     disputed: "Disputed", cancelled: "Cancelled",
   };
-  const modeLabel = (mode) => mode === "borrow" ? "Borrow" : "Buy";
+  const modeLabel = (mode) => mode === "service" ? "Service" : mode === "borrow" ? "Borrow" : "Buy";
   const node = (tag, text, className) => {
     const element = document.createElement(tag);
     if (text !== undefined) element.textContent = text;

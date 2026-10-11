@@ -8,10 +8,10 @@
 {% block content %}
 <section class="card" aria-labelledby="feed-heading">
   <div class="section__head">
-    <h1 id="feed-heading" style="margin:0">People looking for an item</h1>
+    <h1 id="feed-heading" style="margin:0">What campus needs</h1>
     <a class="btn btn--sm btn--primary" href="{{ url_for('pages.home') }}">Post your own request</a>
   </div>
-  <p class="lede">Open requests from UNC members. Only the item, buy or borrow, the day it is needed by,
+  <p class="lede">Open requests from UNC members. Only the item or service, exchange mode, the day it is needed by,
     and a campus area are shown. Exact times and contact details stay private.</p>
 
   <form class="feed-filters" id="feed-filters" aria-label="Filter requests">
@@ -35,5 +35,5 @@
 </section>
 
 <div id="feed-auth" class="notice notice--info" role="status" hidden></div>
-<div id="feed" class="grid" aria-live="polite" aria-busy="true"></div>
+<div id="feed" class="grid catalog-list request-list" aria-live="polite" aria-busy="true"></div>
 {% endblock %}

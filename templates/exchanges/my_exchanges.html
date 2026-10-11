@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}My exchanges · Campus Current{% endblock %}
+{% block page_id %}exchanges{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/exchanges.css') }}">{% endblock %}
 {% block content %}
-{% include "exchanges/_styles.html" %}
+
 <div class="exchanges" id="my-exchanges-page">
   {% if config.get("EXCHANGE_PREVIEW") %}<p class="simulated-notice" role="note">Sandbox preview: demo inventory and identities. Exchanges here are local examples.</p>{% endif %}
   <section class="card">
