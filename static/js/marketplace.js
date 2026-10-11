@@ -18,9 +18,6 @@
     ["event equipment", "Event equipment"], ["outdoor gear", "Outdoor gear"],
     ["mobility", "Mobility"], ["tools", "Tools"],
   ];
-  // Search preference used only when the interpreter gave no mode. It is
-  // shown as "needs confirmation" until the user confirms it.
-  const DEFAULT_MODES = ["borrow", "sale"];
 
   // =============================================================== SERVICES
   // Third listing kind, per docs/contracts.md (Person 1, p1-services):
@@ -81,7 +78,6 @@
     return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  const nonNegInt = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
   const cleanModes = (modes) => (Array.isArray(modes) ? modes.filter((m) => m === "sale" || m === "borrow" || m === "service") : []);
 
   function manualNormalized(text, question) {
@@ -199,23 +195,15 @@
             photoInput.focus();
             return;
           }
-          const missing = err instanceof api.ApiError && (err.status === 404 || err.status === 405 || err.status === 501);
-          photoNote = missing
-            ? "Photo analysis is not available on the server yet, so the photo was not used."
-            : "The photo could not be analyzed (" + C.errorMessage(err) + "), so it was not used.";
-          if (!text) {
-            status.textContent = ""; C.setBusy(submit, false); submitting = false;
-            showNotice(formError, photoNote + " Add a short description to continue.");
-            textarea.focus();
-            return;
-          }
+          photoNote = "Photo details were unavailable. You can add them below.";
+          if (!text) normalized = manualNormalized(text, photoNote);
         }
       }
       if (!normalized) {
         status.textContent = "Interpreting…";
         try {
           const result = await api.post("/api/requests/normalize", { text });
-          normalized = result.normalized || manualNormalized(text, "The interpreter returned nothing. Fill in the fields yourself.");
+          normalized = result.normalized || manualNormalized(text, "Add the details you know below.");
         } catch (err) {
           if (C.isAuthError(err)) {
             if (err.status === 401) api.setToken(null);
@@ -223,42 +211,16 @@
             showNotice(formError, authMessage(err));
             return;
           }
-          normalized = manualNormalized(text, "The interpreter could not be reached (" + C.errorMessage(err) + "). Nothing was guessed; fill in the fields yourself.");
+          normalized = manualNormalized(text, "Add the details you know below.");
         }
         if (photoNote) normalized.follow_up_questions = [photoNote].concat(normalized.follow_up_questions || []);
       }
 
-      // Step 2: anything that still needs the user's decision stops here, on
-      // the page, before a request exists: photo proposals to accept or
-      // dismiss, ambiguous dates, a missing description, or no mode choice.
-      const pendingProposals = (normalized.photo_proposals || []).length > 0;
-      if (pendingProposals || (normalized.ambiguous_dates || []).length || !text || !cleanModes(normalized.modes).length) {
-        status.textContent = "";
-        C.setBusy(submit, false);
-        submitting = false;
-        renderConfirmStep(text, normalized);
-        return;
-      }
-
-      // Step 3: save the request and go to results, where every field is editable.
-      status.textContent = "Saving your request…";
-      try {
-        const request = await createRequestFrom(text, normalized);
-        window.location.href = "/results/" + enc(request.id);
-      } catch (err) {
-        status.textContent = "";
-        C.setBusy(submit, false);
-        submitting = false;
-        if (err instanceof api.ApiError && err.code === "validation_error") {
-          renderConfirmStep(text, normalized);
-          showNotice($("confirm-error"), C.errorMessage(err));
-        } else if (C.isAuthError(err)) {
-          if (err.status === 401) api.setToken(null);
-          showNotice(formError, authMessage(err));
-        } else {
-          showNotice(formError, C.errorMessage(err));
-        }
-      }
+      // Review every interpretation before saving; Gemini proposals stay editable.
+      status.textContent = "";
+      C.setBusy(submit, false);
+      submitting = false;
+      renderConfirmStep(text, normalized);
     });
 
     // ---- confirmation step (before any request is created) ---------------
@@ -284,17 +246,11 @@
       const source = normalized.source || "unknown";
       if (normalized.reference_photo) badges.append(C.badge("Reference photo", "info"));
       if (source === "stub") badges.append(C.fixtureBadge("Stub output, not Gemini"));
-      else if (source === "manual") badges.append(C.badge("Manual entry", "warn"));
+      else if (source === "manual") badges.append(C.badge("Your details", "neutral"));
       else badges.append(C.badge("Proposed by Gemini", "info"));
       noticesBox.append(C.notice("info", C.el("span", {},
         C.el("strong", { text: "Nothing is saved yet. " }),
-        "Check the fields below. Anything proposed by the interpreter or your photo is a suggestion until you confirm it; blank means unknown.")));
-      const questions = (normalized.follow_up_questions || []).filter(Boolean);
-      if (questions.length) {
-        noticesBox.append(C.el("div", { className: "notice notice--warn", role: "note" }, C.el("div", {},
-          C.el("strong", { text: "Please confirm" }),
-          C.el("ul", { style: { margin: 0, paddingLeft: "1.2em" } }, questions.map((q) => C.el("li", { text: String(q) }))))));
-      }
+        "Make these details yours. Edit any suggestion, or leave a field blank if you are not sure.")));
 
       // Description is required (image-only normalization returns "").
       const desc = C.field({ id: "c-text", label: "What you need", type: "textarea", rows: 3, value: text, required: true,
@@ -484,37 +440,12 @@
     });
   }
 
-  // Direct creation from an interpretation that already has a mode (text
-  // requests that skip the confirmation step).
+  // Reuse the same creation key when retrying reviewed terms.
   const requestRetryKeys = new Map();
   async function postRequest(body) {
     const fingerprint = JSON.stringify(body);
     if (!requestRetryKeys.has(fingerprint)) requestRetryKeys.set(fingerprint, crypto.randomUUID());
     return api.post("/api/requests", body, { headers: { "Idempotency-Key": requestRetryKeys.get(fingerprint) } });
-  }
-
-  async function createRequestFrom(text, normalized) {
-    const modes = cleanModes(normalized.modes);
-    const service = modes.length === 1 && modes[0] === "service";
-    const body = {
-      original_text: text,
-      normalized,
-      modes: modes.length ? modes : DEFAULT_MODES.slice(),
-      budget_cents: nonNegInt(normalized.budget_cents),
-      needed_by: normalized.needed_by || null,
-      area: typeof normalized.area === "string" ? normalized.area.slice(0, 80) : null,
-    };
-    if (service) {
-      body.service_duration_minutes = Number.isInteger(normalized.service_duration_minutes) ? normalized.service_duration_minutes : null;
-      body.service_time_windows = Array.isArray(normalized.service_time_windows) ? normalized.service_time_windows : [];
-      normalized.max_deposit_cents = null;
-    } else {
-      body.max_deposit_cents = nonNegInt(normalized.max_deposit_cents);
-      body.use_start = normalized.use_start || null;
-      body.use_end = normalized.use_end || null;
-      body.pickup_windows = [];
-    }
-    return (await postRequest(body)).request;
   }
 
   // =================================================================== RESULTS
@@ -593,24 +524,14 @@
           C.el("strong", { text: "Nothing was extracted. " }),
           "Request interpretation is a labeled stub right now, so every field below started unknown. Fill in what you know; unknown stays unknown.")));
       } else if (source === "manual") {
-        interpBadges.append(C.badge("Manual entry", "warn"));
-        interpBody.append(C.notice("warn", "Nothing was guessed for this request. Fill in the fields you know and update the results."));
+        interpBadges.append(C.badge("Your details", "neutral"));
+        interpBody.append(C.notice("info", "Add the details you know, then update your matches. Blank fields stay unknown."));
       } else {
         interpBadges.append(C.badge(source === "gemini" ? "Proposed by Gemini" : "Review details", "info"));
         interpBody.append(C.notice("info", source === "gemini" ? "These are proposals from the interpreter, not facts. Edit anything that is wrong; blank means unknown." : "Review and correct these details. Blank means unknown; no interpreter source was recorded."));
       }
 
-      const questions = (n.follow_up_questions || []).filter(Boolean);
       const ambiguous = Array.isArray(n.ambiguous_dates) ? n.ambiguous_dates : [];
-      if (questions.length || ambiguous.length) {
-        const list = C.el("ul", { style: { margin: "0", paddingLeft: "1.2em" } });
-        questions.forEach((q) => list.append(C.el("li", { text: String(q) })));
-        ambiguous.forEach((a) => list.append(C.el("li", {},
-          C.el("strong", { text: "Date needs confirmation: " }),
-          `"${a.text}" was read as ${api.formatTime(a.proposed)} · Edit if needed.`)));
-        interpBody.append(C.el("div", { className: "notice notice--warn", role: "note" },
-          C.el("div", {}, C.el("strong", { text: "Please confirm" }), list)));
-      }
 
       const modesKnown = cleanModes(n.modes).length > 0;
       const values = {
@@ -1105,12 +1026,38 @@
 
     const dateReview = (meta.ambiguous || []).length ? C.el("input", { type: "checkbox", id: "f-date-review" }) : null;
     const dateReviewError = C.el("p", { className: "field__error", role: "alert" });
-    const dateReviewPanel = dateReview ? C.el("fieldset", {},
-      C.el("legend", { text: "Confirm the dates" }),
-      C.el("ul", {}, (meta.ambiguous || []).map((a) => C.el("li", { text: String(a.text || "Ambiguous date") + (a.proposed ? " → " + api.formatTime(a.proposed) : " — choose a date or leave it unknown") }))),
-      C.el("label", { className: "choice" }, dateReview, C.el("span", { text: "I reviewed and corrected these dates, or left them unknown." })), dateReviewError) : null;
+    const dateCards = C.el("div", { className: "schedule-review__cards" });
+    const dateLabels = { needed_by: "Needed by", use_start: "Borrowing starts", use_end: "Borrowing ends" };
+    function renderDateCards() {
+      C.clear(dateCards);
+      const service = container.querySelector('input[name="modes"][value="service"]')?.checked;
+      const keys = ["needed_by", "use_start", "use_end"].filter((key) => !service || key === "needed_by");
+      keys.forEach((key) => {
+        const iso = C.localToIso(F[key].value());
+        const date = iso ? new Date(iso) : null;
+        const valid = date && Number.isFinite(date.getTime());
+        const parts = valid ? Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York", month: "short", day: "numeric", weekday: "short",
+        }).formatToParts(date).map((part) => [part.type, part.value])) : {};
+        dateCards.append(C.el("div", { className: "schedule-review__card" },
+          C.el("div", { className: "schedule-review__calendar", "aria-hidden": "true" },
+            C.el("span", { text: parts.month || "—" }), C.el("strong", { text: parts.day || "?" })),
+          C.el("div", {}, C.el("strong", { text: dateLabels[key] }),
+            C.el("p", { text: valid ? api.formatTime(iso) : "Leave open or choose a date above" }))));
+      });
+    }
+    const dateReviewPanel = dateReview ? C.el("fieldset", { className: "schedule-review" },
+      C.el("legend", { text: "Your schedule" }),
+      C.el("p", { className: "field__hint", text: "Check the calendar against what you meant. You can edit the dates above or leave them open." }),
+      dateCards,
+      C.el("label", { className: "schedule-review__accept" }, dateReview, C.el("span", { text: "This schedule works for me" })), dateReviewError) : null;
     if (dateReview) {
-      [F.needed_by, F.use_start, F.use_end].forEach((f) => f.control.addEventListener("input", () => { dateReview.checked = false; }));
+      [F.needed_by, F.use_start, F.use_end].forEach((f) => f.control.addEventListener("input", () => {
+        dateReview.checked = false;
+        dateReview.removeAttribute("aria-invalid");
+        dateReviewError.textContent = "";
+        renderDateCards();
+      }));
     }
 
     F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "Unknown", value: values.area || "", attrs: { maxlength: 80 } });
@@ -1163,6 +1110,7 @@
       F.budget_cents.root.querySelector(".field__label span").textContent = service ? "Budget for the service" : "Purchase or rental budget";
       F.area.root.querySelector(".field__label span").textContent = service ? "Campus area" : "Campus area for pickup";
       setCategoryOptions(service ? SERVICE_CATEGORIES : CATEGORIES, service ? "Choose a service category" : "Unknown / not sure");
+      if (dateReview) { dateReview.checked = false; renderDateCards(); }
     }
     modeInputs.forEach((i) => i.addEventListener("change", syncKind));
     syncKind();
@@ -1174,7 +1122,7 @@
       let bad = false;
       dateReviewError.textContent = "";
       if (dateReview && !dateReview.checked) {
-        dateReviewError.textContent = "Review the dates, then confirm them.";
+        dateReviewError.textContent = "Check your schedule and select “This schedule works for me” to continue.";
         dateReview.setAttribute("aria-invalid", "true");
         bad = true;
       } else if (dateReview) dateReview.removeAttribute("aria-invalid");

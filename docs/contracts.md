@@ -840,7 +840,9 @@ on failure, exclude the actor, and deduplicate by recipient/event identity.
 Message notifications contain no message text. Existing exchanges are not
 backfilled with fabricated history. The UI polls every 20 seconds while visible.
 
-Ambiguous interpreted dates stop the homepage before request creation. The user
+Every interpretation opens editable review before request creation. Gemini
+follow-up questions are not rendered as warning/error lists. Ambiguous dates
+use a calendar summary with Eastern dates and inline editors. The user
 reviews/edits the proposed dates and explicitly acknowledges them; editing a date
 invalidates that acknowledgement. Visual photo proposals still require Accept or
 Dismiss. Confirmed request creation retains its retry key after a lost response.
@@ -1061,3 +1063,14 @@ PostgreSQL application tables are server-only: browser `anon`/`authenticated`
 roles and `PUBLIC` have no table grants, RLS is enabled without client policies,
 and the Flask migration/runtime role must bypass RLS. Storage policies are managed
 separately; public photos may be read anonymously, private evidence cannot.
+
+
+### Email/password browser authentication
+
+Supabase email/password is the primary browser sign-in. Signup confirms UNC email
+once; existing verified users can set a password in Account or follow one
+password-recovery email. Recovery defers saved internal navigation until the new
+password is saved. Ordinary sign-in does not send email. Passwords are submitted
+only to Supabase, never Flask, local/session storage or logs. Backend identity
+and exact-domain/email-confirmation checks are unchanged. Email confirmation is
+not disabled; recovery/registration still obey provider email quotas.

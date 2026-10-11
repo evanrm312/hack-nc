@@ -2,7 +2,9 @@
 
 Branch `fix/render-backend`, based on `dd363fd` (PR #20). The user approved all
 repair operations on 2026-10-11; merging into `main` still requires approval.
-No new models, migrations, dependencies, Auth logic, Gemini models or timeouts.
+No new models, migrations, dependencies, Gemini models or timeouts. The user
+subsequently approved merging PR #21 with calmer request review and requested
+email/password authentication plus a full team test scenario.
 
 ## Confirmed target and original failure
 
@@ -147,3 +149,25 @@ recommendations all returned 200 again. Real Auth and Gemini checks above
 passed; the final sign-out was verified. Remaining release step: obtain
 approval to merge this branch into main, then use and verify the packaged
 release script on Render. The currently active direct migration gate works.
+
+
+## Requested follow-up in PR #21
+
+Email/password replaces repeated magic-link sign-in. Supabase signup still
+requires one-time email confirmation; existing users set a password in Account
+or through one recovery link. Backend domain/verification checks are unchanged.
+Supabase dashboard inspection confirmed signup and email confirmation enabled.
+Recovery holds saved internal destinations until the password is saved.
+
+All interpretations now open editable review before persistence. Gemini
+follow-up warnings are removed from home/results. Ambiguous dates use calendar
+cards that follow edits and retain explicit schedule acknowledgement. Provider
+failure opens neutral manual review; actual permission and field errors remain.
+
+26 Node browser tests and 66 relevant Python tests passed. Isolated Chrome
+checks verified actual DOM password sign-in/recovery/signup with a mocked
+provider, and actual request review persistence/UTC edits with mocked Gemini.
+Desktop and 390px screenshots were inspected; no phone overflow. These mocked
+password checks are not a claim of real-provider password authentication.
+Live password setup/sign-in needs the user's private password entry after
+deployment. Full team test: `docs/team-test-scenario.md`.
