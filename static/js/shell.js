@@ -54,3 +54,25 @@
   });
   menu.addEventListener("click", (event) => { if (event.target.closest("a")) close(false); });
 })();
+
+(function () {
+  if (location.pathname !== "/sign-in") {
+    document.querySelectorAll('a[href="/sign-in"]').forEach(a => {
+      a.href = "/sign-in?next=" + encodeURIComponent(location.pathname + location.search);
+    });
+  }
+})();
+
+// Keyboard focus must remain above the fixed taskbar, including after resize.
+(function () {
+  function ensureVisible(control) {
+    if (!control || !control.closest || !control.closest("main")) return;
+    requestAnimationFrame(()=>{
+      const bar=document.querySelector(".taskbar");
+      if (bar && (control.getBoundingClientRect().bottom>bar.getBoundingClientRect().top-12 || control.getBoundingClientRect().top<0))
+        control.scrollIntoView({block:"center",behavior:"instant"});
+    });
+  }
+  document.addEventListener("focusin",e=>ensureVisible(e.target));
+  if (typeof window!=="undefined") window.addEventListener("resize",()=>ensureVisible(document.activeElement));
+})();

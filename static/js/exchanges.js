@@ -55,11 +55,8 @@
   });
 
   async function initList() {
-    let listings = [];
     let profile = null;
     let loading = false;
-    const requested = new URLSearchParams(location.search);
-    const selectedId = requested.get("listing_id");
     const stageLabels = {
       pre_handoff: "Before pickup", handoff: "At pickup",
       pre_return: "Before return (borrower)", post_return: "After return (owner)",
@@ -190,11 +187,15 @@
       heading.append(title, node("span", statusLabels[exchange.status] || exchange.status, "exchange-status"));
       const owner = exchange.owner_id === profile.id;
       const other = exchange.participants[owner ? "requester" : "owner"];
-      card.append(heading, node("p", (exchange.mode === "borrow" ? owner ? "Lending" : "Borrowing" : owner ? "Selling" : "Buying")
+      card.append(heading, node("p", (exchange.mode === "service" ? owner ? "Providing service" : "Requesting service" : exchange.mode === "borrow" ? owner ? "Lending" : "Borrowing" : owner ? "Selling" : "Buying")
         + " · With " + other.display_name + " · " + other.badge));
       const offer = exchange.current_offer;
       const terms = node("dl", undefined, "exchange-terms");
-      if (offer) {
+      if (offer && exchange.mode === "service") {
+        addRows(terms, [["Service price",api.formatCents(offer.service_price_cents)],
+          ["Duration",offer.service_duration_minutes + " minutes"],["Scheduled",timeText(offer.service_scheduled_at)],
+          ["Location",offer.service_delivery === "in_person" ? "Catalog meeting spot" : "Remote"]]);
+      } else if (offer) {
         addRows(terms, [
           ["Pickup time", timeText(offer.pickup_at)],
           ["Pickup location", meetingText(exchange.pickup_meeting_spot, offer.pickup_meeting_spot_id)],
@@ -218,7 +219,7 @@
       let actionLabel = "Open private exchange";
       let section = "";
       if (exchange.status === "negotiating") {
-        card.append(node("p", "Both participants must accept the same offer revision before pickup. The item is not reserved yet."));
+        card.append(node("p", "Both participants must accept the current offer before it is reserved or scheduled."));
         actionLabel = "Review terms and messages";
       } else if (exchange.status === "reserved") {
         card.append(node("p", count("handoff") + "/2 pickup confirmations · " + (confirmed("handoff")
@@ -246,36 +247,11 @@
         const depositLabel = { simulated_pending: "Simulated deposit: pending", simulated_held: "Simulated deposit: held", simulated_released: "Simulated deposit: released" };
         card.append(node("p", depositLabel[deposit.state] || "Simulated deposit status unavailable", "exchange-help"));
       }
-      card.append(node("p", "Simulated: no real funds are reserved or charged.", "simulated-notice"));
       const actions = node("div", undefined, "exchange-actions");
       const action = node("a", actionLabel, "button"); action.href = roomUrl + section;
       actions.append(action); card.append(actions);
       addPhotos(card, exchange); addReview(card, exchange);
       return card;
-    }
-    function updateModes() {
-      const listing = listings.find((item) => item.id === $("start-listing").value);
-      $("start-mode").replaceChildren();
-      if (!listing) return;
-      listing.allowed_modes.filter((mode) => ["sale", "borrow"].includes(mode)).forEach((mode) => {
-        const option = node("option", modeLabel(mode));
-        option.value = mode;
-        $("start-mode").append(option);
-      });
-      if (listing.allowed_modes.includes(requested.get("mode"))) {
-        $("start-mode").value = requested.get("mode");
-      }
-      updateProposal();
-    }
-    function updateProposal() {
-      const listing = listings.find((item) => item.id === $("start-listing").value);
-      if (!listing) return;
-      const terms = $("start-mode").value === "sale"
-        ? "Asking sale price: " + api.formatCents(listing.sale_price_cents)
-        : "Proposed rental fee: " + api.formatCents(listing.rental_fee_cents)
-          + " · Proposed item value: " + api.formatCents(listing.proposed_item_value_cents)
-          + " · Owner's proposed collateral: " + (listing.collateral_percent ?? "unknown") + "%";
-      $("listing-proposal").textContent = terms + ". Confirm final terms in the exchange room.";
     }
     async function load() {
       if (loading) return;
@@ -289,9 +265,7 @@
         const me = await api.get("/api/me");
         if (!sessionIsCurrent()) return;
         profile = me.profile;
-        const [exchangesResult, listingsResult] = await Promise.allSettled([
-          api.get("/api/exchanges"), api.get("/api/listings"),
-        ]);
+        const exchangesResult = {status: "fulfilled", value: await api.get("/api/exchanges")};
         if (!sessionIsCurrent()) return;
         if (exchangesResult.status === "rejected") throw exchangesResult.reason;
         if (exchangesResult.value.fixture) throw new Error("This server is serving sample exchanges. Restart it with the current exchange backend to load your saved exchanges.");
@@ -303,29 +277,6 @@
           : "Your private exchanges are up to date.";
         $("exchange-empty").hidden = exchanges.length > 0;
         exchanges.forEach((exchange) => $("exchange-list").append(renderExchange(exchange)));
-        $("start-card").hidden = false;
-        if (listingsResult.status === "rejected") {
-          $("listing-status").textContent = "Could not load available listings. Refresh to try again.";
-          $("start-fields").disabled = true;
-          return;
-        }
-        listings = listingsResult.value.listings.filter((listing) => listing.owner_id !== profile.id
-          && listing.allowed_modes.some((mode) => ["sale", "borrow"].includes(mode)));
-        $("start-listing").replaceChildren();
-        listings.forEach((listing) => {
-          const option = node("option", listing.title);
-          option.value = listing.id;
-          $("start-listing").append(option);
-        });
-        const selected = listings.find((listing) => listing.id === selectedId);
-        if (selected) $("start-listing").value = selected.id;
-        $("listing-status").textContent = !listings.length
-          ? "No available items from another member. Check back after a listing is posted."
-          : selectedId && !selected
-            ? "The linked item is unavailable or belongs to you. Choose another available item."
-            : "";
-        $("start-fields").disabled = !listings.length;
-        updateModes();
       } catch (error) {
         if (sessionIsCurrent()) pageError(error);
       } finally {
@@ -335,24 +286,6 @@
       }
     }
     $("refresh-exchanges").addEventListener("click", load);
-    $("start-listing").addEventListener("change", updateModes);
-    $("start-mode").addEventListener("change", updateProposal);
-    $("start-exchange-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      $("start-error").textContent = "";
-      $("start-fields").disabled = true;
-      try {
-        const body = { listing_id: $("start-listing").value, mode: $("start-mode").value };
-        if (requested.get("source_request_id")) body.source_request_id = requested.get("source_request_id");
-        const result = await api.post("/api/exchanges", body);
-        if (sessionIsCurrent()) location.assign("/exchanges/" + encodeURIComponent(result.exchange.id));
-      } catch (error) {
-        if (!sessionIsCurrent()) return;
-        $("start-error").textContent = errorText(error);
-        if ([401, 403].includes(error.status)) pageError(error);
-        $("start-fields").disabled = false;
-      }
-    });
     await load();
   }
 
@@ -377,6 +310,8 @@
     }
     return candidates[0].toISOString();
   }
+  window.campusExchangeTime = {input:easternInput,toUtc:easternToUtc};
+
   function cents(id) {
     const value = $(id).value.trim();
     if (!/^\d+(\.\d{1,2})?$/.test(value)) throw new Error("Enter a nonnegative USD amount with at most two decimal places.");
@@ -386,6 +321,20 @@
 
   async function initRoom() {
     const base = "/api/exchanges/" + encodeURIComponent(roomPage.dataset.exchangeId);
+    try {
+      const initial = await api.get(base);
+      if (initial.exchange.mode === "service") { await window.campusServiceRoom(base, initial); return; }
+      const safety = node("section", undefined, "card");safety.id="meeting-location-card";
+      safety.append(node("h2", "Meeting location and access"));
+      const choices = node("div"); safety.append(choices);
+      $("room-content").prepend(safety);
+      await window.campusExchangeLocations(choices, base, spot => {
+        if ($("offer-editor-card").hidden) return;
+        $("pickup-spot").value = spot.id;
+        $("pickup-spot").dispatchEvent(new Event("change", {bubbles:true}));
+        $("offer-form").scrollIntoView({block:"center"});
+      });
+    } catch (error) { pageError(error); return; }
     let profile, detail, listing, spots = [];
     let draftVersion = null, dirty = false, busy = false, refreshing = false, timer;
     let initialized = false, initializing = false;
@@ -394,6 +343,7 @@
     let evidence = [], evidenceSignature = null, selectedPhotoUrl = null;
     const messages = new Map();
     let after = null;
+    let messageKey=crypto.randomUUID();
     const spotName = (id) => spots.find((spot) => spot.id === id)?.label || (id ? "Meeting spot unavailable; needs confirmation" : "Not selected");
     const participantName = (id) => {
       const participants = Object.values(detail.participants);
@@ -412,6 +362,8 @@
     }
     function renderWorkflow() {
       const exchange = detail.exchange, owner = profile.id === exchange.owner_id;
+      const meeting=$('meeting-location-card');
+      if(meeting){meeting.querySelectorAll('[data-spot]').forEach(b=>{b.disabled=exchange.status!=='negotiating';});const form=meeting.querySelector('form');if(form)form.hidden=['completed','cancelled','disputed'].includes(exchange.status);}
       const pickup = exchange.status === "reserved", returning = exchange.status === "return_pending";
       const pickupConfirmed = confirmations("handoff").some((record) => record.participant_id === profile.id);
       const returnConfirmed = confirmations("return").some((record) => record.participant_id === profile.id);
@@ -764,7 +716,8 @@
       event.preventDefault();
       const body = $("message-body").value;
       action("message-error", async () => {
-        const result = await api.post(base + "/messages", { body });
+        const result = await api.post(base + "/messages", {body}, {headers:{"Idempotency-Key":messageKey}});
+        messageKey=crypto.randomUUID();
         if (!sessionIsCurrent()) return;
         $("message-body").value = "";
         renderMessages([result.message]);

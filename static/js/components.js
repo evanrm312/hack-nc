@@ -131,7 +131,11 @@
       root, control,
       setError(message) {
         error.textContent = message || "";
-        if (message) control.setAttribute("aria-invalid", "true");
+        if (message) {
+          control.setAttribute("aria-invalid", "true");
+          let section = root.closest("details");
+          while (section) { section.open=true; section=section.parentElement.closest("details"); }
+        }
         else control.removeAttribute("aria-invalid");
       },
       clearError() { api.setError(""); },
