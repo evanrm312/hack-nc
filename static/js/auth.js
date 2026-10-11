@@ -187,11 +187,17 @@
       const email = allowedEmail($("signup-email"));
       const password = newPassword($("signup-password"), $("signup-password-confirm"));
       if (!email || !password) return;
-      const { error } = await client.auth.signUp({ email, password,
+      const { data, error } = await client.auth.signUp({ email, password,
         options: { emailRedirectTo: location.origin + "/sign-in" } });
       $("signup-password").value = "";
       $("signup-password-confirm").value = "";
       if (error) { showError(authError(error)); return; }
+      if (data?.session) {
+        api.setToken(data.session.access_token);
+        $("auth-hint").textContent = "Account created. You're signed in and ready to test.";
+        await refreshSessionStatus();
+        return;
+      }
       $("auth-hint").textContent = "Check your UNC inbox to confirm your account once, then sign in with your password. If you already have an account, sign in or use password recovery.";
     });
     const recoveryButton = $("password-recovery");

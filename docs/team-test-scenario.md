@@ -1,7 +1,7 @@
 # Campus Current team acceptance test
 
-Run against https://hack-nc.onrender.com after PR #21 deploys. Allow 30–45
-minutes. Use three real, confirmed UNC accounts in separate browser profiles:
+Run against https://hack-nc.onrender.com after the temporary email-confirmation change deploys. Allow 30–45
+minutes. Use three password test accounts using UNC addresses in separate browser profiles:
 **A borrower**, **B lender**, **C outsider**. Never share passwords or paste
 access tokens into chat. Mark each row PASS/FAIL and record the page/record ID,
 expected versus actual behavior, and a screenshot without emails or secrets.
@@ -17,11 +17,11 @@ first password**, and open the newest recovery email once. Choose and repeat
 an 8+ character password in **Set your password**, then Save password.
 If already signed in, open Account and set your password directly.
 
-New accounts: **New here? Create an account**, enter your UNC email, choose and
-repeat a password, and confirm your inbox link once. Confirm email remains
-required; a typed UNC address alone never grants a badge. The default sender's
-2-email/hour limit still applies to initial confirmation and recovery, so
-prepare the accounts beforehand rather than repeatedly requesting links.
+New accounts: **New here? Create an account**, enter a UNC address, choose and
+repeat a password. Temporary testing mode signs you in immediately without an
+email. Expect **Test account (email not verified)**, not a verification claim.
+Use fresh accounts for A/B/C to avoid recovery email limits. Existing accounts
+with passwords can sign in normally; recovery still requires an email.
 Ordinary password sign-in sends no email.
 
 | Check | Expected |
@@ -29,7 +29,8 @@ Ordinary password sign-in sends no email.
 | Sign out; sign in with email/password three times | Each succeeds without an inbox link; no `/otp` or `/recover` call on normal login |
 | Try an incorrect password once | Clear retry message; no authenticated account |
 | Try `someone@unc.edu.evil.com` | Rejected before provider call; never verified |
-| Sign in with a real confirmed account | “UNC email verified”; no sandbox badge; `/api/me` 200 |
+| Create a fresh test account | Immediate session; “Test account (email not verified)”; `/api/me` 200; no inbox link |
+| Existing verified account signs in | Original profile and records preserved |
 | Refresh, open My Exchanges, and use `/sign-in?next=%2Fexchanges` | Session persists; internal destination opens |
 | Sign out, refresh | Browsing works; `/api/me` 401; posting requires sign-in |
 

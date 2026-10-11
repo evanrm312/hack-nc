@@ -5,9 +5,15 @@
 {% block content %}
 <div class="account-workspace"><aside class="account-pane">{{ icon('shield') }}<h2>Your campus connection</h2><p>Browse freely. Sign in to make requests, share listings, and keep your exchanges private.</p><div class="account-nature" aria-hidden="true"></div></aside><div><section class="card" id="sign-in-card">
   <h1>Sign in</h1>
+  {% if public_config.require_email_confirmation %}
   <p>Browsing is open to everyone. Posting, messaging, offers, and reviews need a
      confirmed <strong>@{{ public_config.allowed_email_domain }}</strong> email.
      The badge "UNC email verified" means only that; it is not proof of student status.</p>
+  {% else %}
+  <div class="simulated-notice" role="note"><strong>Temporary testing mode.</strong>
+    Create an account with an @{{ public_config.allowed_email_domain }} address and a password to start immediately.
+    No confirmation email is required. New accounts are labeled “Test account (email not verified)”.</div>
+  {% endif %}
 
   {% if public_config.auth_mode == "sandbox" %}
   <div class="simulated-notice" role="note">
@@ -40,7 +46,11 @@
   <p id="auth-hint" role="status" aria-live="polite"></p>
   <details class="auth-registration" id="registration-details">
     <summary>New here? Create an account</summary>
+    {% if public_config.require_email_confirmation %}
     <p>Confirm your UNC email once. After that, sign in with your password.</p>
+    {% else %}
+    <p>Create your account and start testing immediately. Use your password for future sign-ins.</p>
+    {% endif %}
     <form id="password-sign-up-form">
       <label for="signup-email">UNC email address</label>
       <input id="signup-email" name="email" type="email" autocomplete="username" required

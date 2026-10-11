@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db import db, iso_utc, new_id, utcnow
 
-VERIFICATION_SOURCES = ("supabase", "sandbox")
+VERIFICATION_SOURCES = ("supabase", "supabase_test", "sandbox")
 
 
 class Profile(db.Model):
@@ -30,6 +30,7 @@ class Profile(db.Model):
     auth_subject: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(80), nullable=False)
     confirmed_email_domain: Mapped[str] = mapped_column(String(255), nullable=False)
+    # "supabase_test" = password account admitted without inbox verification.
     # "supabase" = real email confirmation; "sandbox" = labeled demo identity.
     verification_source: Mapped[str] = mapped_column(String(16), nullable=False)
     is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -39,6 +40,8 @@ class Profile(db.Model):
 
     @property
     def badge(self) -> str:
+        if self.verification_source == "supabase_test":
+            return "Test account (email not verified)"
         if self.verification_source == "supabase":
             return "UNC email verified"
         return "Sandbox identity (not verified)"

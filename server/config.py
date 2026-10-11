@@ -73,6 +73,8 @@ class Config:
     AUTH_MODE = (_env("AUTH_MODE", "sandbox") or "sandbox").lower()
     SANDBOX_USERS = _env_list("SANDBOX_USERS")
     ALLOWED_EMAIL_DOMAIN = (_env("ALLOWED_EMAIL_DOMAIN", "unc.edu") or "unc.edu").lower()
+    # Temporary operator-controlled testing exception; fail closed by default.
+    REQUIRE_EMAIL_CONFIRMATION = (_env("REQUIRE_EMAIL_CONFIRMATION", "true") or "true").lower() != "false"
 
     SUPABASE_URL = _env("SUPABASE_URL")
     SUPABASE_ANON_KEY = _env("SUPABASE_ANON_KEY")
