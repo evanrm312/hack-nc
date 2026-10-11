@@ -1074,3 +1074,14 @@ password is saved. Ordinary sign-in does not send email. Passwords are submitted
 only to Supabase, never Flask, local/session storage or logs. Backend identity
 and exact-domain/email-confirmation checks are unchanged. Email confirmation is
 not disabled; recovery/registration still obey provider email quotas.
+
+## Temporary password testing exception
+
+Explicitly requested by Evan for immediate team testing. `REQUIRE_EMAIL_CONFIRMATION`
+defaults to true; false admits authenticated Supabase users with the exact UNC
+domain without inbox confirmation. Supabase Confirm email must also be disabled.
+New profiles are persisted as `supabase_test`, with `is_demo=true`, an empty
+`confirmed_email_domain`, and badge “Test account (email not verified)”.
+All owner, participant, club, and private-evidence permissions remain enforced.
+Re-enabling confirmation blocks these test profiles even if Supabase populated
+an automatic confirmation timestamp. No existing profile or record is rewritten.

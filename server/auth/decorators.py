@@ -66,25 +66,35 @@ def _load_identity() -> Identity | None:
 
 
 def _verify(identity: Identity) -> None:
-    if not identity.email_confirmed:
+    confirmation_required = current_app.config["REQUIRE_EMAIL_CONFIRMATION"]
+    if confirmation_required and not identity.email_confirmed:
         raise ApiError(403, "email_not_confirmed", "Confirm your email before posting or transacting")
     if not domain_allowed(identity.email, current_app.config["ALLOWED_EMAIL_DOMAIN"]):
         raise ApiError(
             403,
             "domain_not_allowed",
-            f"A verified @{current_app.config['ALLOWED_EMAIL_DOMAIN']} email is required",
+            f"An @{current_app.config['ALLOWED_EMAIL_DOMAIN']} email is required",
         )
+    if confirmation_required and identity.source == "supabase":
+        # Supabase auto-confirms signups when confirmation is disabled. That
+        # timestamp is not evidence of inbox ownership when testing ends.
+        profile = db.session.scalar(db.select(Profile).where(Profile.auth_subject == identity.subject))
+        if profile is not None and profile.verification_source == "supabase_test":
+            raise ApiError(403, "email_not_confirmed", "This test account needs email verification before use outside testing")
 
 
 def _get_or_create_profile(identity: Identity) -> Profile:
     profile = db.session.scalar(db.select(Profile).where(Profile.auth_subject == identity.subject))
     if profile is None:
+        source = identity.source
+        if source == "supabase" and not current_app.config["REQUIRE_EMAIL_CONFIRMATION"]:
+            source = "supabase_test"
         profile = Profile(
             auth_subject=identity.subject,
             display_name="",  # set below once the id exists
-            confirmed_email_domain=identity.domain or "",
-            verification_source=identity.source,
-            is_demo=identity.source != "supabase",
+            confirmed_email_domain="" if source == "supabase_test" else identity.domain or "",
+            verification_source=source,
+            is_demo=source != "supabase",
         )
         db.session.add(profile)
         try:

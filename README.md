@@ -189,6 +189,20 @@ development key and network access.
   `DATABASE_URL` to the Supabase Postgres URL. The service-role key stays
   backend-only.
 
+Temporary team testing: set `REQUIRE_EMAIL_CONFIRMATION=false` on Render and
+disable **Confirm email** in Supabase Authentication → Sign In / Providers.
+New password signups receive an immediate session without an email. Flask still
+validates the real token and exact UNC domain, and enforces owner/participant
+permissions. New profiles use `verification_source=supabase_test`, `is_demo=true`,
+an empty `confirmed_email_domain`, and “Test account (email not verified)”.
+Existing verified profiles keep their identity and records.
+
+To end testing, re-enable Supabase **Confirm email** first, then set
+`REQUIRE_EMAIL_CONFIRMATION=true` and redeploy. Existing test profiles remain
+blocked until a separate inbox-verification process explicitly upgrades them;
+Supabase's automatic confirmation timestamp must not be treated as proof.
+Password recovery still sends an email. Fresh test accounts do not need it.
+
 `server/config.py` loads `.env` when the app starts; an already-exported shell
 variable takes precedence. Restart Flask after editing `.env`. For the shared
 Supabase Session pooler, use the URL copied from **Connect → Session pooler**,

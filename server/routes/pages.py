@@ -17,6 +17,7 @@ def _public_config() -> dict:
         "supabase_url": cfg["SUPABASE_URL"] if cfg["AUTH_MODE"] == "supabase" else None,
         "supabase_anon_key": cfg["SUPABASE_ANON_KEY"] if cfg["AUTH_MODE"] == "supabase" else None,
         "allowed_email_domain": cfg["ALLOWED_EMAIL_DOMAIN"],
+        "require_email_confirmation": cfg["REQUIRE_EMAIL_CONFIRMATION"],
     }
 
 

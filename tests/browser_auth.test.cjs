@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const apiSource = fs.readFileSync(path.join(root, 'static/js/api.js'), 'utf8');
 const authSource = fs.readFileSync(path.join(root, 'static/js/auth.js'), 'utf8');
 
-function harness({ signInPage = false, recovery = false } = {}) {
+function harness({ signInPage = false, recovery = false, instantSignup = false } = {}) {
   const listeners = new Map();
   const elements = new Map();
   const storage = new Map();
@@ -54,7 +54,11 @@ function harness({ signInPage = false, recovery = false } = {}) {
       if (!providerError) { session={access_token:'password-token'}; authCallback?.('SIGNED_IN',session); }
       return {error:providerError};
     },
-    async signUp(body) { authCalls.push({method:'signup',body}); return {error:providerError}; },
+    async signUp(body) {
+      authCalls.push({method:'signup',body});
+      if (instantSignup && !providerError) { session={access_token:'signup-token'}; authCallback?.('SIGNED_IN',session); }
+      return {data:{session},error:providerError};
+    },
     async resetPasswordForEmail(email, options) { authCalls.push({method:'recovery',email,options}); return {error:providerError}; },
     async updateUser(body) { authCalls.push({method:'update',body}); return {error:providerError}; },
   } };
@@ -144,6 +148,20 @@ test('signup validates password confirmation and leaves email verification with 
   assert.equal(h.api.getToken(),null);
   assert.match(h.element('auth-hint').textContent,/confirm your account once/);
   assert.equal(h.element('signup-password').value,'');
+});
+
+test('signup with confirmation disabled immediately establishes a session', async () => {
+  const h=harness({signInPage:true,instantSignup:true});
+  h.element('signup-email').value='new@unc.edu';
+  h.element('signup-password').value='only-in-test';
+  h.element('signup-password-confirm').value='only-in-test';
+  await submit(h,'password-sign-up-form');
+  assert.equal(h.api.getToken(),'signup-token');
+  assert.deepEqual(h.authCalls.map(c=>c.method),['signup']);
+  assert.equal(h.element('registration-details').hidden,true);
+  assert.match(h.element('auth-hint').textContent,/ready to test/);
+  assert.equal(h.element('signup-password').value,'');
+  assert.ok(h.requests.some(r=>r.url==='/api/me'));
 });
 
 test('recovery uses the approved callback and a generic account-existence message', async () => {

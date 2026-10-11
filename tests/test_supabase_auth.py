@@ -30,8 +30,11 @@ def supabase_client(tmp_path):
         "TESTING": True,
         "APP_ENV": "development",
         "AUTH_MODE": "supabase",
+        "REQUIRE_EMAIL_CONFIRMATION": True,
         "SUPABASE_URL": "https://example.supabase.co",
         "SUPABASE_ANON_KEY": "public-test-key",
+        "STORAGE_BACKEND": "local",
+        "GEMINI_API_KEY": None,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'supabase-test.sqlite3'}",
         "UPLOAD_DIR": str(tmp_path / "uploads"),
     })
@@ -65,7 +68,9 @@ def test_confirmed_unc_email_creates_private_profile(supabase_client, monkeypatc
     assert "alice@unc.edu" not in response.get_data(as_text=True).lower()
 
 
-def test_supabase_identity_owns_normalized_request_and_matches_real_catalog(supabase_client, monkeypatch):
+@pytest.mark.parametrize("confirmation_required", [True, False])
+def test_supabase_identity_owns_normalized_request_and_matches_real_catalog(supabase_client, monkeypatch, confirmation_required):
+    supabase_client.application.config["REQUIRE_EMAIL_CONFIRMATION"] = confirmation_required
     users = {
         "owner-token": {"id": "provider-owner", "email": "owner@unc.edu", "email_confirmed_at": "2026-01-01T00:00:00Z"},
         "requester-token": {"id": "provider-requester", "email": "requester@unc.edu", "email_confirmed_at": "2026-01-01T00:00:00Z"},
@@ -143,6 +148,38 @@ def test_invalid_token(supabase_client, monkeypatch):
     response = supabase_client.get("/api/me", headers={"Authorization": "Bearer expired"})
     assert response.status_code == 401
     assert response.get_json()["error"]["code"] == "invalid_token"
+
+
+@pytest.mark.parametrize("confirmed_at", [None, "2026-01-01T00:00:00Z"])
+def test_temporary_signup_is_unverified_and_rejected_when_testing_ends(supabase_client, monkeypatch, confirmed_at):
+    supabase_client.application.config["REQUIRE_EMAIL_CONFIRMATION"] = False
+    payload = {"id": "test-user", "email": "qa@unc.edu", "email_confirmed_at": confirmed_at}
+    monkeypatch.setattr("server.auth.identity.urllib.request.urlopen", lambda *_a, **_kw: ProviderResponse(json.dumps(payload).encode()))
+    headers = {"Authorization": "Bearer test-token"}
+    response = supabase_client.get("/api/me", headers=headers)
+    assert response.status_code == 200
+    profile = response.get_json()["profile"]
+    assert profile["verification_source"] == "supabase_test"
+    assert profile["badge"] == "Test account (email not verified)"
+    assert profile["is_demo"] is True
+    assert profile["confirmed_email_domain"] == ""
+    assert supabase_client.get("/api/me", headers=headers).get_json()["profile"]["id"] == profile["id"]
+    supabase_client.application.config["REQUIRE_EMAIL_CONFIRMATION"] = True
+    payload["email_confirmed_at"] = "2026-01-01T00:00:00Z"
+    assert supabase_client.get("/api/me", headers=headers).status_code == 403
+
+
+def test_temporary_mode_keeps_domain_and_token_checks(supabase_client, monkeypatch):
+    supabase_client.application.config["REQUIRE_EMAIL_CONFIRMATION"] = False
+    payload = {"id": "test-user", "email": "qa@unc.edu.evil.com", "email_confirmed_at": None}
+    monkeypatch.setattr("server.auth.identity.urllib.request.urlopen", lambda *_a, **_kw: ProviderResponse(json.dumps(payload).encode()))
+    assert supabase_client.get("/api/me").status_code == 401
+    response = supabase_client.get("/api/me", headers={"Authorization": "Bearer test-token"})
+    assert response.status_code == 403
+    assert response.get_json()["error"]["code"] == "domain_not_allowed"
+    html = supabase_client.get("/sign-in").get_data(as_text=True)
+    assert "Temporary testing mode" in html
+    assert "No confirmation email is required" in html
 
 
 def test_provider_failure_fails_closed(supabase_client, monkeypatch):
