@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#247ea0">
   <title>{% block title %}Campus Current{% endblock %}</title>
-  <link rel="preload" href="{{ url_for('static', filename='assets/fonts/SourceSans3-Upright.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='assets/fonts/Carlito-Regular.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
   {% block styles %}{% endblock %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/desktop.css') }}">
@@ -20,7 +20,7 @@
         <span class="brand__orb">{{ icon('leaf') }}</span>
         <span>Campus Current</span>
       </a>
-      <span class="brand__tag">buy · borrow · UNC</span>
+      <span class="brand__tag">Buy · Borrow · UNC</span>
       <div class="session" id="session-status" role="status" aria-live="polite"></div>
     </header>
     <main class="shell-main" id="main" tabindex="-1">
@@ -33,15 +33,15 @@
         <div class="window-toolbar">
           <a href="{{ url_for('pages.home') }}">{{ icon('home') }} Campus</a>
           <span aria-hidden="true">›</span><span>Exchange workspace</span>
-          <span class="toolbar-purpose">Reuse · share · connect</span>
+          <span class="toolbar-purpose">UNC community exchange</span>
         </div>
         <div class="window-content">{% block content %}{% endblock %}</div>
       </div>
     </main>
     <footer class="aero-footer">
-      <span>Reuse what already exists on campus: short-term access, local handoffs.</span>
+      <span>Buy, borrow, and share on campus.</span>
       <span>Prototype. Payments and deposits are simulated.</span>
-      <details class="asset-credits"><summary>Photo &amp; font credits</summary><p>Sky: <a href="https://www.pexels.com/photo/blue-skies-53594/">Pixabay / Pexels</a>. Leaves: <a href="https://www.pexels.com/photo/green-leaves-1154623/">Free Nature Stock / Pexels</a>. Both photographs are marked CC0 on their source pages. <a href="https://github.com/adobe-fonts/source-sans">Source Sans 3 by Adobe</a>, SIL Open Font License 1.1.</p></details>
+      <details class="asset-credits"><summary>Photo &amp; font credits</summary><p>Sky: <a href="https://www.pexels.com/photo/blue-skies-53594/">Pixabay / Pexels</a>. Leaves: <a href="https://www.pexels.com/photo/green-leaves-1154623/">Free Nature Stock / Pexels</a>. Both photographs are marked CC0 on their source pages. <a href="https://github.com/googlefonts/carlito">Carlito by Łukasz Dziedzic</a>, SIL Open Font License 1.1.</p></details>
     </footer>
   </div>
   <section class="start-menu" id="start-menu" aria-label="Campus launcher" hidden>
@@ -54,7 +54,7 @@
         <a href="/listings/mine">{{ icon('listing') }}<span>My listings<small>Manage your offerings</small></span></a>
         <a href="/exchanges">{{ icon('exchange') }}<span>My exchanges<small>Private agreements and messages</small></span></a>
       </nav>
-      <div class="start-menu__aside"><span class="start-nature">{{ icon('leaf') }}</span><h2>A campus in circulation</h2><p>Find what you need. Share what you have.</p><a href="/sign-in">{{ icon('user') }} Your account</a></div>
+      <div class="start-menu__aside"><span class="start-nature">{{ icon('leaf') }}</span><h2>Your workspace</h2><p>Requests, listings, and private exchanges in one place.</p><a href="/sign-in">{{ icon('user') }} Your account</a></div>
     </div>
   </section>
   <nav class="taskbar" aria-label="Primary">
@@ -72,6 +72,7 @@
   <script src="{{ url_for('static', filename='js/components.js') }}"></script>
   <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
   <script src="{{ url_for('static', filename='js/marketplace.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/discovery.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

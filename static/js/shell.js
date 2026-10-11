@@ -13,11 +13,17 @@
   // Keep keyboard-focused content controls above the fixed taskbar.
   document.addEventListener("focusin", (event) => {
     if (!event.target.closest || !event.target.closest("#main")) return;
-    const bar = document.querySelector(".taskbar");
-    const rect = event.target.getBoundingClientRect();
-    const lowerEdge = bar ? bar.getBoundingClientRect().top - 12 : window.innerHeight - 12;
-    if (rect.bottom > lowerEdge) window.scrollBy({ top: rect.bottom - lowerEdge, behavior: "instant" });
-    else if (rect.top < 12) window.scrollBy({ top: rect.top - 12, behavior: "instant" });
+    function keepVisible() {
+      if (document.activeElement !== event.target) return;
+      const bar = document.querySelector(".taskbar");
+      const rect = event.target.getBoundingClientRect();
+      const lowerEdge = bar ? bar.getBoundingClientRect().top - 12 : window.innerHeight - 12;
+      if (rect.bottom > lowerEdge) window.scrollBy({ top: rect.bottom - lowerEdge, behavior: "instant" });
+      else if (rect.top < 12) window.scrollBy({ top: rect.top - 12, behavior: "instant" });
+    }
+    keepVisible();
+    // Firefox can perform its native focus scroll after focusin dispatch.
+    window.requestAnimationFrame(keepVisible);
   });
   const toggle = document.getElementById("start-toggle");
   const menu = document.getElementById("start-menu");

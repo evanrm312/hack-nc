@@ -10,8 +10,7 @@
 <section class="card card--hero" aria-labelledby="request-heading">
   <div class="hero-grid">
     <div class="request-box">
-      <p class="eyebrow">Find it on campus</p>
-      <h1 id="request-heading">Describe what you need</h1>
+      <h1 id="request-heading">What do you need?</h1>
       <p class="lede">Tell us what you need, when you need it, and whether you want to buy or borrow.</p>
 
       <div id="auth-gate" class="notice notice--info" role="status" hidden>
@@ -23,15 +22,15 @@
 
       <form id="request-form" novalidate>
         <div class="field">
-          <label class="field__label" for="request-text"><span>What do you need?</span></label>
-          <p class="field__hint" id="request-text-hint">Include size or model, when you need it, your budget, and whether borrowing is fine. You can correct every interpreted field on the next page.</p>
+          <label class="field__label" for="request-text"><span>Your request</span></label>
+          <p class="field__hint" id="request-text-hint">Include size or model and budget. Review and edit the proposed details before searching.</p>
           <textarea id="request-text" name="text" rows="3" required maxlength="4000"
                     aria-describedby="request-text-hint request-text-error"
                     placeholder="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit."></textarea>
           <p class="field__error" id="request-text-error" role="alert"></p>
         </div>
         <div class="field photo-field">
-          <label class="field__label" for="request-photo"><span>Add a reference photo</span><span class="field__optional">optional</span></label>
+          <label class="field__label" for="request-photo"><span>Add a reference photo</span><span class="field__optional">Optional</span></label>
           <details class="photo-guidance"><summary>Private, not stored · JPEG, PNG, or WebP</summary><p class="field__hint" id="request-photo-hint">A picture of the kind of item you mean, for example a suit you like. JPEG, PNG, or WebP.
             Only broad visual details (category, type, color, pattern, style) are proposed, never size, price, or condition. The photo is private, is not stored, and never appears on public cards.</p></details>
           <input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="request-photo-hint request-photo-error">
@@ -58,16 +57,18 @@
       </form>
     </div>
 
-    <aside class="campus-pane" aria-label="A campus in circulation">
-      <div class="nature-display"><img src="{{ url_for('static', filename='assets/leaves.webp') }}" alt="Sunlight passing through fresh green leaves" width="1000" height="667">
-        <div class="nature-caption">A campus in circulation</div>
-        <div class="connection"><span class="connection__request">{{ icon('requests') }} Request</span><span class="connection__match">{{ icon('check') }} Match</span></div>
-      </div>
-      <div class="campus-pane__body"><h2>More use. Less unused.</h2><p>Give things already on campus another turn. Buy, borrow, or connect with a local service.</p>
-        <a href="/requests">{{ icon('requests') }} See what people need <span aria-hidden="true">›</span></a>
-        <a href="/listings/new">{{ icon('add') }} Share what you have <span aria-hidden="true">›</span></a>
-        <p class="campus-note">Real listings. Details you confirm. Agreements between people.</p>
-      </div>
+    <aside class="campus-pane discovery-sidebar" aria-label="Campus browsing and your purchases">
+      <div class="sidebar-nature" aria-hidden="true"></div>
+      <section class="sidebar-section" aria-labelledby="recommended-heading">
+        <h2 id="recommended-heading">{{ icon('search') }} Recommended</h2>
+        <p class="sidebar-caption">Browsing suggestions from the catalog. Not personalized.</p>
+        <div id="recommended-items" aria-live="polite"></div>
+      </section>
+      <section class="sidebar-section" aria-labelledby="previous-buys-heading">
+        <h2 id="previous-buys-heading">{{ icon('listing') }} Previous buys</h2>
+        <p class="sidebar-caption">Your completed purchases. Private to your account.</p>
+        <div id="previous-buys" aria-live="polite"></div>
+      </section>
     </aside>
   </div>
 </section>
@@ -134,8 +135,7 @@
   <div class="section__head">
     <h2 id="listings-heading">Available on campus now</h2>
     <div class="cluster">
-      <a class="btn btn--sm" href="{{ url_for('pages.requests_feed') }}">Browse public requests</a>
-      <a class="btn btn--sm btn--primary" href="{{ url_for('pages.listing_form') }}">List an item</a>
+      <a href="{{ url_for('pages.listing_form') }}">New listing</a>
     </div>
   </div>
   <div id="listings" class="grid catalog-list" aria-live="polite" aria-busy="true"></div>

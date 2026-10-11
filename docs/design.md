@@ -23,22 +23,20 @@ without redesign. Files: `static/css/theme.css`, `static/js/components.js`,
 
 ## Typography
 
-System stack only, no downloaded fonts, matching the mid-2000s Frutiger Aero
-era (Windows Vista/7, Mac OS X, early iPhone):
+The refinement bundles Carlito Regular and Bold, by Łukasz Dziedzic, under
+the SIL Open Font License 1.1. It is a modern humanist substitute compatible
+with Calibri's metrics; it is not a bundled Microsoft or Frutiger font.
 
 ```css
---font: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
+--font: "Carlito", "Calibri", "Segoe UI", "DejaVu Sans", sans-serif;
 ```
 
-Windows renders Segoe UI, macOS/iOS fall back to Lucida Grande, older systems
-to Tahoma/Verdana. Body text is 1rem/1.5, plain weight, `--ink` on opaque
-surfaces. Only large headings get polish: `h1` has a white top highlight plus a
-faint sky shadow, the hero `h1` uses an ink-to-sky-900 gradient fill (both
-colors are dark, so contrast stays high; it falls back to plain ink where
-`background-clip: text` is unsupported), `h2` gets the highlight only. Form
-fields, buttons, badges, and body copy have no shadows or gradients on text
-except the white text on primary/leaf buttons, which keeps a 1px dark shadow
-for legibility. No pixel, novelty, or display fonts anywhere.
+The local font works on Linux without an installed Microsoft font. Page
+headings use 32–42px regular type; section titles use 23–24px bold; window
+titles use 17px bold; form labels use 18px bold; body uses 17px/1.45; supporting
+information uses 14–15px/1.4. Prices and agreed terms use tabular numerals.
+Text stays solid navy or green. Reflections belong to surfaces; a small
+shadow supports light text on primary buttons. No novelty display font is used.
 
 ## Tokens (`:root`)
 

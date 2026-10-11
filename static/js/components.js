@@ -115,7 +115,7 @@
 
     const label = el("label", { className: "field__label", for: id },
       el("span", { text: opts.label }),
-      opts.optional ? el("span", { className: "field__optional", text: "optional" }) : null);
+      opts.optional ? el("span", { className: "field__optional", text: "Optional" }) : null);
     const hint = opts.hint ? el("p", { className: "field__hint", id: hintId, text: opts.hint }) : null;
     const error = el("p", { className: "field__error", id: errorId, role: "alert" });
 
@@ -153,7 +153,11 @@
       else leftovers.push(`${name}: ${message}`);
     }
     const first = Object.values(fieldMap).find((f) => f && f.control && f.control.getAttribute("aria-invalid") === "true");
-    if (first) first.control.focus();
+    if (first) {
+      let disclosure = first.control.closest("details");
+      while (disclosure) { disclosure.open = true; disclosure = disclosure.parentElement.closest("details"); }
+      first.control.focus();
+    }
     return leftovers;
   }
 
