@@ -6,14 +6,18 @@
   {% if config.get("EXCHANGE_PREVIEW") %}<p class="simulated-notice" role="note">Sandbox preview: demo inventory and identities. Exchanges here are local examples.</p>{% endif %}
   <section class="card">
     <h1>My exchanges</h1>
-    <p>Agree on terms, choose a campus meeting spot, and keep your conversation private.</p>
+    <p>Track your campus pickups, active loans, and returns. Photos and conversations stay private to each exchange's participants.</p>
     <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
     <p id="page-status" role="status">Loading your exchanges…</p>
     <p id="page-error" class="exchange-error" role="alert"></p>
     <p id="sign-in-hint" hidden><a href="{{ url_for('pages.sign_in') }}">Sign in</a> to view or start a private exchange.</p>
-    <button type="button" id="refresh-exchanges">Refresh exchanges</button>
+    <button type="button" id="refresh-exchanges" disabled>Refresh exchanges</button>
   </section>
-  <div id="exchange-list" aria-label="Your exchanges"></div>
+  <section class="card" id="exchange-empty" hidden>
+    <h2>No exchanges yet</h2>
+    <p>Your exchanges appear here when you start a private conversation about an item. Choose an available item below or <a href="{{ url_for('pages.home') }}">browse Campus Current</a>.</p>
+  </section>
+  <div id="exchange-list" aria-label="Your exchanges" aria-busy="true"></div>
   <section class="card" id="start-card" hidden>
     <h2>Start an exchange</h2>
     <p>Choose an available listing from another member. Starting a conversation does not reserve the item.</p>
