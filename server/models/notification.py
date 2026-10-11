@@ -18,6 +18,7 @@ class Notification(db.Model):
     exchange = relationship("Exchange")
 
     def to_dict(self):
+        accessible = self.exchange is not None and self.recipient_id in self.exchange.participant_ids
         return {'id': self.id, 'kind': self.kind, 'exchange_id': self.exchange_id,
-                'url': '/exchanges/' + self.exchange_id, 'created_at': iso_utc(self.created_at),
+                'url': '/exchanges/' + self.exchange_id if accessible else None, 'accessible': accessible, 'created_at': iso_utc(self.created_at),
                 'read_at': iso_utc(self.read_at)}

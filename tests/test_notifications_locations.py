@@ -156,3 +156,29 @@ def test_condition_acknowledgement_notifies_only_the_new_confirmation(client,ali
     for participant in [alice,bob]:
         rows=[n for n in notices(client,participant)['notifications'] if n['kind']=='condition_confirmation']
         assert len(rows)==1
+
+
+def test_notification_read_does_not_generate_events(client,alice,bob):
+    _,_,_=exchange_with_offer(client,alice,bob)
+    before=notices(client,alice)
+    note=before['notifications'][0]
+    for _ in range(2):assert client.post('/api/notifications/'+note['id']+'/read',headers=alice).status_code==200
+    after=notices(client,alice)
+    assert len(after['notifications'])==len(before['notifications'])
+    assert after['unread_count']==before['unread_count']-1
+
+
+def test_inaccessible_notification_target_has_no_destination(app,client,alice,bob):
+    from server.models import Exchange
+    _,exchange,_=exchange_with_offer(client,alice,bob)
+    me=client.get('/api/me',headers=alice).json['profile']['id']
+    with app.app_context():
+        row=db.session.get(Exchange,exchange['id'])
+        row.owner_id=row.requester_id  # recipient loses participation; isolated corruption scenario
+        db.session.commit();db.session.remove()
+    data=notices(client,alice)
+    assert data['notifications'][0]['url'] is None
+    assert data['notifications'][0]['accessible'] is False
+    note=data['notifications'][0]
+    response=client.post('/api/notifications/'+note['id']+'/read',headers=alice)
+    assert response.status_code==200 and response.json['notification']['url'] is None
