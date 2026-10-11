@@ -31,7 +31,7 @@ def test_catalog_seed_idempotent_preserves_rows_and_public_media(catalog_app):
         unrelated_before = unrelated.to_dict()
         first = seed_demo_data()
         assert sum('demo catalog listing created:' in line for line in first) == 54
-        assert db.session.scalar(select(func.count()).select_from(Listing)) == 57
+        assert db.session.scalar(select(func.count()).select_from(Listing)) == 60
         assert db.session.get(Listing, unrelated.id).to_dict() == unrelated_before
         navy = db.session.get(Listing, _catalog_id('listing', 'clothing-navy-suit-40r'))
         assert navy.owner_id == alice_id
@@ -63,7 +63,7 @@ def test_storage_failure_keeps_catalog_and_no_fake_paths(catalog_app, monkeypatc
     with catalog_app.app_context():
         result = seed_demo_data()
         assert sum('photo unavailable:' in line for line in result) == 52
-        assert db.session.scalar(select(func.count()).select_from(Listing)) == 56
+        assert db.session.scalar(select(func.count()).select_from(Listing)) == 59
         assert not any(row.public_photo_path for row in db.session.scalars(select(Listing)))
 
 
@@ -105,7 +105,9 @@ def test_direct_seed_guard_and_unsupported_showcase_identity(catalog_app):
         catalog_app.config['APP_ENV'] = 'development'
         catalog_app.config['SANDBOX_USERS'] = []
         seed_demo_data()
-        assert all(':demo-catalog:v1:' in p.auth_subject for p in db.session.scalars(select(Profile)) if p.auth_subject != 'sandbox:demo-lender')
+        from server.seed import DEMO_USERS, sandbox_subject
+        sign_in_subjects = {sandbox_subject(email) for email, _ in DEMO_USERS}
+        assert all(':demo-catalog:v1:' in p.auth_subject or p.auth_subject in sign_in_subjects for p in db.session.scalars(select(Profile)))
 
 
 def test_old_namespaced_showcase_owner_maps_without_replacing_id(catalog_app):
@@ -175,6 +177,6 @@ def test_missing_local_reference_does_not_block_other_listings(catalog_app, tmp_
     monkeypatch.setattr(validate_images, 'BASE', base)
     with catalog_app.app_context():
         seed_demo_data()
-        assert db.session.scalar(select(func.count()).select_from(Listing)) == 56
+        assert db.session.scalar(select(func.count()).select_from(Listing)) == 59
         assert db.session.get(Listing, _catalog_id('listing', record['listing_key'])).public_photo_path is None
         assert sum(bool(row.public_photo_path) for row in db.session.scalars(select(Listing))) == 51

@@ -18,27 +18,36 @@ without redesign. Files: `static/css/theme.css`, `static/js/components.js`,
 - Honest labels: fixture/stub data is purple-striped, anything money-related
   that is not real says "simulated", a profile badge shows the server's text
   verbatim and is green only when `verification_source === "supabase"`.
-- Unknown is rendered as "unknown" (via `api.formatCents`/`api.formatTime`),
+- Unknown is rendered as "Unknown" in standalone UI labels (the shared API
+  formatting helpers retain their existing lowercase return values),
   never as `$0.00` or a made-up value.
 
 ## Typography
 
-System stack only, no downloaded fonts, matching the mid-2000s Frutiger Aero
-era (Windows Vista/7, Mac OS X, early iPhone):
+The current refinement uses Segoe UI when installed and bundles Open Sans
+upright variable type, by Steve Matteson and the Open Sans Project Authors,
+under the SIL Open Font License 1.1. Direct browser inspection of the user's
+Aero Archive reference confirmed its Segoe UI/Tahoma stack and regular-weight
+headings. Open Sans supplies a readable humanist approximation on Linux;
+no commercial Microsoft or Frutiger font is redistributed.
 
 ```css
---font: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
+--font: "Segoe UI", "Open Sans", Tahoma, "DejaVu Sans", sans-serif;
 ```
 
-Windows renders Segoe UI, macOS/iOS fall back to Lucida Grande, older systems
-to Tahoma/Verdana. Body text is 1rem/1.5, plain weight, `--ink` on opaque
-surfaces. Only large headings get polish: `h1` has a white top highlight plus a
-faint sky shadow, the hero `h1` uses an ink-to-sky-900 gradient fill (both
-colors are dark, so contrast stays high; it falls back to plain ink where
-`background-clip: text` is unsupported), `h2` gets the highlight only. Form
-fields, buttons, badges, and body copy have no shadows or gradients on text
-except the white text on primary/leaf buttons, which keeps a 1px dark shadow
-for legibility. No pixel, novelty, or display fonts anywhere.
+The local font works on Linux without an installed Microsoft font. Page
+headings use 32–42px regular type; section titles use 23–24px semibold; window
+titles use 17px semibold; form labels use 17px semibold; body uses 17px/1.45; supporting
+information uses 14–15px/1.4. Prices and agreed terms use tabular numerals.
+Text stays solid navy or green. Reflections belong to surfaces; a small
+shadow supports light text on primary buttons. No novelty display font is used.
+
+Window frames have 22px corners (18px on phones), hero panels 20px, controls
+11–12px, and dialogs 20px. White upper/left bevels, shaded lower lips, and
+contact shadows make the chrome and primary actions raised; fields and
+conversation wells remain inset. Catalog rows remain flat inside a rounded
+collection frame, so depth reinforces hierarchy. Application enum labels use
+explicit display mappings, never CSS capitalization or rewrites of user text.
 
 ## Tokens (`:root`)
 
@@ -119,14 +128,28 @@ Dates: `datetime-local` → `components.localToIso()` → ISO with `Z`
 
 CSS: `.card` with gloss highlight; modifiers `--compact`, `--hero`, `--sky`,
 `--leaf`, `--glass` (short text only), `--interactive` (hover lift). Parts:
-`.card__media` (4:3, `--empty` shows "No photo yet"), `.card__header`,
-`.card__title`, `.card__subtitle`, `.card__body`, `.card__footer`,
-`a.card__link` (makes the whole card clickable, link text still readable).
+`.card__media` (4:3; without `src` it becomes `--empty` and shows
+`components.mediaPlaceholder`), `.card__header`, `.card__title`,
+`.card__subtitle`, `.card__body`, `.card__footer`, `a.card__link` (makes the
+whole card clickable, link text still readable).
 
 ```js
 components.card({ title: "Navy suit 40R", subtitle: "formalwear", badges: [components.modeBadge("borrow")],
   media: { src: listing.public_photo_url, alt: "Photo of …" }, body: [...], footer: [...], variant: ["compact"], interactive: true });
+// no photo: media: { placeholder: { category: "formalwear", kind: "item"|"service", label, action } }
 ```
+
+**Photo placeholder** (`components.categoryIcon`, `components.mediaPlaceholder`):
+a glossy sky/leaf bubble (`.media-icon`, teal-tinted for `--service`) with a
+simple stroke icon chosen from a fixed whitelist of category keys
+(formalwear, clothing, electronics, textbooks, calculators, furniture,
+appliances, sports, tools, kitchen, tutoring, proofreading, moving help;
+anything else gets a box), a `.media-label` ("No photo yet", or the service
+category), and an optional owner `action` node rendered above a card's
+stretched link (`.media-action`). Service cards use the same 4:3 media box
+so item and service cards line up in the grid. Photos are only ever the
+listing's own `public_photo_url`; nothing is fetched from the web or
+generated.
 
 ### 4. Dialog
 
@@ -470,6 +493,24 @@ button, and an error with retry.
   `/api/meeting-spots`; owner card with the server's badge text and the
   exchange entry point (below). States: loading, 404 "Listing not found",
   error with retry.
+
+## Listing photos: add or replace (implemented)
+
+`openPhotoDialog(listing, opener, onUploaded)` in `marketplace.js` opens a
+`components.dialog` with a file field (accept JPEG/PNG/WebP; client checks
+MIME and size against `min(CAMPUS_CONFIG.max_upload_bytes, 5 MiB)`), a
+preview from an object URL (revoked on close), the current photo when
+replacing, an upload button disabled until a valid file is chosen, and an
+in-flight guard. Upload goes through `api.upload("/api/listings/{id}/photo",
+"photo", file)`; the server swaps the file and returns the listing. Errors:
+`unsupported_image` / `payload_too_large` / `validation_error` on the field,
+`forbidden`, 404, auth (sign-in link), other. Entry points: My listings (an
+**Add photo** button inside the placeholder, or **Replace photo** in the card
+actions; the list re-renders from the returned listing and focus returns to
+that card's button) and the owner's listing detail page (button under the
+media; the page reloads). Services have no upload control; their media box is
+the category icon. No endpoint removes a photo, and none is needed for this
+scope.
 
 ## Exchange entry points (implemented)
 

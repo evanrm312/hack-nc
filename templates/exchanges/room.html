@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Exchange · Campus Current{% endblock %}
+{% block page_id %}exchange-room{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/exchanges.css') }}">{% endblock %}
 {% block content %}
-{% include "exchanges/_styles.html" %}
 <div class="exchanges" id="exchange-room-page" data-exchange-id="{{ exchange_id }}">
   {% if config.get("EXCHANGE_PREVIEW") %}<p class="simulated-notice" role="note">Sandbox preview: demo inventory and identities. Exchanges here are local examples.</p>{% endif %}
   <section class="card">
-    <a href="{{ url_for('pages.my_exchanges') }}">← My exchanges</a>
+    <a href="{{ url_for('pages.my_exchanges') }}">← My Exchanges</a>
     <div class="exchange-heading"><h1 id="room-title">Exchange room</h1><span id="exchange-status" class="exchange-status"></span></div>
     <p id="participants"></p>
     <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
@@ -74,6 +75,17 @@
       <h2>Return disputed</h2>
       <p id="dispute-reason"></p>
       <p>The item remains reserved for manual review. A dispute never automatically triggers a charge. No real funds are reserved or charged.</p>
+    </section>
+    <section class="card" id="cancel-card" hidden>
+      <h2 id="cancel-heading">Cancel before pickup</h2>
+      <p id="cancel-help">Either participant can cancel before anyone confirms pickup. An unused reservation is released. No cancellation charge is triggered.</p>
+      <form id="cancel-form">
+        <fieldset id="cancel-fields">
+          <div class="exchange-field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" maxlength="2000" rows="2" required></textarea></div>
+          <button type="submit" id="cancel-exchange">Cancel exchange</button>
+        </fieldset>
+      </form>
+      <p id="cancel-error" class="exchange-error" role="alert"></p>
     </section>
     <div class="exchange-layout">
       <div>
@@ -149,7 +161,7 @@
           <div id="offer-history"></div>
         </section>
       </div>
-      <section class="card">
+      <section class="card conversation-pane">
         <h2>Private messages</h2>
         <p class="exchange-help">Only you and the other participant can read this conversation. Messages refresh every five seconds.</p>
         <p id="message-status" role="status"></p>

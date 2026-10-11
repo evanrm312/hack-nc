@@ -397,10 +397,11 @@ def test_edit_racing_accept_cannot_reserve_stale_terms(app, client, alice, bob, 
         assert detail["current_offer"]["rental_fee_cents"] == 1500
 
 
-def test_later_milestones_never_silently_complete_or_charge(client, alice, bob, spot):
+def test_invalid_milestones_never_silently_complete_or_charge(client, alice, bob, spot):
     exchange = ready_exchange(client, alice, bob, spot)
-    for suffix in ("review", "dispute", "cancel"):
-        assert client.post(f"/api/exchanges/{exchange['id']}/{suffix}", json={}, headers=bob).status_code == 501
+    for suffix in ("dispute", "cancel"):
+        assert client.post(f"/api/exchanges/{exchange['id']}/{suffix}", json={}, headers=bob).status_code == 400
+    assert client.post(f"/api/exchanges/{exchange['id']}/review", json={}, headers=bob).status_code == 409
     for suffix in ("handoff", "return", "evidence"):
         assert client.post(f"/api/exchanges/{exchange['id']}/{suffix}", json={}, headers=bob).status_code in (400, 409)
     assert db.session.get(Exchange, exchange["id"]).status == "negotiating"
@@ -441,7 +442,7 @@ def test_preview_uses_isolated_labeled_data_and_does_not_duplicate_inventory(tmp
         assert {listing["title"] for listing in demonstration} == {
             "Navy suit — borrow preview (demo inventory)", "Desk lamp — buy preview (demo inventory)"}
         assert catalog_owner_ids <= {listing["id"] for listing in listings}
-        assert len(listings) == len(catalog_owner_ids) + 2
+        assert len(listings) == len(catalog_owner_ids) + 3 + 2
         current_ids = {listing["id"] for listing in listings}
         if original_ids is None:
             original_ids = current_ids
@@ -767,3 +768,171 @@ def test_simultaneous_pickup_confirmations_are_persisted(app, client, alice, bob
     detail = client.get(f"/api/exchanges/{exchange['id']}", headers=bob).get_json()
     assert detail["exchange"]["status"] == "on_loan"
     assert len(detail["confirmations"]) == 2
+
+
+def test_dashboard_is_empty_without_transactions_and_requires_auth(client, bob):
+    assert client.get("/api/exchanges").status_code == 401
+    assert client.get("/api/exchanges", headers=bob).get_json() == {"exchanges": []}
+    page = client.get("/exchanges")
+    assert page.status_code == 200
+    assert b"No exchanges yet" in page.data and b"Loading your exchanges" in page.data
+    assert b"js/exchanges.js" in page.data and b"Stub. Person 4" not in page.data
+
+
+def test_dashboard_shows_current_terms_and_private_progress(client, alice, bob, third_party, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    photo = photo_upload(client, exchange["id"], alice).get_json()["evidence"]
+    assert handoff(client, exchange["id"], bob).status_code == 200
+    response = client.get("/api/exchanges", headers=bob)
+    assert response.headers["Cache-Control"] == "private, no-store"
+    row = response.get_json()["exchanges"][0]
+    assert row["status"] == "reserved"
+    assert row["current_offer"]["version"] == 2
+    assert row["current_offer"]["pickup_at"] == "2026-10-12T18:00:00Z"
+    assert row["current_offer"]["return_deadline"] == "2026-10-15T22:00:00Z"
+    assert row["pickup_meeting_spot"]["label"] == db.session.get(MeetingSpot, spot).label
+    assert row["return_meeting_spot"]["id"] == spot
+    assert row["participants"]["requester"]["id"] == exchange["requester_id"]
+    assert row["participants"]["owner"]["badge"] == "Sandbox identity (not verified)"
+    assert row["confirmations"][0]["participant_id"] == exchange["requester_id"]
+    assert row["confirmations"][0]["stage"] == "handoff"
+    assert row["evidence"][0]["id"] == photo["id"]
+    assert "private_storage_path" not in row["evidence"][0]
+    assert row["deposit_status"] == {"state": "simulated_held", "label": "Simulated: no real funds are reserved or charged."}
+    assert row["my_review"] is None and row["can_review"] is False
+    assert client.get("/api/exchanges", headers=third_party).get_json() == {"exchanges": []}
+    # Other participants' messages and unrelated listings are never included.
+    post = client.post(f"/api/exchanges/{exchange['id']}/messages", headers=alice, json={"body": "Private chat"})
+    assert post.status_code == 201
+    assert "Private chat" not in client.get("/api/exchanges", headers=bob).get_data(as_text=True)
+
+
+def test_dashboard_preserves_unknown_meetings_and_condition(client, alice, bob):
+    listing = create_listing(client, alice, condition=None, accessories=None, known_defects=None)
+    exchange = start(client, listing["id"], bob)["exchange"]
+    row = client.get("/api/exchanges", headers=bob).get_json()["exchanges"][0]
+    assert row["id"] == exchange["id"]
+    assert row["pickup_meeting_spot"] is None and row["return_meeting_spot"] is None
+    assert row["current_offer"]["pickup_at"] is None
+    assert row["current_offer"]["condition_snapshot"]["condition"] is None
+    assert row["confirmations"] == [] and row["evidence"] == []
+
+
+def test_dashboard_follows_real_loan_return_dispute_and_review_eligibility(client, alice, bob, spot):
+    exchange = active_loan(client, alice, bob, spot)
+    row = client.get("/api/exchanges", headers=bob).get_json()["exchanges"][0]
+    assert row["status"] == "on_loan" and row["can_review"] is False
+    assert photo_upload(client, exchange["id"], bob, "pre_return").status_code == 201
+    assert return_action(client, exchange["id"], bob, "initiate").status_code == 200
+    row = client.get("/api/exchanges", headers=alice).get_json()["exchanges"][0]
+    assert row["status"] == "return_pending" and row["can_review"] is False
+    assert return_action(client, exchange["id"], alice, "issue", reason="A button is missing").status_code == 200
+    row = client.get("/api/exchanges", headers=bob).get_json()["exchanges"][0]
+    assert row["status"] == "disputed" and row["dispute_reason"] == "A button is missing"
+    assert row["can_review"] is False and row["deposit_status"]["state"] == "simulated_held"
+
+
+@pytest.mark.parametrize("status", ["negotiating", "reserved"])
+@pytest.mark.parametrize("actor", ["owner", "requester"])
+def test_cancellation_releases_only_unused_reservation_and_is_idempotent(client, alice, bob, spot, status, actor):
+    exchange = ready_exchange(client, alice, bob, spot)
+    if status == "reserved":
+        assert accept(client, exchange["id"], alice).status_code == 200
+        assert accept(client, exchange["id"], bob).status_code == 200
+    headers = alice if actor == "owner" else bob
+    url = f"/api/exchanges/{exchange['id']}/cancel"
+    body = {"reason": "Plans changed"}
+    response = client.post(url, headers=headers, json=body)
+    assert response.status_code == 200
+    cancelled = response.get_json()["exchange"]
+    assert cancelled["status"] == "cancelled" and cancelled["cancellation_reason"] == "Plans changed"
+    assert client.post(url, headers=headers, json=body).get_json()["exchange"] == cancelled
+    listing = db.session.get(Listing, exchange["listing_id"])
+    assert listing.status == "available" and listing.active_exchange_id is None
+    row = client.get("/api/exchanges", headers=headers).get_json()["exchanges"][0]
+    assert row["deposit_status"]["state"] == "simulated_released" and row["can_review"] is False
+    assert client.post(url, headers=headers, json={"reason": "Replace reason"}).status_code == 409
+
+
+@pytest.mark.parametrize("reason", [None, "", " ", 42, "x" * 2001])
+def test_cancellation_requires_specific_reason(client, alice, bob, spot, reason):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    response = client.post(f"/api/exchanges/{exchange['id']}/cancel", headers=bob, json={"reason": reason})
+    assert response.status_code == 400
+    assert db.session.get(Exchange, exchange["id"]).status == "reserved"
+    assert db.session.get(Listing, exchange["listing_id"]).active_exchange_id == exchange["id"]
+
+
+@pytest.mark.parametrize("status", ["on_loan", "return_pending", "completed", "disputed"])
+def test_cancellation_cannot_skip_later_stages(client, alice, bob, spot, status):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    db.session.get(Exchange, exchange["id"]).status = status
+    db.session.commit()
+    response = client.post(f"/api/exchanges/{exchange['id']}/cancel", headers=bob, json={"reason": "Plans changed"})
+    assert response.status_code == 409
+    assert db.session.get(Exchange, exchange["id"]).status == status
+    assert db.session.get(Listing, exchange["listing_id"]).active_exchange_id == exchange["id"]
+
+
+def test_cancellation_is_blocked_after_first_pickup_confirmation(client, alice, bob, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    assert photo_upload(client, exchange["id"], bob).status_code == 201
+    assert handoff(client, exchange["id"], bob).status_code == 200
+    response = client.post(f"/api/exchanges/{exchange['id']}/cancel", headers=alice, json={"reason": "Changed mind"})
+    assert response.status_code == 409
+    assert db.session.get(Listing, exchange["listing_id"]).status == "reserved"
+
+
+def test_failed_cancellation_release_rolls_back(client, alice, bob, spot, monkeypatch):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    monkeypatch.setattr("server.exchanges.routes.release_listing", lambda *args: False)
+    response = client.post(f"/api/exchanges/{exchange['id']}/cancel", headers=bob, json={"reason": "Plans changed"})
+    assert response.status_code == 409
+    saved = db.session.get(Exchange, exchange["id"])
+    assert saved.status == "reserved" and saved.cancellation_reason is None
+
+
+def test_old_cancellation_does_not_release_a_new_reservation(client, alice, bob, spot):
+    exchange = reserved_exchange(client, alice, bob, spot)
+    url = f"/api/exchanges/{exchange['id']}/cancel"
+    body = {"reason": "Plans changed"}
+    assert client.post(url, headers=bob, json=body).status_code == 200
+    newer = ready_exchange(client, alice, bob, spot, listing_id=exchange["listing_id"])
+    assert accept(client, newer["id"], alice).status_code == 200
+    assert accept(client, newer["id"], bob).status_code == 200
+    assert client.post(url, headers=bob, json=body).status_code == 200
+    assert db.session.get(Listing, exchange["listing_id"]).active_exchange_id == newer["id"]
+
+
+@pytest.mark.parametrize("actor", ["owner", "requester"])
+def test_standalone_dispute_matches_return_issue_and_never_charges(client, alice, bob, spot, actor):
+    exchange = pending_return(client, alice, bob, spot)
+    headers = alice if actor == "owner" else bob
+    url = f"/api/exchanges/{exchange['id']}/dispute"
+    reason = "The agreed accessory is missing"
+    response = client.post(url, headers=headers, json={"reason": reason})
+    assert response.status_code == 200
+    disputed = response.get_json()["exchange"]
+    assert disputed["status"] == "disputed" and disputed["dispute_reason"] == reason
+    assert client.post(url, headers=headers, json={"reason": reason}).get_json()["exchange"] == disputed
+    assert return_action(client, exchange["id"], headers, "issue", reason=reason).get_json()["exchange"] == disputed
+    detail = client.get(f"/api/exchanges/{exchange['id']}", headers=headers).get_json()
+    assert detail["deposit_status"] == {"state": "simulated_held", "label": "Simulated: no real funds are reserved or charged."}
+    assert db.session.get(Listing, exchange["listing_id"]).active_exchange_id == exchange["id"]
+    assert return_action(client, exchange["id"], headers, "accept").status_code == 409
+
+
+@pytest.mark.parametrize("status", ["negotiating", "reserved", "on_loan", "completed", "cancelled"])
+def test_standalone_dispute_rejects_invalid_states(client, alice, bob, spot, status):
+    exchange = ready_exchange(client, alice, bob, spot)
+    db.session.get(Exchange, exchange["id"]).status = status
+    db.session.commit()
+    assert client.post(f"/api/exchanges/{exchange['id']}/dispute", headers=bob,
+                       json={"reason": "Specific issue"}).status_code == 409
+    assert db.session.get(Exchange, exchange["id"]).status == status
+
+
+def test_sale_cannot_use_standalone_return_dispute(client, alice, bob, spot):
+    exchange = ready_exchange(client, alice, bob, spot, mode="sale")
+    assert client.post(f"/api/exchanges/{exchange['id']}/dispute", headers=bob,
+                       json={"reason": "Specific issue"}).status_code == 409

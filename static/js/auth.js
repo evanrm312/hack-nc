@@ -24,7 +24,7 @@
       const token = await api.sessionToken();
       if (!token) {
         status.textContent = "Not signed in. Browsing only.";
-        if (navSignIn) navSignIn.textContent = "Sign in";
+        if (navSignIn) navSignIn.textContent = "Sign In";
         clearProfile();
         return;
       }
@@ -51,7 +51,7 @@
       } else {
         status.textContent = "Could not check session. Try again shortly.";
       }
-      if (navSignIn) navSignIn.textContent = sessionSaved ? "Account" : "Sign in";
+      if (navSignIn) navSignIn.textContent = sessionSaved ? "Account" : "Sign In";
       const signOut = $("sign-out");
       if (signOut) signOut.hidden = !sessionSaved;
     }

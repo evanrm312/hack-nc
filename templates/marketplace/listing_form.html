@@ -2,14 +2,12 @@
 {# Listing form: POST /api/listings, then POST /api/listings/{id}/photo, then
    redirect to /listings/{id}. Meeting spots from GET /api/meeting-spots.
    Behavior in static/js/marketplace.js (page "listing-form"). #}
-{% block title %}New listing · Campus Current{% endblock %}
+{% block title %}New Listing · Campus Current{% endblock %}
 {% block page_id %}listing-form{% endblock %}
 {% block content %}
 <section class="card card--hero" aria-labelledby="listing-form-heading">
-  <h1 id="listing-form-heading">List an item or service</h1>
-  <p class="lede">Sell something you own, lend it for a deposit, or offer a service such as tutoring,
-    proofreading, tech help, repairs, photography, or event help. Be specific about size, model, and condition for items, and about
-    length and available times for services, so matches are accurate.</p>
+  <h1 id="listing-form-heading">Create a listing</h1>
+  <p class="lede">Offer an item for sale, borrowing, or both—or provide a campus service.</p>
 
   <div id="auth-gate" class="notice notice--info" role="status" hidden>
     <div>

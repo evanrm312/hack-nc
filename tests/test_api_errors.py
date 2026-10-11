@@ -43,15 +43,17 @@ def test_healthz_and_pages_render(client):
     assert b"service_role" not in sign_in
 
 
-def test_exchange_auth_and_error_contract(client, alice):
-    assert client.get("/api/exchanges").status_code == 401
-    listed = client.get("/api/exchanges", headers=alice).get_json()
-    if listed.get("fixture") is True:
-        # Main's scaffold remains valid until the exchange PR lands.
-        assert listed["exchanges"][0]["id"].startswith("fixture-")
-        _assert_error_shape(client.post("/api/exchanges", json={}, headers=alice), 501, "not_implemented")
-    else:
-        assert listed == {"exchanges": []}
-        _assert_error_shape(client.get("/api/exchanges/anything", headers=alice), 404, "not_found")
-        _assert_error_shape(client.get("/api/exchanges/anything/messages", headers=alice), 404, "not_found")
-        _assert_error_shape(client.post("/api/exchanges", json={}, headers=alice), 400, "validation_error")
+def test_exchange_auth_and_errors_use_real_records(client, alice):
+    _assert_error_shape(client.get("/api/exchanges"), 401, "auth_required")
+    listed = client.get("/api/exchanges", headers=alice)
+    assert listed.status_code == 200
+    assert listed.get_json() == {"exchanges": []}
+
+    for suffix in ("", "/messages", "/evidence", "/evidence/missing-photo"):
+        _assert_error_shape(client.get(f"/api/exchanges/anything{suffix}", headers=alice), 404, "not_found")
+    for suffix in ("messages", "offers", "accept", "evidence", "handoff", "return", "review", "cancel", "dispute"):
+        _assert_error_shape(client.post(f"/api/exchanges/anything/{suffix}", json={}, headers=alice), 404, "not_found")
+
+    invalid_create = client.post("/api/exchanges", json={}, headers=alice)
+    _assert_error_shape(invalid_create, 400, "validation_error")
+    assert set(invalid_create.get_json()["error"]["fields"]) == {"listing_id", "mode"}
