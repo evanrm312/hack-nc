@@ -286,7 +286,7 @@
       "is_demo": true,
       "listing": {
         "title": "Two-person tent (DEMO inventory)",
-        "category": "outdoors",
+        "category": "outdoor gear",
         "description": "DEMO INVENTORY. Free to borrow, or purchase for $65. Two-person tent with poles and rainfly; weather suitability must be confirmed before use. Fictional demo loan proposal: item value $100.00; rental fee $0.00; separate proposed deposit $100.00 (100% collateral). Simulated only; no funds are reserved or charged.",
         "specifications": {
           "type": "tent",
@@ -335,7 +335,7 @@
       "is_demo": true,
       "listing": {
         "title": "Blue sleeping bag (DEMO inventory)",
-        "category": "outdoors",
+        "category": "outdoor gear",
         "description": "DEMO INVENTORY. Free to borrow, or purchase for $18. Blue sleeping bag with stuff sack; temperature rating is unknown, so confirm suitability for your plans. Fictional demo loan proposal: item value $35.00; rental fee $0.00; separate proposed deposit $35.00 (100% collateral). Simulated only; no funds are reserved or charged.",
         "specifications": {
           "type": "sleeping bag",
@@ -381,7 +381,7 @@
       "is_demo": true,
       "listing": {
         "title": "Striped hammock (DEMO inventory)",
-        "category": "outdoors",
+        "category": "outdoor gear",
         "description": "DEMO INVENTORY. Free to borrow, or purchase for $20. Striped hammock with pouch; straps are not included and load limit needs confirmation. Fictional demo loan proposal: item value $35.00; rental fee $0.00; separate proposed deposit $35.00 (100% collateral). Simulated only; no funds are reserved or charged.",
         "specifications": {
           "type": "hammock",

@@ -539,3 +539,46 @@ def test_weekday_ambiguity_proposal_without_repeated_weekday(sdk):
     result = normalize('By Sunday at 8 AM')
     assert result['needed_by'] == '2026-10-11T12:00:00Z'
     assert all(a['proposed'] in (None, '2026-10-11T12:00:00Z') for a in result['ambiguous_dates'])
+
+
+@pytest.mark.parametrize('category,text', [
+    ('tech help', 'I need help with my laptop'),
+    ('repair and mending', 'I need a jacket mended'),
+    ('bike repair', 'I need help repairing my bike'),
+    ('photography', 'I need photography help'),
+    ('event help', 'I need help setting up an event'),
+])
+def test_additional_service_categories_have_focused_unknown_scope(sdk, category, text):
+    sdk[2](payload(modes=['service'], category=category))
+    result = normalize(text)
+    assert result['source'] == 'gemini'
+    assert result['category'] == category
+    assert result['required_specifications'] == {}
+    assert result['preferred_specifications'] == {}
+    assert result['budget_cents'] is None
+    assert result['service_duration_minutes'] is None
+    assert result['service_time_windows'] is None
+    assert result['max_deposit_cents'] is None
+    assert any(word in ' '.join(result['follow_up_questions']).lower()
+               for word in ('problem', 'work', 'photos', 'task'))
+    instruction = sdk[1].models.generate_content.call_args.kwargs['config'].system_instruction
+    for supported in module.SERVICE_CATEGORIES:
+        assert supported in instruction
+        assert supported in module.Extraction.model_json_schema()['properties']['category']['description']
+    assert 'Never invent' in instruction
+
+
+def test_new_service_explicit_task_preserved_without_generic_scope_question(sdk):
+    sdk[2](payload(modes=['service'], category='event help', budget_dollars='20',
+        service_duration_minutes=60, required_specifications=[dict(name='task', value='set up chairs')],
+        service_time_windows=[dict(start='2026-10-11T18:00:00Z', end='2026-10-11T20:00:00Z')]))
+    result = normalize('Help set up chairs for 60 minutes October 11, 2026 2–4 PM, budget $20')
+    assert result['required_specifications'] == {'task': 'set up chairs'}
+    assert result['budget_cents'] == 2000
+    assert result['service_duration_minutes'] == 60
+    assert not any('What event task' in q for q in result['follow_up_questions'])
+
+
+def test_unsupported_service_category_returns_editable_fallback(sdk):
+    sdk[2](payload(modes=['service'], category='professional certification'))
+    assert normalize()['source'] == 'manual'

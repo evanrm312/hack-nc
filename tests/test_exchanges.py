@@ -415,19 +415,38 @@ def test_accept_requires_integer_revision(client, alice, bob, spot, version):
 def test_preview_uses_isolated_labeled_data_and_does_not_duplicate_inventory(tmp_path):
     from server.exchanges.preview import create_preview_app
 
+    from fixtures.demo_catalog.validate_catalog import validate
+    from server.seed import _catalog_id
+
     data_dir = tmp_path / "preview"
+    data_dir.mkdir()
+    old_database = data_dir / "preview.sqlite3"
+    old_database.write_bytes(b"Preserve preexisting preview state")
+    catalog_entries, _, _ = validate()
+    catalog_owner_ids = {_catalog_id("listing", entry["key"]) for entry in catalog_entries
+                         if entry["owner_key"] == "clothing-owner-1"}
+    original_ids = None
     for _ in range(2):
         preview = create_preview_app(data_dir)
         assert preview.config["AUTH_MODE"] == "sandbox"
-        assert preview.config["SQLALCHEMY_DATABASE_URI"] == f"sqlite:///{data_dir / 'preview.sqlite3'}"
+        assert preview.config["SQLALCHEMY_DATABASE_URI"] == f"sqlite:///{data_dir / 'preview_dev.sqlite3'}"
+        assert old_database.read_bytes() == b"Preserve preexisting preview state"
         client = preview.test_client()
         alice = auth("alice@unc.edu")
         profile = client.get("/api/me", headers=alice).get_json()["profile"]
         assert profile["is_demo"] is True
         assert profile["badge"] == "Sandbox identity (not verified)"
-        listings = client.get(f"/api/listings?owner_id={profile['id']}").get_json()["listings"]
-        assert len(listings) == 2
-        assert all("demo inventory" in listing["title"] for listing in listings)
+        listings = client.get(f"/api/listings?status=all&owner_id={profile['id']}").get_json()["listings"]
+        demonstration = [listing for listing in listings if "preview (demo inventory)" in listing["title"]]
+        assert {listing["title"] for listing in demonstration} == {
+            "Navy suit — borrow preview (demo inventory)", "Desk lamp — buy preview (demo inventory)"}
+        assert catalog_owner_ids <= {listing["id"] for listing in listings}
+        assert len(listings) == len(catalog_owner_ids) + 2
+        current_ids = {listing["id"] for listing in listings}
+        if original_ids is None:
+            original_ids = current_ids
+        assert current_ids == original_ids
+        assert all("demo" in listing["title"].casefold() and listing["owner"]["is_demo"] for listing in listings)
         assert all(listing["status"] == "available" for listing in listings)
         assert client.get("/api/exchanges", headers=alice).get_json() == {"exchanges": []}
         assert b"Sandbox preview" in client.get("/exchanges").data

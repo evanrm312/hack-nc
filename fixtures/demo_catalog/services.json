@@ -21,9 +21,9 @@
       "owner_key": "services-owner-1",
       "is_demo": true,
       "listing": {
-        "title": "Demo calculus practice session",
+        "title": "Demo Calculus I practice session",
         "category": "tutoring",
-        "description": "DEMO INVENTORY. Work through introductory derivatives and limits using your own practice questions. This fictional session does not complete assessed work.",
+        "description": "DEMO INVENTORY. Work through limits and derivatives from your own practice questions; feedback does not complete assessed work.",
         "allowed_modes": [
           "service"
         ],
@@ -33,12 +33,16 @@
           {
             "start": "2026-10-11T18:00:00Z",
             "end": "2026-10-11T20:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-calculus-tutoring",
-        "desired_image_description": "A blank notebook with handwritten fictional derivative exercises beside a plain pencil; staged overhead desk photo.",
+        "desired_image_description": "Illustrative staged still life for Calculus I practice session, no faces, logos, names, or personal information.",
         "local_filename": "demo-calculus-tutoring.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -51,9 +55,9 @@
       "owner_key": "services-owner-2",
       "is_demo": true,
       "listing": {
-        "title": "Demo introductory Python tutoring",
+        "title": "Demo COMP 110 Python practice",
         "category": "tutoring",
-        "description": "DEMO INVENTORY. Discuss loops, functions, and debugging using small practice examples. Bring the concepts you want to review; no graded assignment completion.",
+        "description": "DEMO INVENTORY. Discuss introductory Python loops, functions, and debugging with small practice examples; no course affiliation or graded-work completion.",
         "allowed_modes": [
           "service"
         ],
@@ -63,12 +67,16 @@
           {
             "start": "2026-10-11T23:00:00Z",
             "end": "2026-10-12T01:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-python-tutoring",
-        "desired_image_description": "A plain laptop displaying a short fictional Python loop beside an unbranded notebook; no personal information.",
+        "desired_image_description": "Illustrative staged still life for COMP 110 Python practice, no faces, logos, names, or personal information.",
         "local_filename": "demo-python-tutoring.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -81,9 +89,9 @@
       "owner_key": "services-owner-3",
       "is_demo": true,
       "listing": {
-        "title": "Demo statistics review session",
+        "title": "Demo introductory physics practice",
         "category": "tutoring",
-        "description": "DEMO INVENTORY. Review probability and descriptive statistics with practice problems you supply. Scope and learning goals must be agreed before scheduling.",
+        "description": "DEMO INVENTORY. Review introductory mechanics with practice problems you supply; agree on learning goals before scheduling.",
         "allowed_modes": [
           "service"
         ],
@@ -93,12 +101,16 @@
           {
             "start": "2026-10-11T15:00:00Z",
             "end": "2026-10-11T17:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-statistics-tutoring",
-        "desired_image_description": "A staged sheet of fictional probability exercises and a generic calculator on a tidy tabletop.",
+        "desired_image_description": "Illustrative staged still life for introductory physics practice, no faces, logos, names, or personal information.",
         "local_filename": "demo-statistics-tutoring.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -111,9 +123,9 @@
       "owner_key": "services-owner-1",
       "is_demo": true,
       "listing": {
-        "title": "Demo evening essay proofreading",
+        "title": "Demo college essay proofreading",
         "category": "proofreading",
-        "description": "DEMO INVENTORY. Read a draft together for grammar, punctuation, and clarity. Feedback only; the writer retains responsibility for content and course rules.",
+        "description": "DEMO INVENTORY. Review grammar, punctuation, and clarity in a college essay draft; feedback only, with course rules and authorship retained by the writer.",
         "allowed_modes": [
           "service"
         ],
@@ -123,12 +135,16 @@
           {
             "start": "2026-10-11T23:00:00Z",
             "end": "2026-10-12T01:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-evening-essay-proofreading",
-        "desired_image_description": "An unbranded pen beside a fictional essay page with a few punctuation edits; no names or institutional logos.",
+        "desired_image_description": "Illustrative staged still life for college essay proofreading, no faces, logos, names, or personal information.",
         "local_filename": "demo-evening-essay-proofreading.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -141,9 +157,9 @@
       "owner_key": "services-owner-2",
       "is_demo": true,
       "listing": {
-        "title": "Demo extended draft proofreading",
+        "title": "Demo resume and cover letter proofreading",
         "category": "proofreading",
-        "description": "DEMO INVENTORY. A longer session for proofreading a draft and discussing recurring grammar issues. Document length and scope need agreement before booking.",
+        "description": "DEMO INVENTORY. Review spelling and sentence clarity in a resume and cover letter; no hiring outcome or career credential is claimed.",
         "allowed_modes": [
           "service"
         ],
@@ -153,12 +169,16 @@
           {
             "start": "2026-10-11T23:00:00Z",
             "end": "2026-10-12T01:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-extended-proofreading",
-        "desired_image_description": "Two pages of fictional sample prose with restrained proofreading marks on a neutral desk.",
+        "desired_image_description": "Illustrative staged still life for resume and cover letter proofreading, no faces, logos, names, or personal information.",
         "local_filename": "demo-extended-proofreading.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -171,9 +191,9 @@
       "owner_key": "services-owner-3",
       "is_demo": true,
       "listing": {
-        "title": "Demo late proofreading session",
+        "title": "Demo lab report proofreading",
         "category": "proofreading",
-        "description": "DEMO INVENTORY. Review spelling and sentence clarity in your draft. The offered late slot must fit the full agreed session; comments do not rewrite the work.",
+        "description": "DEMO INVENTORY. Review grammar and readability in a lab report draft; no data checking, scientific validation, or rewriting assessed work.",
         "allowed_modes": [
           "service"
         ],
@@ -183,12 +203,16 @@
           {
             "start": "2026-10-12T00:30:00Z",
             "end": "2026-10-12T01:30:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-late-proofreading",
-        "desired_image_description": "A fictional marked-up draft next to a simple desk clock and plain pencil, warmly lit tabletop with no faces.",
+        "desired_image_description": "Illustrative staged still life for lab report proofreading, no faces, logos, names, or personal information.",
         "local_filename": "demo-late-proofreading.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -201,9 +225,9 @@
       "owner_key": "services-owner-1",
       "is_demo": true,
       "listing": {
-        "title": "Demo lightweight box moving help",
+        "title": "Demo dorm move box assistance",
         "category": "moving help",
-        "description": "DEMO INVENTORY. Help carry lightweight packed boxes on a short move. Discuss weight, stairs, and route first; no vehicle, appliance, or heavy lifting is offered.",
+        "description": "DEMO INVENTORY. Help carry manageable packed boxes on a short dorm move; discuss weight, stairs, and access first. No vehicle or appliance handling.",
         "allowed_modes": [
           "service"
         ],
@@ -213,12 +237,16 @@
           {
             "start": "2026-10-11T14:00:00Z",
             "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-box-moving-help",
-        "desired_image_description": "Several plain closed cardboard boxes staged beside a clear hallway; no labels, addresses, people, or tools advertised as included.",
+        "desired_image_description": "Illustrative staged still life for dorm move box assistance, no faces, logos, names, or personal information.",
         "local_filename": "demo-box-moving-help.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -231,9 +259,9 @@
       "owner_key": "services-owner-2",
       "is_demo": true,
       "listing": {
-        "title": "Demo packing and moving support",
+        "title": "Demo packing assistance",
         "category": "moving help",
-        "description": "DEMO INVENTORY. Help organize small belongings and move manageable boxes. Supplies are not included; confirm the task and access before scheduling.",
+        "description": "DEMO INVENTORY. Help organize small belongings into boxes; supplies are not included and scope must be agreed before scheduling.",
         "allowed_modes": [
           "service"
         ],
@@ -243,12 +271,16 @@
           {
             "start": "2026-10-11T19:00:00Z",
             "end": "2026-10-11T21:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-packing-moving-help",
-        "desired_image_description": "A few small plain cardboard boxes and folded paper on an unbranded tabletop, staged as a moving-help illustration.",
+        "desired_image_description": "Illustrative staged still life for packing assistance, no faces, logos, names, or personal information.",
         "local_filename": "demo-packing-moving-help.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
@@ -261,9 +293,9 @@
       "owner_key": "services-owner-3",
       "is_demo": true,
       "listing": {
-        "title": "Demo afternoon small move helper",
+        "title": "Demo furniture lifting assistance",
         "category": "moving help",
-        "description": "DEMO INVENTORY. Extra hands for a small move with lightweight belongings. No transport or heavy furniture handling; clarify scope and stairs in advance.",
+        "description": "DEMO INVENTORY. An extra pair of hands for lifting a manageable small furniture piece; discuss weight and stairs first. No vehicle, heavy appliance work, or guaranteed lifting capacity.",
         "allowed_modes": [
           "service"
         ],
@@ -273,13 +305,425 @@
           {
             "start": "2026-10-11T20:00:00Z",
             "end": "2026-10-11T22:00:00Z"
+          },
+          {
+            "start": "2026-10-11T10:00:00Z",
+            "end": "2026-10-11T12:00:00Z"
           }
         ]
       },
       "image_manifest": {
         "listing_key": "demo-afternoon-moving-help",
-        "desired_image_description": "A staged arrangement of plain small moving boxes beside an open doorway, no identifying room numbers or people.",
+        "desired_image_description": "Illustrative staged still life for furniture lifting assistance, no faces, logos, names, or personal information.",
         "local_filename": "demo-afternoon-moving-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-general-chemistry-tutoring",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo general chemistry practice",
+        "category": "tutoring",
+        "description": "DEMO INVENTORY. Review introductory stoichiometry and chemical equations from practice questions; no laboratory work or assessed-work completion.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 0,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-general-chemistry-tutoring",
+        "desired_image_description": "Illustrative staged still life for general chemistry practice, no faces, logos, names, or personal information.",
+        "local_filename": "demo-general-chemistry-tutoring.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-laptop-software-help",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo laptop software help",
+        "category": "tech help",
+        "description": "DEMO INVENTORY. Walk through a basic software installation or settings issue together; account access stays with the owner and no recovery outcome is promised.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1500,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-laptop-software-help",
+        "desired_image_description": "Illustrative staged still life for laptop software help, no faces, logos, names, or personal information.",
+        "local_filename": "demo-laptop-software-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-printer-wifi-help",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo printer and Wi-Fi setup help",
+        "category": "tech help",
+        "description": "DEMO INVENTORY. Help work through printer connection settings on a network you are authorized to use; no network administration or credential handling.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 0,
+        "service_duration_minutes": 45,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-printer-wifi-help",
+        "desired_image_description": "Illustrative staged still life for printer and Wi-Fi setup help, no faces, logos, names, or personal information.",
+        "local_filename": "demo-printer-wifi-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-projector-setup-help",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo projector setup help",
+        "category": "tech help",
+        "description": "DEMO INVENTORY. Help connect your laptop to a projector and check display settings; hardware and compatible cables must be supplied by the requester.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1000,
+        "service_duration_minutes": 30,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-projector-setup-help",
+        "desired_image_description": "Illustrative staged still life for projector setup help, no faces, logos, names, or personal information.",
+        "local_filename": "demo-projector-setup-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-basic-mending",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo basic garment mending",
+        "category": "repair and mending",
+        "description": "DEMO INVENTORY. Discuss and attempt a small hand-sewn mend in an everyday garment; inspect fabric and agree on scope first, with no result guarantee.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1000,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-basic-mending",
+        "desired_image_description": "Illustrative staged still life for basic garment mending, no faces, logos, names, or personal information.",
+        "local_filename": "demo-basic-mending.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-button-seam-mending",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo button and seam mending",
+        "category": "repair and mending",
+        "description": "DEMO INVENTORY. Help attach a supplied button or close a small open seam by hand; confirm materials and fabric suitability before scheduling.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 0,
+        "service_duration_minutes": 45,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-button-seam-mending",
+        "desired_image_description": "Illustrative staged still life for button and seam mending, no faces, logos, names, or personal information.",
+        "local_filename": "demo-button-seam-mending.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-small-item-repair-assessment",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo small item repair assessment",
+        "category": "repair and mending",
+        "description": "DEMO INVENTORY. Look over a small non-electrical household item and discuss possible repair steps; assessment only, without safety certification or a promised fix.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 500,
+        "service_duration_minutes": 30,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-small-item-repair-assessment",
+        "desired_image_description": "Illustrative staged still life for small item repair assessment, no faces, logos, names, or personal information.",
+        "local_filename": "demo-small-item-repair-assessment.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-basic-bike-tune",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo basic bike tune-up discussion",
+        "category": "bike repair",
+        "description": "DEMO INVENTORY. Help inspect simple adjustments on your bicycle and discuss next steps; no brake safety certification or roadworthiness guarantee.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1500,
+        "service_duration_minutes": 60,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-basic-bike-tune",
+        "desired_image_description": "Illustrative staged still life for basic bike tune-up discussion, no faces, logos, names, or personal information.",
+        "local_filename": "demo-basic-bike-tune.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-flat-tire-help",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo bicycle flat tire assistance",
+        "category": "bike repair",
+        "description": "DEMO INVENTORY. Help remove and replace a supplied bicycle tube after confirming fit; replacement parts are not included and no roadworthiness certification is offered.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1000,
+        "service_duration_minutes": 45,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-flat-tire-help",
+        "desired_image_description": "Illustrative staged still life for bicycle flat tire assistance, no faces, logos, names, or personal information.",
+        "local_filename": "demo-flat-tire-help.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-headshot-photo-session",
+      "owner_key": "services-owner-1",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo casual headshot photo session",
+        "category": "photography",
+        "description": "DEMO INVENTORY. A short casual portrait session with scope, consent, and delivery agreed beforehand; no professional credential or publication promise.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 2000,
+        "service_duration_minutes": 30,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-headshot-photo-session",
+        "desired_image_description": "Illustrative staged still life for casual headshot photo session, no faces, logos, names, or personal information.",
+        "local_filename": "demo-headshot-photo-session.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-club-event-photo-session",
+      "owner_key": "services-owner-2",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo small gathering photography",
+        "category": "photography",
+        "description": "DEMO INVENTORY. Take informal photographs at a small gathering with organizer permission and participant consent; no club affiliation or authorization is claimed.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 3000,
+        "service_duration_minutes": 90,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-club-event-photo-session",
+        "desired_image_description": "Illustrative staged still life for small gathering photography, no faces, logos, names, or personal information.",
+        "local_filename": "demo-club-event-photo-session.jpg",
+        "source_type": "planned_original_photo",
+        "source_url": null,
+        "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",
+        "attribution_requirement": "Pending permission review; no asset acquired."
+      }
+    },
+    {
+      "key": "demo-event-setup-cleanup",
+      "owner_key": "services-owner-3",
+      "is_demo": true,
+      "listing": {
+        "title": "Demo event setup and cleanup help",
+        "category": "event help",
+        "description": "DEMO INVENTORY. Help arrange manageable tables and collect ordinary event materials; confirm lifting limits and access, with no venue authorization or hazardous cleanup.",
+        "allowed_modes": [
+          "service"
+        ],
+        "service_price_cents": 1500,
+        "service_duration_minutes": 120,
+        "service_available_windows": [
+          {
+            "start": "2026-10-11T14:00:00Z",
+            "end": "2026-10-11T16:00:00Z"
+          },
+          {
+            "start": "2026-10-11T20:00:00Z",
+            "end": "2026-10-11T22:00:00Z"
+          }
+        ]
+      },
+      "image_manifest": {
+        "listing_key": "demo-event-setup-cleanup",
+        "desired_image_description": "Illustrative staged still life for event setup and cleanup help, no faces, logos, names, or personal information.",
+        "local_filename": "demo-event-setup-cleanup.jpg",
         "source_type": "planned_original_photo",
         "source_url": null,
         "license_permission_note": "Pending: team-owned original photo; permission must be confirmed before use.",

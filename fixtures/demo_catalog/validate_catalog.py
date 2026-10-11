@@ -61,20 +61,23 @@ def validate():
             check(len(modes) == len(set(modes)) and modes and set(modes) <= {'sale', 'borrow', 'service'}, 'modes')
             if modes == ['service']:
                 check(set(body) == SERVICE, f'{key}: service field whitelist')
-                check(body['category'] in {'tutoring', 'proofreading', 'moving help'}, 'service category')
+                check(body['category'] in {'tutoring', 'proofreading', 'moving help', 'tech help', 'repair and mending', 'bike repair', 'photography', 'event help'}, 'service category')
                 check(type(body['service_price_cents']) is int and body['service_price_cents'] >= 0, 'service money')
                 duration = body['service_duration_minutes']
-                check(type(duration) is int and 1 <= duration <= 1440, 'service duration')
-                check(body['service_available_windows'], 'service windows required')
+                check(type(duration) is int and 30 <= duration <= 120, 'service duration')
+                check(len(body['service_available_windows']) >= 2, 'multiple service windows required')
                 fits = False
                 for window in body['service_available_windows']:
                     check(set(window) == {'start', 'end'}, 'window keys')
                     start, end = utc(window['start']), utc(window['end'])
                     check(start < end, 'window order')
-                    fits |= end - start >= timedelta(minutes=duration)
+                    check(end - start >= timedelta(minutes=duration), 'each service window must fit duration')
+                    fits = True
                     check(start < utc('2026-10-12T04:00:00Z') and end > utc('2026-10-11T04:00:00Z'), 'Oct 11 local service availability')
                 check(fits, 'no service window fits duration')
                 counts['services'] += 1
+                counts['service_' + body['category']] += 1
+                counts['free_service'] += body['service_price_cents'] == 0
             else:
                 check(set(body) == ITEM, f'{key}: item field whitelist')
                 check('service' not in modes, 'mixed modes')
@@ -104,14 +107,19 @@ def validate():
             check(set(manifest) == MANIFEST and manifest['listing_key'] == key, 'manifest shape/key')
             check(Path(manifest['local_filename']).name == manifest['local_filename'] and manifest['local_filename'] not in filenames, 'unique safe image filename')
             filenames.add(manifest['local_filename'])
-            check(manifest['source_type'] == 'planned_original_photo' and manifest['source_url'] is None, 'image sourcing remains planned')
+            # Embedded manifests preserve the initial sourcing brief; runtime provenance lives in image_manifests/*.json.
+            check(manifest['source_type'] == 'planned_original_photo' and manifest['source_url'] is None, 'historical image sourcing plan')
             check('pending' in manifest['license_permission_note'].lower() and 'pending' in manifest['attribution_requirement'].lower(), 'pending image permission')
             text = json.dumps(body).lower().replace('no safety rating, calibration, or mains-use claim is made', '').replace('temperature rating is unknown', '')
             check(not re.search(r'\b(?:ratings?|reviews|transactions?|verified|verification|popularity|carbon|co2|environmental impact)\b', text), f'{key}: prohibited claim')
             check(not re.search(r'\b[\w.+-]+@[\w.-]+\.[a-z]+\b|\b\d{3}[-.]\d{3}[-.]\d{4}\b', text), 'contact details')
             entries.append(entry)
-    check(40 <= len(entries) <= 50, 'catalog size')
-    for name, minimum in {'borrow_only': 8, 'sale_only': 8, 'both': 8, 'free_keep': 4, 'free_borrow': 4, 'services': 8}.items():
+    check(len(entries) == 54, 'catalog must contain exactly 54 listings')
+    check(counts['services'] == 21, 'catalog must contain exactly 21 services')
+    check(counts['free_service'] >= 3, 'at least three free services')
+    for category, total in {'tutoring': 4, 'proofreading': 3, 'moving help': 3, 'tech help': 3, 'repair and mending': 3, 'bike repair': 2, 'photography': 2, 'event help': 1}.items():
+        check(counts['service_' + category] == total, f'{category}: exact concept count')
+    for name, minimum in {'borrow_only': 11, 'sale_only': 11, 'both': 11, 'free_keep': 4, 'free_borrow': 8, 'services': 21}.items():
         check(counts[name] >= minimum, f'{name} below minimum')
     return entries, owners, dict(counts)
 
@@ -150,4 +158,6 @@ def exercise(entries):
 if __name__ == '__main__':
     entries, owners, counts = validate()
     results = exercise(entries)
-    print(json.dumps({'total': len(entries), 'owners': len(owners), 'counts': counts, 'shared_listing_validation': len(entries), 'matching': results}, indent=2))
+    from validate_images import validate_images
+    image_results = validate_images(entries)
+    print(json.dumps({'images': image_results, 'total': len(entries), 'owners': len(owners), 'counts': counts, 'shared_listing_validation': len(entries), 'matching': results}, indent=2))

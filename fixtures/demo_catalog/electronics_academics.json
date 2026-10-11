@@ -22,7 +22,7 @@
       "is_demo": true,
       "listing": {
         "title": "Graphing calculator (demo)",
-        "category": "academics",
+        "category": "academic supplies",
         "description": "DEMO INVENTORY. Fictional item: Plot functions and check homework; no exam approval is claimed.",
         "specifications": {
           "type": "graphing calculator",
@@ -212,11 +212,11 @@
           "model": "D24 demo model",
           "compatibility": "D-mount demo lenses",
           "connector": "USB mini-B",
-          "included_accessories": "18–55 mm lens; battery; charger; strap"
+          "included_accessories": "18\u201355 mm lens; battery; charger; strap"
         },
         "condition": "good",
         "accessories": [
-          "18–55 mm lens",
+          "18\u201355 mm lens",
           "battery",
           "charger",
           "strap"
@@ -486,7 +486,7 @@
       "is_demo": true,
       "listing": {
         "title": "Wireless presentation clicker (demo)",
-        "category": "academics",
+        "category": "academic supplies",
         "description": "DEMO INVENTORY. Fictional item: Move through presentation slides; confirm application support before borrowing.",
         "specifications": {
           "type": "presentation clicker",

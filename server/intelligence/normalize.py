@@ -14,6 +14,8 @@ from google.genai import errors
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..models.listing import SERVICE_CATEGORIES
+
 logger = logging.getLogger(__name__)
 DEFAULT_MODELS = ('gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash')
 ATTEMPT_TIMEOUT_MS = 10000
@@ -114,7 +116,7 @@ class ServiceWindow(Structured):
 
 class Extraction(Structured):
     modes: list[Literal['sale', 'borrow', 'service']] | None
-    category: str | None
+    category: str | None = Field(description='Item category, or for service mode exactly one of: ' + ', '.join(SERVICE_CATEGORIES))
     required_specifications: list[Specification]
     preferred_specifications: list[Specification]
     budget_dollars: str | None
@@ -149,7 +151,7 @@ class Extraction(Structured):
         if self.modes and 'service' in self.modes:
             if self.modes != ['service'] or self.max_deposit_dollars is not None or self.use_start or self.use_end:
                 raise ValueError('Services cannot have item modes, deposits, or loan dates')
-            if self.category not in (None, 'tutoring', 'proofreading', 'moving help'):
+            if self.category is not None and self.category not in SERVICE_CATEGORIES:
                 raise ValueError('Unsupported service category')
         elif self.service_duration_minutes is not None or self.service_time_windows is not None:
             raise ValueError('Service fields require service mode')
@@ -166,8 +168,7 @@ Never invent missing information. Unknown scalars/modes are null; empty specific
 lists mean no known specifications. Buy maps to sale; rent maps to borrow; both only
 when explicitly acceptable. Suits use category formalwear, jacket_size (e.g. 40R),
 trouser_size, color, type. Size is required; colors are preferred unless mandatory.
-For a service request, use only mode service and category tutoring, proofreading,
-or moving help. Never assign a deposit, agreed item value, condition, or loan dates
+For a service request, use only mode service and a category from SERVICE_CATEGORY_NAMES. Never assign a deposit, agreed item value, condition, or loan dates
 to a service. Do not mix service with sale or borrow modes.
 Extract service_duration_minutes only from an explicitly supplied duration, using
 integer minutes (1-1440). Never assume one hour, a tutoring subject, course, language,
@@ -176,7 +177,10 @@ acceptable session intervals with start/end; unknown is null. A deadline such as
 'by Friday' goes in needed_by and ambiguous_dates, NEVER an availability window.
 Relative session times need ambiguous_dates and confirmation. Use subject as a
 required specification only when the user supplies it. Ask focused questions for
-missing subject (tutoring), document/work scope (proofreading), or moving scope.
+missing subject (tutoring), document/work scope (proofreading), moving scope,
+device/problem (tech help), item/repair (repair and mending), bike/problem
+(bike repair), photo purpose (photography), or task (event help). Never invent
+qualifications, licenses, tools, transport, experience, membership or availability.
 Extract monetary limits as decimal USD dollar strings, NOT cents. Under $20 means
 budget_dollars "20". Budget is sale price/rental fee/service price; refundable deposit is separate,
 never inferred from budget. Free is "0". Never infer an unmentioned borrowing duration.
@@ -185,7 +189,7 @@ ISO offsets. Relative/vague dates, absent year/time, '2 a.m.', and ambiguous DST
 must be flagged in ambiguous_dates with original text, proposed timestamp (null if
 no defensible proposal), needs_confirmation true, and a confirmation question.
 No date mentioned means null dates. Ask useful missing compatibility questions,
-including trouser size for suits. All output is editable and requires user confirmation.'''
+including trouser size for suits. All output is editable and requires user confirmation.'''.replace('SERVICE_CATEGORY_NAMES', ', '.join(SERVICE_CATEGORIES))
 
 
 def manual(text):
@@ -331,7 +335,7 @@ def _to_request(extracted, text):
                    budget_cents='What is your purchase or rental fee budget in USD?',
                    area='Which campus area works for pickup?')
     if extracted.modes == ['service']:
-        missing.update(category='Do you need tutoring, proofreading, or moving help?',
+        missing.update(category='What kind of service do you need?',
                        budget_cents='What is your service price budget in USD?',
                        area='Where can the service take place?')
         missing['needed_by'] = 'When do you need the service?'
@@ -339,6 +343,17 @@ def _to_request(extracted, text):
         missing['service_time_windows'] = 'What start and end times are acceptable for the service session?'
         if extracted.category == 'tutoring' and not result['required_specifications'].get('subject'):
             result['follow_up_questions'].append('What subject do you need tutoring in?')
+        scope_questions = {
+            'tech help': 'What device or software do you need help with, and what is the problem?',
+            'repair and mending': 'What item needs repair or mending, and what work is needed?',
+            'bike repair': 'What bike problem or repair do you need help with?',
+            'photography': 'What do you want photographed, and what kind of photos do you need?',
+            'event help': 'What event task do you need help with?',
+        }
+        scope_keys = {'task', 'scope', 'problem', 'device', 'software', 'item', 'repair', 'photo_purpose', 'purpose'}
+        if extracted.category in scope_questions and not any(
+                result['required_specifications'].get(k) for k in scope_keys):
+            result['follow_up_questions'].append(scope_questions[extracted.category])
     elif extracted.modes and 'borrow' in extracted.modes:
         missing.update(max_deposit_cents='What is the maximum refundable deposit you can afford?',
                        use_start='When does your borrowing period start?',

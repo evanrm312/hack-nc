@@ -158,7 +158,7 @@
       "is_demo": true,
       "listing": {
         "title": "Handheld garment steamer (demo inventory)",
-        "category": "appliances",
+        "category": "dorm essentials",
         "description": "DEMO INVENTORY. Compact steamer for interview clothes; inspect the cord and follow the supplied operating instructions.",
         "specifications": {
           "type": "garment steamer",
@@ -328,8 +328,8 @@
       "is_demo": true,
       "listing": {
         "title": "Two navy tablecloths for events (demo inventory)",
-        "category": "event supplies",
-        "description": "DEMO INVENTORY. Two rectangular cloths for a small event setup; one has a faded patch shown in the planned photo.",
+        "category": "event equipment",
+        "description": "DEMO INVENTORY. Two rectangular cloths for a small event setup; one has a faded patch recorded as a fictional demo defect.",
         "specifications": {
           "type": "tablecloth set",
           "color": "navy",
@@ -418,7 +418,7 @@
       "is_demo": true,
       "listing": {
         "title": "Four-foot folding event table (demo inventory)",
-        "category": "event supplies",
+        "category": "event equipment",
         "description": "DEMO INVENTORY. A compact table for poster displays or refreshments; surface scratches are cosmetic in this fictional demo record. Reduced deposit proposal requires explicit lender acknowledgment before acceptance.",
         "specifications": {
           "type": "folding table",

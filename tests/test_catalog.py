@@ -18,6 +18,7 @@ def _migrated_app(tmp_path, database_name, *, app_env="development"):
         "AUTH_MODE": "sandbox",
         "SANDBOX_USERS": ["alice@unc.edu"],
         "UPLOAD_DIR": str(tmp_path / "uploads"),
+        "STORAGE_BACKEND": "local",
         "APP_ENV": app_env,
     }
     app = create_app(config)
@@ -57,7 +58,7 @@ def test_demo_seed_requires_dev_target_and_is_idempotent(tmp_path):
         db.session.commit()
     assert runner.invoke(args=["seed-demo"]).exit_code == 0
     with app.app_context():
-        assert db.session.scalar(select(func.count()).select_from(Listing)) == 2
+        assert db.session.scalar(select(func.count()).select_from(Listing)) == 56
         suit = db.session.scalar(select(Listing).where(Listing.title == DEMO_SUIT_TITLE))
         assert suit.id == original_id
         assert suit.specifications["type"] == "suit"
@@ -129,7 +130,9 @@ def test_seeded_suit_matches_dated_interview_request(tmp_path):
         assert all(need[key] == value for key, value in request_body.items())
         response = client.get(f"/api/requests/{need['id']}/matches", headers=auth("alice@unc.edu"))
         assert response.status_code == 200
-        return response.get_json()
+        result = response.get_json()
+        legacy_ids = {suit["id"], charcoal["id"]}
+        return {group: [entry for entry in result[group] if entry["listing_id"] in legacy_ids] for group in ("confirmed", "needs_confirmation", "rejected")}
 
     affordable_80 = matches_for(8000)
     affordable_200 = matches_for(20000)

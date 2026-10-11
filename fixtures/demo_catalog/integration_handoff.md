@@ -1,43 +1,41 @@
-# Evan handoff: proposed catalog seed integration
+# Catalog integration review
 
-The 42 catalog listings and 12 fictional owner definitions remain JSON fixtures. No configured database was contacted or seeded. No shared file was edited. Images remain planned, with permission/attribution pending.
+The current team assignment authorizes actual integration in `server/seed.py` and the seed CLI. The old unapplied `evan_seed_integration.patch` and disposable patch runner were removed because they describe the previous 42-listing, image-free proposal and no longer apply. Do not apply an old copy.
 
-## Exact proposed shared change
+## Protected loading
 
-Review `fixtures/demo_catalog/evan_seed_integration.patch`. It changes only `server/seed.py` and the existing seed CLI's one call in `server/app.py`. The patch is an unapplied proposal for Person 1; catalog generation stops at this boundary.
+Run existing migrations and `flask --app server.app seed-demo` only against a deliberately selected development database. The original `validate_demo_seed_target` implementation is unchanged, and both the CLI and direct `seed_demo_data` calls enforce it. The existing `--allow-supabase-postgres-dev` flag is forwarded; it still requires the configured project's session-pooler database and `APP_ENV=development`. Production, memory SQLite and unnamed targets remain rejected.
 
-The existing `flask --app server.app seed-demo` command would load the catalog alongside the existing three meeting spots, demo lender, two suit records, and two fixture price references. Existing legacy seed behavior remains unchanged. The catalog adds no price evidence, reviews, transactions, verification claims or images.
+`_catalog_plan()` reads all four JSON fixture banks, validates their envelope/distribution, validates the licensed image manifests and bytes, and preflights every listing with the existing HTTP field validator before writes. Stable UUID5 IDs retain the original proposal namespace: `campus-current:demo-catalog:v1:<kind>:<key>`. Wrapper metadata never becomes an API/database field. Runtime deployment must include `fixtures/demo_catalog/` and its validators and Pillow, which is already installed in this project environment.
 
-- Keep the CLI's existing `validate_demo_seed_target` call, including its explicit Supabase development opt-in. Forward that flag to `seed_demo_data`, which repeats the unchanged guard for direct callers. Production and unnamed databases remain rejected. Supabase `/postgres` still requires the configured project's session-pooler URL and `--allow-supabase-postgres-dev`.
-- Reuse `validate_catalog.validate()` for all four files' shape/metadata/cross-file checks, then preflight every body using the existing `_apply_listing_fields(..., creating=True)` HTTP validator before adding any catalog row. Keep the fixture directory and validator available in the runtime checkout/package.
-- Owner identity is `sandbox:demo-catalog:v1:<owner-key>`. It is a fictional namespaced subject, not an email or login credential. Profile and listing IDs are stable opaque UUID5 hex values over `campus-current:demo-catalog:v1:<kind>:<key>`; no new schema field is needed. Display names remain visibly demo; profiles set `verification_source="sandbox"`, `is_demo=True`, and the existing allowed domain field. The public badge says sandbox, not verified.
-- Repeated loads skip existing catalog rows by stable identity. Edited prices, titles, availability, reservations, statuses, photos and demo display names remain untouched. No row is deleted. Unexpected profile ID/subject collisions, non-demo/non-sandbox profiles, or listing IDs with different owners or absent demo labeling fail closed. All catalog inserts participate in the existing final transaction/commit. If any later operation or commit fails, callers must roll back the session, as with existing seed errors.
-- Do not add `source_agent`, `is_demo`, owner keys, seed keys, image manifests or generated IDs to the listing API body. Use existing Listing columns and wrapper metadata only.
+The loader retains the legacy two suits, lender, three meeting spots and two explicitly labeled fixture price-reference rows. A fresh target therefore contains **56 listings and 13 profiles**: 54 catalog listings/12 owners plus the two legacy suits/one lender. The catalog alone has 33 physical items and 21 services. No transactions, ratings, reviews, impact or verification claims are generated.
 
-## Observed focused validation
+## Showcase identities and preservation
 
-Commands actually executed:
+`clothing-owner-1` uses the already supported sandbox Alice identity; `services-owner-1` uses Bob. The authentication resolver determines their exact hashed subjects. Mapping occurs only in sandbox auth when that identity is actually configured; otherwise the owner remains a non-login namespaced demo profile. Other owners always use `sandbox:demo-catalog:v1:<key>`, not login credentials. All created profiles are `verification_source="sandbox"`, `is_demo=True`, with visible demo display names. Existing authentication-created sandbox profiles keep their public name and remain visibly demo through `is_demo` and the sandbox badge.
+
+Existing namespaced showcase profiles can adopt a supported sandbox subject without changing their ID. If both that old profile and the supported auth profile already exist separately, the loader fails closed rather than merging accounts or reassigning listings; Evan must resolve that explicit identity collision. Any non-demo/non-sandbox owner or foreign-owner listing collision is refused. Existing matching catalog rows preserve customized titles, description content, prices, specifications, scheduling, status and photos. A successfully filled missing photo appends its required reference disclosure/credit. Unrelated rows are untouched. The existing legacy suit's established missing-type/date-bound upgrades remain intact.
+
+## Public reference photos
+
+Licensed WebPs are saved through `get_storage().save("public", stream, MAX_UPLOAD_BYTES)`. Only a successfully returned storage path is assigned; fixture filenames and remote URLs are never substituted. The existing media route serves the photos. Repeat seeds skip every non-null photo path and do not duplicate uploads.
+
+New descriptions contain visible attribution, license/adaptation terms and source page links plus a clear disclaimer: licensed illustrative references depict fictional demo inventory/provider scenes, not proof of model, size, condition, accessories or qualifications. Existing description content is preserved. For an older matching demo row without credit, the loader preflights the appended disclosure/credit against the HTTP description-length limit and appends it only after a missing photo is saved successfully. Existing non-null photos remain untouched.
+
+Two manifest entries remain explicitly missing (navy tablecloths and clear storage bins), so those listings seed without a photo. Missing references, including unexpectedly absent local licensed files, do not block the catalog. The loader uses the validator’s explicit tolerant missing-file mode; it still validates safe paths and license metadata and strictly checks every present file. Storage failures are reported by listing key without exception text, credentials or request text; failed rows keep null paths and the rest of the catalog continues. A failed database transaction rolls back rows and attempts deletion of newly saved objects. A failed cleanup is logged without secrets and requires operator cleanup. Malformed fixtures, unsafe paths, modified hashes or licensing metadata failures refuse the load before database/storage writes.
+
+## Review and validation
+
+Focused integration commands:
 
 ```sh
-git apply --check fixtures/demo_catalog/evan_seed_integration.patch
-.venv/bin/python fixtures/demo_catalog/test_seed_proposal.py
+.venv/bin/python -m pytest -q tests/test_catalog.py tests/test_demo_catalog.py
 ```
 
-Both passed. The second command copies the two proposed shared files into a disposable directory, applies the patch there, compiles the candidate seed module without changing/import-replacing repository modules, applies the two existing migrations to a temporary `catalog_dev.sqlite`, and removes everything at exit. It does not apply the patch to this repository or use `.env` database configuration.
+These tests use migrated temporary named development SQLite databases and local temporary uploads only. They cover repeat seeding and file counts, existing auth profile reuse, old namespaced owner compatibility, user/customized-row preservation, public media retrieval, demo labels, ID collision refusal, direct target guards, unsupported showcase identities, storage failure, fixture validation refusal and commit rollback/upload cleanup. No configured database, Supabase storage, deployment or live Gemini call is exercised.
 
-Assertions passed: 42 newly inserted catalog listings; 12 new owners; 45 total listings and 14 profiles with two existing demo listings plus one controlled user row; unchanged legacy demo and user records; second load creates nothing; edited catalog record stays unchanged; every new owner is labeled sandbox/demo; every catalog photo path stays null; production guard rejection; required Supabase opt-in and configured-project check; non-demo profile and foreign-owner listing collision rejection; a last-entry API validation failure causes zero partial catalog inserts.
+Evan: review shared loader/CLI/tests, target opt-in and identity collision policy before using a real development target. Emily: review attribution wrapping, licensed-reference disclosure, service photo presentation and eight-category selectors/filters. Aarush: review fixture/matching scenarios and representative-photo limitations. Sid: run the interactive demo journeys; the catalog creates no completed jobs or exchanges. October 11, 2026 windows are deliberate snapshots, not automatically shifted dates.
 
-The fixtures' separate validator already reports 11 borrow-only, 11 sale-only, 11 sale-and-borrow, 9 services, 4 free-to-keep and 8 free-to-borrow. This proposed-loader check is local SQLite only: no Supabase connection, authenticated upload, live Gemini request, or deployment check was performed.
+## Exchange preview compatibility (Sid review)
 
-## Person 1 integration steps
-
-1. Review the proposed patch and the unchanged target guard; check against latest shared files. Apply it only in Person 1's authorized branch. `git apply --check fixtures/demo_catalog/evan_seed_integration.patch` verifies context; `git apply fixtures/demo_catalog/evan_seed_integration.patch` is the proposed application command, **not executed here**.
-2. Add/adjust Person 1-owned seed CLI tests for the forwarded opt-in and direct-call guard. Run the seed/auth/catalog suites and full suite, including named temporary development targets.
-3. Apply existing migrations to the deliberately selected development target. Run the existing seed command; for the designated Supabase development database use its existing explicit `--allow-supabase-postgres-dev` flag. Run twice and verify catalog IDs and edited/demo/user rows remain stable. Do not target production.
-4. Verify public catalog serialization shows the demo title/description and sandbox owner badge. Namespaced catalog owners cannot authenticate by ordinary sandbox emails; if interactive negotiation is needed, Evan must choose a deliberate demo-owner authentication mapping rather than impersonating real identities.
-
-## Deferred image and service wiring
-
-Storage is understood: `get_storage().save("public", stream, MAX_UPLOAD_BYTES)` checks magic bytes for JPEG/PNG/WebP, caps size and returns a generated relative `StoredFile.path`. Only that returned path belongs in `Listing.public_photo_path`; never put manifest filenames, source URLs or arbitrary remote URLs there. Existing local and Supabase adapters and public media route handle delivery. Private evidence stays in the separate private scope. All catalog photo paths are null; no image was downloaded, committed, acquired or loaded. A later explicitly authorized image pass must resolve permission/attribution and either use the authenticated existing photo endpoint as the owner or an Evan-reviewed seed storage helper.
-
-Service listing bodies deliberately omit all item fields and specifications, per today's contract. Subject/scope lives only in descriptions; the deterministic matcher must ask for confirmation for structured requirements it cannot verify. Subject/spec storage requires an Evan-owned contract/schema decision. Emily can display these demo listings through the existing catalog API once Evan loads them. October 11, 2026 dates are intentional snapshots; a later demo needs an explicit fixture update, not automatic date shifting.
+The isolated preview caller now uses `preview_dev.sqlite3`, a named development target accepted by the unchanged direct-call guard. An existing `preview.sqlite3` is left untouched; its prior preview state is not migrated automatically. This minimal compatibility update changes only that tooling path and its existing regression test. Alice now owns the mapped clothing showcase records plus the preview's original two demonstration listings. The test verifies both original demo titles, catalog presence, stable owner inventory IDs on repeated setup, demo labeling, no exchanges, and preservation of the old file. Sid should review the changed preview path before resuming a saved preview session.

@@ -24,7 +24,7 @@ def create_preview_app(data_dir: Path):
         "AUTH_MODE": "sandbox",
         "SANDBOX_USERS": ["alice@unc.edu", "bob@unc.edu", "charlie@unc.edu"],
         "ALLOWED_EMAIL_DOMAIN": "unc.edu",
-        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{data_dir / 'preview.sqlite3'}",
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{data_dir / 'preview_dev.sqlite3'}",
         "STORAGE_BACKEND": "local",
         "UPLOAD_DIR": str(data_dir / "uploads"),
         "EXCHANGE_PREVIEW": True,

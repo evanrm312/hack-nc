@@ -338,7 +338,8 @@ was created, no branch switch occurred and no uncommitted work was discarded.
 Shared routes/models/migrations/UI are the upstream implementation, not rebuilt here.
 
 Supported service modes/categories are exactly modes ["service"] with category
-"tutoring", "proofreading", or "moving help". New validated extraction fields:
+"tutoring", "proofreading", "moving help", "tech help", "repair and mending",
+"bike repair", "photography", or "event help". New validated extraction fields:
 service_duration_minutes (nullable strict integer, 1–1440) and service_time_windows
 (nullable list of {start, end} offset-aware intervals). Python converts timestamps
 to UTC and rejects invalid/reversed windows, invalid duration/category, mixed
@@ -446,3 +447,21 @@ confirmation. All resulting structures are revalidated with Pydantic. Relative
 weekday proposals still require user confirmation; stale ISO timestamps in model
 questions are replaced when corrected. Natural-language interpretation remains
 limited: ambiguous date/field associations require editing, not automatic guessing.
+
+### Additional service categories
+
+The backend category constant also supplies Gemini's schema guidance and prompt.
+Tech help asks about the device/software and problem; repair and mending asks about
+item and work; bike repair asks about the problem; photography asks about purpose;
+event help asks about the task. These questions propose no qualifications,
+licenses, tools, transport, experience, membership, or availability.
+
+Examples: "Help me troubleshoot my laptop for 30 minutes; budget $15" uses tech
+help; "I need a jacket hem mended" uses repair and mending; "Help adjust my bike
+brakes" uses bike repair; "I need portrait photography for 45 minutes" uses
+photography; "Help set up event chairs for an hour" uses event help. Only explicit
+constraints become requirements. Unknown dates and scope need confirmation.
+All categories use the same existing service price, duration, private scheduling,
+and lifecycle endpoints. No deposit or item terms are introduced. Services still
+cannot persist listing specification maps; required request details therefore need
+provider confirmation until the shared listing contract supports them.

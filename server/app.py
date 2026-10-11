@@ -68,6 +68,6 @@ def _register_cli(app: Flask) -> None:
         except ValueError as exc:
             raise click.ClickException(str(exc)) from exc
 
-        summary = seed_demo_data()
+        summary = seed_demo_data(allow_supabase_postgres_dev=allow_supabase_postgres_dev)
         for line in summary:
             click.echo(line)
