@@ -2,8 +2,9 @@
 
 ## Scope and checkout
 
-Baseline: `origin/main` **3fb6df2**, re-fetched unchanged on October 11, 2026.
-Final functional code tested: **b4d6f77b80ff8530340936d6fd3b14e22cf61575**.
+Initial baseline: `origin/main` **3fb6df2**. PR #17 landed during final handoff;
+latest main **5597874** is merged into this branch without changing catalog records/assets.
+Final functional code tested: **2813c560acc149bdaeffee655848edf92f8c31af**.
 Documentation is committed separately afterward. All changes remain on the
 feature branch; main and the older Aero worktree are untouched. No merge or deployment.
 
@@ -85,27 +86,34 @@ Owner review needed before merge:
 - **Aarush:** bounded Gemini retries and the original user-reported reproduction
   if different from the observed transient provider failure.
 
-A separate remote branch `catalog-assets-services` at **f7b83c5** appeared during
-final fetch. It is not merged into main and was not pulled into this work.
-It expands categories to eight and changes models, normalization, preview,
-contracts/tests and catalog assets. Reconcile those overlapping files explicitly
-if it lands: this baseline intentionally retains the current three categories.
-Emily's category controls must follow any separately reviewed expansion.
+PR **#17** (`catalog-assets-services`) landed as **5597874** during handoff.
+The feature merge **7cfafcd** resolves three overlaps:
+
+- `server/models/listing.py`: retain main's eight categories plus private draft status.
+- `static/js/marketplace.js`: retain main's licensed-reference image/attribution
+  layout, one image, eight category controls and catalog filters; preserve compact
+  publication/confirmation controls and service-specific exchange meeting flow.
+- `tests/test_exchanges.py`: retain main's expanded catalog/preview preservation
+  assertions and feature photo-publication setup.
+
+All fixtures, image assets and seed code are identical to latest main. Eight new
+category creation/filter/matching tests now publish their drafts with images
+before querying public catalog/matches. The combined suite passes.
 
 ## Verification actually run
 
 | Check | Result | External dependencies |
 |---|---|---|
-| Full Python at b4d6f77 | **412 passed, 0 failed, 1 skipped** | Gemini/Supabase provider responses mocked; isolated SQLite/local storage real |
+| Full Python at 2813c56 | **445 passed, 0 failed, 1 skipped** | Gemini/Supabase provider responses mocked; isolated SQLite/local storage real |
 | Focused publication/exchange/service/location/notification suite at 7a93b2c | **146 passed** | Isolated data; mocked providers |
 | Final notification ownership/condition acknowledgement tests at b4d6f77 | **9 passed** | Isolated data; mocked providers |
 | Final service/location/notification tests including offer retry at def3034 | **26 passed** | Isolated data; mocked providers |
 | Storage/publication fault-injection tests at 5f0c10f | **22 passed** | Local writes real; Supabase upload/cleanup mocked |
-| Node auth, launcher and purchase-history harnesses at def3034 | **15 passed, 0 failed, 0 skipped** | DOM/SDK/network mocked |
+| Node auth, launcher and purchase-history harnesses at 2813c56 | **15 passed, 0 failed, 0 skipped** | DOM/SDK/network mocked |
 | JS syntax | **11 files passed** | `node --check static/js/*.js` individually |
 | Empty SQLite migration chain | **Passed inside full suite** | Through head c705exchangekeys; item/service schema columns verified |
-| Firefox page journeys | **41/41 assertions passed** | Sandbox auth, isolated local API/storage, inference fallback |
-| Two-account service/alerts/outsider journey, rerun at def3034 | **14/14 passed** | Alice/Bob/Charlie isolated sandbox identities, not real Supabase accounts |
+| Firefox page journeys, rerun at 2813c56 | **41/41 assertions passed** | Sandbox auth, isolated local API/storage, inference fallback |
+| Two-account service/alerts/outsider journey, rerun at 2813c56 | **14/14 passed** | Alice/Bob/Charlie isolated sandbox identities, not real Supabase accounts |
 | Draft failure/resume/retry and taskbar focus | **8/8 passed** | Corrupt image then valid image; same draft published |
 | Reduced-motion, closed-service controls, unknown safety and layout | **9/9 passed** | Actual Firefox reduced-motion preference |
 | Ambiguous-date acknowledgement + lost-response retry | **6/6 passed** | Gemini response mocked; request persistence/idempotency real |
