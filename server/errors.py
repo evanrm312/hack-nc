@@ -8,7 +8,7 @@ turns it (and any Werkzeug HTTP error under /api/) into that shape.
 
 from __future__ import annotations
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, current_app, render_template
 from werkzeug.exceptions import HTTPException
 
 
@@ -70,7 +70,10 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(Exception)
     def _unhandled(err: Exception):
         if not _wants_json():
-            raise err
-        app.logger.exception("Unhandled error on %s", request.path)
+            if current_app.config['APP_ENV'] != 'production':
+                raise err
+            app.logger.error("Unhandled page error (%s)", type(err).__name__)
+            return render_template('error.html'), 500
+        app.logger.error("Unhandled API error (%s)", type(err).__name__)
         body = {"error": {"code": "internal_error", "message": "Internal server error", "fields": {}}}
         return jsonify(body), 500

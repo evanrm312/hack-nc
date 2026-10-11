@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    image: campus-current:local
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      AUTH_MODE: supabase
+      STORAGE_BACKEND: supabase
+      PORT: '8080'
+    ports:
+      - '127.0.0.1:5055:8080'
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
