@@ -400,7 +400,7 @@ def test_all_supported_service_categories_create_filter_and_match(client, alice,
     created = client.post('/api/listings', json={**LISTING, 'category': category,
         'title': 'Demo ' + category}, headers=alice)
     assert created.status_code == 201, created.get_json()
-    listing = created.get_json()['listing']
+    listing = publish_listing(client, alice, created.get_json()['listing'])
     assert listing['category'] == category
     assert not {'condition', 'collateral_percent', 'sale_price_cents', 'rental_fee_cents'} & listing.keys()
     filtered = client.get('/api/listings', query_string={'mode': 'service', 'category': category})
