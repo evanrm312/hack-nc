@@ -17,7 +17,8 @@ Screenshots and extracted page text are saved under
 | https://fontsinuse.com/uses/79154/shacknews-logo | December 2001 Aspirin wordmark in a screenshot of the January 2006 site; restrained metallic teal header framing | Keep polished trim and compact titles. Do not copy its lowercase logo or use Aspirin for form text. Screenshot is reference only, all rights reserved. |
 | https://fontsinuse.com/uses/78453/the-typography-of-whitehouse-gov-2000-2026 | Inspected the October 2008 page and profile screenshots: compact information columns and clear heading/body separation; article describes the later use of Lucida Sans/Grande | Make the sidebar secondary, separate headings from supporting information, and retain open, readable body lettering. Screenshots are reference only, CC BY-NC-ND. |
 | https://learn.microsoft.com/en-us/windows/win32/uxguide/vis-icons | Followed from Aero Archive; illustrated icon guidance distinguishes larger dimensional icons from simple toolbar symbols | Keep one original SVG family, polished icon frames, and real image thumbnails when available. |
-| https://github.com/googlefonts/carlito | Inspected the README, attribution, Calibri metric compatibility, and OFL license | Bundle Carlito Regular/Bold as a licensed modern humanist substitute. No commercial Windows fonts are redistributed. |
+| https://github.com/googlefonts/carlito | Inspected the README, attribution, Calibri metric compatibility, and OFL license | Previous pass used Carlito; retained as a licensed asset, superseded by Open Sans in the screenshot refinement below. |
+| https://github.com/googlefonts/opensans | Inspected designer attribution, variable weight/width axes, and SIL OFL license | Use licensed Open Sans on Linux, with locally installed Segoe UI first, to approximate the user's Archive header reference. |
 
 No new photography was needed. The existing real sky and leaf photographs
 and their documented licenses remain in `static/assets/ASSETS.md`.
@@ -28,7 +29,7 @@ and their documented licenses remain in `static/assets/ASSETS.md`.
 | --- | --- | --- |
 | Bold request headline, repeated field question and long guidance | Regular-weight “What do you need?”; “Your request” label; shorter guidance | Text/photo normalization, editable confirmation, and required creation fields |
 | Large right-side nature panel with repeated slogans and links | Small framed nature band; Recommended and Previous buys | Genuine catalog links and private exchange links |
-| Source Sans 3 with similar heading/label weights | Carlito with regular page headings and bold window/section titles and labels | Local Linux rendering and fallback stack |
+| Source Sans 3, then Carlito with sharper/narrower forms | Segoe UI / locally bundled Open Sans with regular page headings and semibold titles/labels | Local Linux rendering and fallback stack |
 | Condition, photo, specifications, accessories, and defects all expanded | Basics; optional Photos and details disclosures; Terms with optional Availability | Draft values survive mode toggles; invalid hidden fields are disabled and omitted from payloads |
 | Nested green terms panels and one-column price fields | Plain aligned sections separated by a fine rule; paired related price controls on desktop | Sale, borrow, combined item modes, and exclusive service mode |
 | Individual photo suggestions presented as decorative cards | Compact proposal rows with the same Accept/Dismiss decisions and useful bulk controls | Every proposed visual attribute still requires a decision |
@@ -215,3 +216,62 @@ process and verified the manual fallback instead. No auth email was requested.
 Live Supabase authentication, the full service UI lifecycle, saved profile
 preferences, private participant locations, geographic ranking, and real
 two-person exchange completion remain unverified or pending.
+
+## Screenshot-directed typography and depth refinement
+
+This follow-up starts from feature commit `36e271b`. The supplied Archive
+header screenshot informs regular-weight, open humanist lettering. Direct
+Firefox inspection of the Archive resource page confirmed its Segoe UI /
+Tahoma / Geneva / Verdana stack and 400-weight text. The reference screenshot
+was not turned into an image asset. Open Sans is losslessly compressed to
+WOFF2, with its full OFL license and source recorded in `static/assets/ASSETS.md`.
+
+The window frame now has 22px corners; the hero and dialogs 20px; buttons
+12px; fields 11px. Rounded chrome, white upper-left bevels, shaded lower edges,
+and contact shadows create thickness without moving text into perspective.
+Conversation wells and fields are inset; catalog rows remain quiet inside
+a rounded collection frame. Semibold labels and section titles soften the
+previous bold treatment. Primary hover/pressed states retain depth.
+
+Additional copy corrections include:
+
+- `formalwear · condition good` → `Formalwear · Condition: Good`
+- `category: formalwear`, `deposit up to` → `Category: Formalwear`, `Deposit up to`
+- `needs confirmation`, `none known`, `required` → `Needs confirmation`, `None known`, `Required`
+- `from photo (accepted)` → `From photo (accepted)`
+- `Publish Request` → `Publish request`
+- Missing exchange times previously appeared as `unknown Eastern`; now `Time not agreed`.
+- Service status `scheduled` has the display label `Scheduled`.
+
+Only known application enum values receive display mappings. Custom categories,
+condition wording, titles, descriptions, specification values, and messages
+remain unchanged. No CSS text transformation is used. Exchange changes in
+Sid's JS file are display strings only; the pending service controller
+integration described above remains pending.
+
+Verification for this follow-up:
+
+- Full Python suite: **285 passed, 1 skipped**. External Auth, Gemini, and
+  Supabase Storage checks are mocked; dedicated `TEST_DATABASE_URL` is absent.
+- Browser auth/shell/discovery helper tests: **13 passed, 0 failed, 0 skipped**.
+- `node --check`: all **7** JS files. `git diff --check`: passed.
+- Headless Firefox walkthrough: **66 passed** across 12 reachable page states
+  and 1440/1024/390px views; menu focus/Escape, form errors, service/item field
+  visibility, draft preservation, keyboard/taskbar clearance, sandbox auth
+  refresh/navigation/sign-out. This is local sandbox auth, not live Supabase.
+- Targeted Firefox follow-up: **18 passed** for real loaded font, normal-weight
+  headings, rounded/beveled materials, sentence-case labels, unchanged listing
+  title/description and custom condition text, reduced motion, fallback type,
+  publish preview, Escape focus restoration, and dialog/taskbar clearance.
+- The first targeted run found a too-tall tablet publish dialog; fixed by a
+  constrained flex dialog with scrollable body and visible footer, then reran
+  all 18 checks successfully. Preview opening was tested without publishing.
+
+Baseline screenshots: `/tmp/campus-aero-softening/before/`.
+After screenshots: `/tmp/campus-aero-softening/after/`.
+Comparison: `/tmp/campus-aero-softening/review.html`.
+Local feature preview: `http://127.0.0.1:5057`, using the existing isolated
+SQLite preview database and local uploads. No shared database was modified;
+no seed or sample files changed. No new data-creation journey or live external
+service check was needed for this typography/material pass. Main remains
+untouched; nothing was pushed, merged, or deployed.

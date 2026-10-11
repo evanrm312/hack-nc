@@ -43,16 +43,16 @@
   --glass: rgba(255, 255, 255, 0.55);    /* short labels / chrome only */
   --glass-line: rgba(255, 255, 255, 0.75);
   /* shape */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 12px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
   --r-pill: 999px;
   --shadow-soft: 0 8px 24px rgba(10, 75, 125, 0.14), 0 1px 2px rgba(10, 75, 125, 0.10);
   --shadow-float: 0 14px 36px rgba(10, 75, 125, 0.20);
   --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.9);
   /* type & spacing */
-  /* Mid-2000s system stack (Vista/7, Mac OS X, early iPhone). No downloads. */
-  --font: "Carlito", "Calibri", "Segoe UI", "DejaVu Sans", sans-serif;
+  /* Archive reference: Segoe UI first; licensed humanist fallback for Linux. */
+  --font: "Segoe UI", "Open Sans", Tahoma, "DejaVu Sans", sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px;
@@ -63,8 +63,7 @@
 }
 
 /* ------------------------------------------------------------------- base */
-@font-face { font-family: "Carlito"; src: url("../assets/fonts/Carlito-Regular.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
-@font-face { font-family: "Carlito"; src: url("../assets/fonts/Carlito-Bold.woff2") format("woff2"); font-style: normal; font-weight: 600 900; font-display: swap; }
+@font-face { font-family: "Open Sans"; src: url("../assets/fonts/OpenSans-Upright.woff2") format("woff2"); font-style: normal; font-weight: 300 800; font-stretch: 75% 100%; font-display: swap; }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-padding: 24px 0 100px; }
 body { margin: 0; min-height: 100vh; font-family: var(--font); font-size: 16px; line-height: 1.45; color: var(--ink); background: #96c9ca; }

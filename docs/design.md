@@ -18,25 +18,36 @@ without redesign. Files: `static/css/theme.css`, `static/js/components.js`,
 - Honest labels: fixture/stub data is purple-striped, anything money-related
   that is not real says "simulated", a profile badge shows the server's text
   verbatim and is green only when `verification_source === "supabase"`.
-- Unknown is rendered as "unknown" (via `api.formatCents`/`api.formatTime`),
+- Unknown is rendered as "Unknown" in standalone UI labels (the shared API
+  formatting helpers retain their existing lowercase return values),
   never as `$0.00` or a made-up value.
 
 ## Typography
 
-The refinement bundles Carlito Regular and Bold, by Łukasz Dziedzic, under
-the SIL Open Font License 1.1. It is a modern humanist substitute compatible
-with Calibri's metrics; it is not a bundled Microsoft or Frutiger font.
+The current refinement uses Segoe UI when installed and bundles Open Sans
+upright variable type, by Steve Matteson and the Open Sans Project Authors,
+under the SIL Open Font License 1.1. Direct browser inspection of the user's
+Aero Archive reference confirmed its Segoe UI/Tahoma stack and regular-weight
+headings. Open Sans supplies a readable humanist approximation on Linux;
+no commercial Microsoft or Frutiger font is redistributed.
 
 ```css
---font: "Carlito", "Calibri", "Segoe UI", "DejaVu Sans", sans-serif;
+--font: "Segoe UI", "Open Sans", Tahoma, "DejaVu Sans", sans-serif;
 ```
 
 The local font works on Linux without an installed Microsoft font. Page
-headings use 32–42px regular type; section titles use 23–24px bold; window
-titles use 17px bold; form labels use 18px bold; body uses 17px/1.45; supporting
+headings use 32–42px regular type; section titles use 23–24px semibold; window
+titles use 17px semibold; form labels use 17px semibold; body uses 17px/1.45; supporting
 information uses 14–15px/1.4. Prices and agreed terms use tabular numerals.
 Text stays solid navy or green. Reflections belong to surfaces; a small
 shadow supports light text on primary buttons. No novelty display font is used.
+
+Window frames have 22px corners (18px on phones), hero panels 20px, controls
+11–12px, and dialogs 20px. White upper/left bevels, shaded lower lips, and
+contact shadows make the chrome and primary actions raised; fields and
+conversation wells remain inset. Catalog rows remain flat inside a rounded
+collection frame, so depth reinforces hierarchy. Application enum labels use
+explicit display mappings, never CSS capitalization or rewrites of user text.
 
 ## Tokens (`:root`)
 

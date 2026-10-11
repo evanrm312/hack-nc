@@ -35,14 +35,16 @@
   //     absent/null; optional service_duration_minutes and private
   //     service_time_windows. Public view adds service_duration_minutes.
   const SERVICE_CATEGORIES = [["tutoring", "Tutoring"], ["proofreading", "Proofreading"], ["moving help", "Moving help"]];
-  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "unknown"])[1];
+  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "Unknown"])[1];
+  const categoryLabel = (c) => ([...CATEGORIES, ...SERVICE_CATEGORIES].find(([v]) => v && v === c) || [c, c ? String(c) : "Uncategorized"])[1];
+  const modeLabel = (m) => ({ sale: "Buy", borrow: "Borrow", service: "Service" })[m] || String(m);
   const isServiceCategory = (c) => SERVICE_CATEGORIES.some(([v]) => v === c);
   const isService = (listing) => !!listing && (listing.allowed_modes || []).includes("service");
   const isServiceRequest = (r) => !!r && ((r.modes || []).includes("service") || (r.normalized && (r.normalized.modes || []).includes("service")));
-  const formatDuration = (min) => (Number.isInteger(min) ? (min >= 60 ? (min / 60).toFixed(min % 60 ? 1 : 0) + " h" : min + " min") : "unknown");
+  const formatDuration = (min) => (Number.isInteger(min) ? (min >= 60 ? (min / 60).toFixed(min % 60 ? 1 : 0) + " h" : min + " min") : "Unknown");
 
   const CONDITIONS = [["", "Unknown"], ["new", "New"], ["like_new", "Like new"], ["good", "Good"], ["fair", "Fair"], ["worn", "Worn"]];
-  const conditionLabel = (c) => (CONDITIONS.find(([v]) => v === c) || [c, c ? String(c).replace("_", " ") : "unknown"])[1];
+  const conditionLabel = C.conditionLabel;
 
   if (page === "home") initHome();
   if (page === "results") initResults();
@@ -611,9 +613,9 @@
       if (photoAttrs) {
         interpBody.append(C.notice("info", C.el("span", {},
           C.el("strong", { text: "Reference photo. " }),
-          "Fields marked \"from photo (accepted)\" were proposed from your photo and confirmed by you. They are preferences you can still edit. The photo itself is private and was not stored.")));
+          "Fields marked \"From photo (accepted)\" were proposed from your photo and confirmed by you. They are preferences you can still edit. The photo itself is private and was not stored.")));
       }
-      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs, photoLabel: "from photo (accepted)", photoVariant: "neutral" };
+      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs, photoLabel: "From photo (accepted)", photoVariant: "neutral" };
 
       const form = C.el("form", { id: "interp-form", novalidate: true });
       const editor = buildInterpretationForm(form, values, meta);
@@ -761,16 +763,16 @@
       const chips = [];
       const confirmed = cleanModes(n.modes);
       const modes = confirmed.includes("service") ? confirmed : (request.modes || []);
-      const labels = modes.map((m) => (m === "sale" ? "buy" : m === "borrow" ? "borrow" : "service"));
+      const labels = modes.map(modeLabel);
       if (labels.length) chips.push(labels.join(" or "));
-      if (n.category) chips.push("category: " + n.category);
+      if (n.category) chips.push("Category: " + categoryLabel(n.category));
       Object.entries(n.required_specifications || {}).forEach(([k, v]) => chips.push(k.replace(/_/g, " ") + " = " + String(v) + " (required)"));
-      if (request.budget_cents != null) chips.push("budget up to " + api.formatCents(request.budget_cents));
-      if (request.max_deposit_cents != null) chips.push("deposit up to " + api.formatCents(request.max_deposit_cents));
-      if (request.needed_by) chips.push("needed by " + api.formatTime(request.needed_by));
-      if (request.use_start && request.use_end) chips.push("borrow " + api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end));
-      if (Number.isInteger(request.service_duration_minutes)) chips.push("session " + formatDuration(request.service_duration_minutes));
-      if (request.area) chips.push((isServiceRequest(request) ? "around " : "pickup around ") + request.area);
+      if (request.budget_cents != null) chips.push("Budget up to " + api.formatCents(request.budget_cents));
+      if (request.max_deposit_cents != null) chips.push("Deposit up to " + api.formatCents(request.max_deposit_cents));
+      if (request.needed_by) chips.push("Needed by " + api.formatTime(request.needed_by));
+      if (request.use_start && request.use_end) chips.push("Borrow " + api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end));
+      if (Number.isInteger(request.service_duration_minutes)) chips.push("Session " + formatDuration(request.service_duration_minutes));
+      if (request.area) chips.push((isServiceRequest(request) ? "Around " : "Pickup around ") + request.area);
       return chips;
     }
 
@@ -822,7 +824,7 @@
         renderPublishSuccess(box, null);
         return;
       }
-      const btn = C.button({ label: "Publish Request", variant: "leaf", attrs: { id: "publish-btn" } });
+      const btn = C.button({ label: "Publish request", variant: "leaf", attrs: { id: "publish-btn" } });
       box.append(
         C.el("h3", { text: "Let other members know" }),
         C.el("p", { className: "muted", text: "Publishing shares a sanitized version of this request in the public feed: the item, buy or borrow, the day you need it by, and your campus area. Your exact times, borrowing dates, deposit limit, and contact details stay private. Nothing is published until you confirm." }),
@@ -833,26 +835,26 @@
     // Mirrors the server's public view (docs/contracts.md -> NeedRequest public view).
     function buildPublicPreview(profile) {
       const n = request.normalized || {};
-      const fmtSpecs = (obj) => Object.entries(obj || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "none";
+      const fmtSpecs = (obj) => Object.entries(obj || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "None";
       const modes = request.modes || [];
       const neededDate = request.needed_by ? request.needed_by.slice(0, 10) : null;
       const publicRows = [
-        ["Who", profile ? profile.display_name + " (" + profile.badge + ")" : "your display name and verification badge"],
-        ["Item category", n.category || "unknown"],
+        ["Who", profile ? profile.display_name + " (" + profile.badge + ")" : "Your display name and verification badge"],
+        ["Item category", n.category ? categoryLabel(n.category) : "Unknown"],
         ["Required details", fmtSpecs(n.required_specifications)],
         ["Preferred details", fmtSpecs(n.preferred_specifications)],
-        ["Buy or borrow", modes.length ? modes.map((m) => (m === "sale" ? "buy" : "borrow")).join(" or ") : "unknown"],
-        ["Budget", request.budget_cents != null ? api.formatCents(request.budget_cents) : "unknown"],
-        ["Needed by", neededDate ? neededDate + " (date only)" : "unknown"],
-        ["Campus area", request.area || "unknown"],
+        ["Buy or borrow", modes.length ? modes.map(modeLabel).join(" or ") : "Unknown"],
+        ["Budget", request.budget_cents != null ? api.formatCents(request.budget_cents) : "Unknown"],
+        ["Needed by", neededDate ? neededDate + " (date only)" : "Unknown"],
+        ["Campus area", request.area || "Unknown"],
       ];
       const privateRows = [
         ["Your original wording", request.original_text ? "“" + request.original_text.slice(0, 80) + (request.original_text.length > 80 ? "…" : "") + "”" : "—"],
-        ["Exact needed-by time", request.needed_by ? api.formatTime(request.needed_by) : "unknown"],
-        ["Borrowing dates", request.use_start || request.use_end ? api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end) : "unknown"],
-        ["Pickup windows", (request.pickup_windows || []).length ? (request.pickup_windows.length + " window(s)") : "none set"],
-        ["Deposit you can afford", request.max_deposit_cents != null ? api.formatCents(request.max_deposit_cents) : "unknown"],
-        ["Email and contact details", "never shown"],
+        ["Exact needed-by time", request.needed_by ? api.formatTime(request.needed_by) : "Unknown"],
+        ["Borrowing dates", request.use_start || request.use_end ? api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end) : "Unknown"],
+        ["Pickup windows", (request.pickup_windows || []).length ? (request.pickup_windows.length + " window(s)") : "None set"],
+        ["Deposit you can afford", request.max_deposit_cents != null ? api.formatCents(request.max_deposit_cents) : "Unknown"],
+        ["Email and contact details", "Never shown"],
       ];
       const list = (rows, lock) => C.el("dl", { className: "privacy-list" }, rows.flatMap(([k, v]) => [
         C.el("dt", {}, C.el("span", { className: "privacy-list__lock privacy-list__lock--" + lock, "aria-hidden": "true" }), k),
@@ -919,17 +921,17 @@
             C.button({ label: "See it in the public feed", variant: "primary", href: "/requests" }),
             C.statusBadge(request.status), C.badge("Published", "sale")))));
       if (pub) {
-        const specs = (o) => Object.entries(o || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "none";
+        const specs = (o) => Object.entries(o || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "None";
         box.append(C.el("p", { className: "muted", style: { margin: "var(--space-3) 0 var(--space-1)" }, text: "Exactly what was published:" }),
           C.el("dl", { className: "privacy-list" }, [
-            ["Who", pub.requester ? pub.requester.display_name + " (" + pub.requester.badge + ")" : "unknown"],
-            ["Item category", pub.category || "unknown"],
+            ["Who", pub.requester ? pub.requester.display_name + " (" + pub.requester.badge + ")" : "Unknown"],
+            ["Item category", pub.category ? categoryLabel(pub.category) : "Unknown"],
             ["Required details", specs(pub.required_specifications)],
             ["Preferred details", specs(pub.preferred_specifications)],
-            ["Buy or borrow", (pub.modes || []).length ? pub.modes.map((m) => (m === "sale" ? "buy" : "borrow")).join(" or ") : "unknown"],
-            ["Budget", pub.budget_cents != null ? api.formatCents(pub.budget_cents) : "unknown"],
-            ["Needed by", pub.needed_by_date || "unknown"],
-            ["Campus area", pub.area || "unknown"],
+            ["Buy or borrow", (pub.modes || []).length ? pub.modes.map(modeLabel).join(" or ") : "Unknown"],
+            ["Budget", pub.budget_cents != null ? api.formatCents(pub.budget_cents) : "Unknown"],
+            ["Needed by", pub.needed_by_date || "Unknown"],
+            ["Campus area", pub.area || "Unknown"],
           ].flatMap(([k, v]) => [C.el("dt", {}, C.el("span", { className: "privacy-list__lock privacy-list__lock--open", "aria-hidden": "true" }), k), C.el("dd", { text: v })])));
       }
     }
@@ -978,7 +980,7 @@
       const footer = [
         C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: owner.display_name || "Owner" }), C.profileBadge(owner)),
         C.el("span", { className: "cluster" },
-          typeof entry.score === "number" ? C.badge("fit " + entry.score.toFixed(2), "neutral") : null,
+          typeof entry.score === "number" ? C.badge("Fit " + entry.score.toFixed(2), "neutral") : null,
           C.button({ label: service ? "View service" : "View listing", size: "sm", variant: kind === "confirmed" ? "primary" : "default", href: "/listings/" + enc(listing.id || "") })),
       ];
 
@@ -988,7 +990,7 @@
         title: listing.title || "Untitled listing",
         subtitle: service
           ? serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes)
-          : [listing.category, listing.condition ? "condition " + String(listing.condition).replace("_", " ") : "condition unknown"].filter(Boolean).join(" · "),
+          : [categoryLabel(listing.category), "Condition: " + conditionLabel(listing.condition)].filter(Boolean).join(" · "),
         badges,
         body: [money, specList, windows, C.el("h4", { className: "reasons__title", text: kind === "confirmed" ? "Why it matches" : "What still needs checking" }), reasons],
         footer,
@@ -1024,12 +1026,12 @@
     meta = meta || {};
     const F = {};
     const unknownBadge = () => C.badge("Unknown", "neutral");
-    const confirmBadge = () => C.badge("needs confirmation", "warn");
+    const confirmBadge = () => C.badge("Needs confirmation", "warn");
     const markLabel = (fieldApi, badge) => { fieldApi.root.querySelector(".field__label").append(badge); };
 
     const modesErr = C.el("p", { className: "field__error", id: "modes-error", role: "alert" });
     const modesGroup = C.el("fieldset", {},
-      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("required", "info") : null),
+      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("Required", "info") : null),
       C.el("p", { className: "field__hint", id: "modes-hint", text: meta.modesUnknown
         ? "The interpreter did not say. Buy and borrow are selected as a search preference; confirm or narrow it."
         : (meta.requireModes ? "Required. " : "") + "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person (tutoring, proofreading, moving help)." }),
@@ -1047,7 +1049,7 @@
       F.category.control.value = values.category;
     }
     const photoAttrs = meta.photoAttributes || {};
-    const photoLabel = meta.photoLabel || "from photo (accepted)";
+    const photoLabel = meta.photoLabel || "From photo (accepted)";
     const photoBadge = () => C.badge(photoLabel, meta.photoVariant || "neutral");
     if (!values.category) markLabel(F.category, unknownBadge());
     else if (photoAttrs.category && photoAttrs.category === values.category) markLabel(F.category, photoBadge());
@@ -1059,10 +1061,10 @@
     F.preferred_specifications = preferredSpecs;
 
     F.budget_cents = C.field({ id: "f-budget", label: "Purchase or rental budget", type: "text", prefix: "$", optional: true,
-      attrs: { inputmode: "decimal" }, placeholder: "unknown", value: C.centsToDollars(values.budget_cents),
+      attrs: { inputmode: "decimal" }, placeholder: "Unknown", value: C.centsToDollars(values.budget_cents),
       hint: "The most you would pay to buy, or as a rental fee." });
     F.max_deposit_cents = C.field({ id: "f-deposit", label: "Deposit you can afford", type: "text", prefix: "$", optional: true,
-      attrs: { inputmode: "decimal" }, placeholder: "unknown", value: C.centsToDollars(values.max_deposit_cents),
+      attrs: { inputmode: "decimal" }, placeholder: "Unknown", value: C.centsToDollars(values.max_deposit_cents),
       hint: "Separate from your budget. A free loan can still be unaffordable if the deposit is too high. Deposits are simulated in this prototype." });
     if (values.budget_cents == null) markLabel(F.budget_cents, unknownBadge());
     if (values.max_deposit_cents == null) markLabel(F.max_deposit_cents, unknownBadge());
@@ -1077,7 +1079,7 @@
       else if (!values[key]) markLabel(f, unknownBadge());
     });
 
-    F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "unknown", value: values.area || "", attrs: { maxlength: 80 } });
+    F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "Unknown", value: values.area || "", attrs: { maxlength: 80 } });
     if (!values.area) markLabel(F.area, unknownBadge());
 
     // Service-only fields (docs/contracts.md -> Service NeedRequest): optional
@@ -1634,7 +1636,7 @@
         C.el("dl", { className: "kv-list" },
           C.el("dt", { text: "Price per session" }), C.el("dd", { text: api.formatCents(listing.service_price_cents) }),
           C.el("dt", { text: "Session length" }), C.el("dd", { text: formatDuration(listing.service_duration_minutes) }),
-          C.el("dt", { text: "Deposit" }), C.el("dd", { text: "none (services have no collateral)" })),
+          C.el("dt", { text: "Deposit" }), C.el("dd", { text: "None (services have no collateral)" })),
         serviceWindowsNode(listing),
       ],
       footer: owner.display_name ? [C.el("span", { className: "muted", text: owner.display_name }), C.profileBadge(owner)] : null,
@@ -1701,7 +1703,7 @@
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
         C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
-        C.el("div", { className: "meta" }, C.el("span", { text: listing.category || "uncategorized" }), C.el("span", { text: "condition: " + conditionLabel(listing.condition) })),
+        C.el("div", { className: "meta" }, C.el("span", { text: categoryLabel(listing.category) }), C.el("span", { text: "Condition: " + conditionLabel(listing.condition) })),
         listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
         section("Specifications", kv(listing.specifications, "No specifications listed.")),
         section("Included accessories", stringList(listing.accessories, "None listed.")),
@@ -1721,15 +1723,15 @@
           row("Deposit proposed (simulated)", api.formatCents(deposit) + " (" + pct + "% of value)");
           row("Not covered by deposit", api.formatCents(uncovered), uncovered > 0 ? "kv-list__warn" : "");
         } else {
-          row("Deposit proposed (simulated)", "unknown");
+          row("Deposit proposed (simulated)", "Unknown");
         }
         const av = listing.availability || {};
         row("Available", (av.available_from || av.available_until)
-          ? (av.available_from ? "from " + api.formatTime(av.available_from) : "") + (av.available_until ? " until " + api.formatTime(av.available_until) : "")
-          : "no fixed dates");
+          ? (av.available_from ? "From " + api.formatTime(av.available_from) : "") + (av.available_until ? (av.available_from ? " until " : "Until ") + api.formatTime(av.available_until) : "")
+          : "No fixed dates");
         if (av.notes) row("Availability notes", av.notes);
       }
-      if (!allowed.length) row("Terms", "unknown");
+      if (!allowed.length) row("Terms", "Unknown");
 
       // ---- meeting spots
       const spotIds = new Set(listing.meeting_spot_ids || []);
@@ -1780,7 +1782,7 @@
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
         C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
-        C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "session: " + formatDuration(listing.service_duration_minutes) })),
+        C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "Session: " + formatDuration(listing.service_duration_minutes) })),
         listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
         section("Available time windows", serviceWindowsNode(listing)));
 
@@ -1927,7 +1929,7 @@
         variant: ["compact"],
         media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + listing.title : "" },
         title: C.el("a", { href: "/listings/" + enc(listing.id), text: listing.title }),
-        subtitle: service ? serviceCategoryLabel(listing.category) : listing.category,
+        subtitle: categoryLabel(listing.category),
         badges,
         body: [price, C.el("p", { className: "muted", style: { fontSize: ".85rem" }, text: "Updated " + api.formatTime(listing.updated_at) })],
         footer: [C.el("span", { className: "visually-hidden", id: "withdraw-hint", text: "Withdrawing hides the listing; you will be asked to confirm." }), actions],
@@ -2091,14 +2093,14 @@
       const specs = Object.entries(r.required_specifications || {});
       const prefs = Object.entries(r.preferred_specifications || {});
       const item = C.el("div", { className: "stack--tight" },
-        C.el("div", { className: "req-item", text: r.category ? (service ? serviceCategoryLabel(r.category) : capitalize(r.category)) : (service ? "Service not specified" : "Item not specified") }),
+        C.el("div", { className: "req-item", text: r.category ? categoryLabel(r.category) : (service ? "Service not specified" : "Item not specified") }),
         specs.length ? C.el("dl", { className: "specs" }, specs.flatMap(([k, v]) => [C.el("dt", { text: k.replace(/_/g, " ") }), C.el("dd", { text: String(v) })])) : C.el("p", { className: "muted", text: "No required details given." }),
         prefs.length ? C.el("p", { className: "muted", text: "Prefers " + prefs.map(([k, v]) => k.replace(/_/g, " ") + " " + String(v)).join(", ") }) : null);
 
       const facts = C.el("dl", { className: "kv-list kv-list--plain" },
         C.el("dt", { text: "Needed by" }), C.el("dd", { text: formatDateOnly(r.needed_by_date) }),
-        C.el("dt", { text: "Campus area" }), C.el("dd", { text: r.area || "not given" }),
-        C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "up to " + api.formatCents(r.budget_cents) : "not given" }),
+        C.el("dt", { text: "Campus area" }), C.el("dd", { text: r.area || "Not given" }),
+        C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "Up to " + api.formatCents(r.budget_cents) : "Not given" }),
         service ? C.el("dt", { text: "Session" }) : null, service ? C.el("dd", { text: formatDuration(r.service_duration_minutes) }) : null);
 
       let action;
@@ -2118,7 +2120,7 @@
         body: [item, facts],
         footer: [
           C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: requester.display_name || "Member" }), C.profileBadge(requester),
-            C.el("span", { className: "muted", text: "posted " + api.formatTime(r.created_at) })),
+            C.el("span", { className: "muted", text: "Posted " + api.formatTime(r.created_at) })),
           action,
         ],
       });
@@ -2133,7 +2135,6 @@
     const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
-  function capitalize(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
 
   // Key/value editor for specifications. Returns {root, control, value(), setError, clearError}.
   function kvEditor(title, hint, initial, opts) {
@@ -2145,7 +2146,7 @@
       const v = C.el("input", { type: "text", placeholder: "value (e.g. 40R)", "aria-label": title + " attribute value", maxlength: 120 });
       if (key != null) k.value = key;
       if (value != null) v.value = typeof value === "object" ? JSON.stringify(value) : String(value);
-      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "please confirm", opts.flagVariant || "warn") : null;
+      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "Please confirm", opts.flagVariant || "warn") : null;
       if (flag) v.setAttribute("aria-description", opts.flagLabel || "please confirm");
       const row = C.el("div", { className: "kv-row" + (flag ? " kv-row--flag" : "") }, k, v, flag,
         C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this " + title.toLowerCase() + " row" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
@@ -2155,7 +2156,7 @@
     const entries = Object.entries(initial || {});
     if (entries.length) entries.forEach(([k, v]) => addRow(k, v)); else addRow();
     const add = C.button({ label: "+ Add another", size: "sm", onClick: () => { const r = addRow(); r.querySelector("input").focus(); } });
-    const legend = C.el("legend", {}, title + " ", (entries.length || opts.badge === false) ? null : C.badge("none known", "neutral"));
+    const legend = C.el("legend", {}, title + " ", (entries.length || opts.badge === false) ? null : C.badge("None known", "neutral"));
     const root = C.el("fieldset", {}, legend, C.el("p", { className: "field__hint", text: hint }), rows, C.el("div", { style: { marginTop: "8px" } }, add), error);
     return {
       root,
@@ -2243,7 +2244,7 @@
     const specList = specs.length ? C.el("dl", { className: "specs" }, specs.flatMap(([k, v]) => [C.el("dt", { text: k.replace(/_/g, " ") }), C.el("dd", { text: String(v) })])) : null;
 
     const meta = C.el("div", { className: "meta" },
-      C.el("span", { text: listing.category || "uncategorized" }),
+      C.el("span", { text: categoryLabel(listing.category) }),
       listing.condition ? C.el("span", { text: "Condition: " + conditionLabel(listing.condition) }) : C.el("span", { text: "Condition unknown" }),
       listing.known_defects && listing.known_defects.length ? C.el("span", { text: listing.known_defects.length + " known defect" + (listing.known_defects.length > 1 ? "s" : "") }) : null);
 
