@@ -44,6 +44,13 @@ def _candidate(request, listing, mode):
     else:
         reasons.append(f'Listing supports requested mode: {mode}.')
 
+    request_modes = request.get('modes') or []
+    listing_modes = listing.get('allowed_modes') or []
+    if ('service' in request_modes) != ('service' in listing_modes):
+        rejected.append('Service requests and item listings cannot match each other.')
+    if ('service' in request_modes and request_modes != ['service']) or ('service' in listing_modes and listing_modes != ['service']):
+        rejected.append('Service and item modes cannot be combined.')
+
     category = request.get('category')
     if category is None or listing.get('category') is None:
         uncertain('category', 'Category needs confirmation.')
@@ -97,33 +104,56 @@ def _candidate(request, listing, mode):
                     unknown.append('deposit_agreement')
 
         if mode == 'service':
-            duration = listing.get('service_duration_minutes')
-            requested_duration = request.get('service_duration_minutes')
-            if type(duration) is not int or duration <= 0:
-                uncertain('service_duration_minutes', 'Service duration needs confirmation.')
-            elif requested_duration is not None and (type(requested_duration) is not int or
-                                                      requested_duration > duration):
-                rejected.append('Service duration is shorter than requested.')
-            try:
-                windows = [(_date(window['start']), _date(window['end']))
-                           for window in (listing.get('service_available_windows') or [])]
-                wanted = [(_date(window['start']), _date(window['end']))
-                          for window in (request.get('service_time_windows') or [])]
-                deadline = _date(request.get('needed_by'))
-                if not windows or any(start >= end for start, end in windows):
-                    uncertain('service_available_windows', 'Service availability needs confirmation.')
-                elif type(duration) is int and duration > 0:
-                    span = timedelta(minutes=duration)
-                    fits = any(max(start, want_start) + span <= min(
-                        end, want_end, deadline or end)
-                        for start, end in windows
-                        for want_start, want_end in (wanted or [(start, end)]))
-                    if not fits:
-                        rejected.append('No service time window fits the requested time or deadline.')
+            offered = listing.get('service_duration_minutes')
+            requested = request.get('service_duration_minutes')
+            valid_offered = type(offered) is int and 1 <= offered <= 1440
+            valid_requested = type(requested) is int and 1 <= requested <= 1440
+            if not valid_offered:
+                uncertain('service_duration_minutes', 'Provider service duration needs confirmation.')
+            if not valid_requested:
+                uncertain('service_duration_minutes', 'Requested service duration needs confirmation.')
+            elif valid_offered and requested > offered:
+                rejected.append(f'Service duration {offered} minutes is shorter than requested {requested} minutes.')
+            elif valid_offered:
+                reasons.append(f'Provider duration {offered} minutes covers requested {requested} minutes.')
+
+            def parse_windows(values):
+                if not values:
+                    return []
+                parsed = [(_date(window['start']), _date(window['end'])) for window in values]
+                if any(start is None or end is None or start >= end for start, end in parsed):
+                    raise ValueError('Invalid service interval')
+                return parsed
+
+            windows, wanted = [], []
+            for field, source in (('service_available_windows', listing), ('service_time_windows', request)):
+                try:
+                    parsed = parse_windows(source.get(field))
+                    if not parsed:
+                        uncertain(field, f'{field} missing; scheduling needs confirmation.')
+                    if field == 'service_available_windows':
+                        windows = parsed
                     else:
-                        reasons.append('Service time window fits the requested time.')
-            except (ValueError, TypeError, AttributeError, KeyError):
-                uncertain('service_available_windows', 'Service time windows need confirmation.')
+                        wanted = parsed
+                except (ValueError, TypeError, AttributeError, KeyError):
+                    uncertain(field, f'{field} invalid; scheduling needs confirmation.')
+            try:
+                deadline = _date(request.get('needed_by'))
+            except (ValueError, TypeError, AttributeError):
+                deadline = None
+                uncertain('needed_by', 'Service deadline needs confirmation.')
+            # A deadline caps completion; it never supplies the user's availability.
+            if windows and (wanted or deadline):
+                span = timedelta(minutes=requested) if valid_requested else timedelta(0)
+                overlaps = [(max(start, want_start), min(end, want_end, deadline or end))
+                            for start, end in windows
+                            for want_start, want_end in (wanted or [(start, end)])]
+                if not any(start < end and start + span <= end for start, end in overlaps):
+                    rejected.append('No feasible service overlap is long enough for the requested duration before the deadline.')
+                elif wanted and valid_requested:
+                    reasons.append(f'Service time windows overlap for at least {requested} minutes before any deadline.')
+            if any(date.get('needs_confirmation') for date in (request.get('ambiguous_dates') or [])):
+                uncertain('service_schedule_confirmation', 'Proposed service dates require user confirmation.')
         else:
             try:
                 availability = listing.get('availability') or {}

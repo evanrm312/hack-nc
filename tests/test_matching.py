@@ -231,3 +231,109 @@ def test_unknown_requested_mode_not_confirmed(need, suit):
     entry = only(need, suit, 'needs_confirmation')
     assert entry['mode'] is None
     assert 'modes' in entry['unknown_required']
+
+
+@pytest.fixture
+def service_need():
+    return dict(modes=['service'], budget_cents=3000, service_duration_minutes=60,
+        service_time_windows=[dict(start='2026-10-14T12:00:00Z', end='2026-10-14T14:00:00Z')],
+        needed_by='2026-10-14T15:00:00Z', normalized=dict(category='tutoring',
+        required_specifications={'subject': 'calculus'}, preferred_specifications={'format': 'in person'}))
+
+
+@pytest.fixture
+def service_listing():
+    return dict(id='test-tutor', allowed_modes=['service'], status='available', category='tutoring',
+        service_price_cents=2500, service_duration_minutes=60,
+        service_available_windows=[dict(start='2026-10-14T12:00:00Z', end='2026-10-14T14:00:00Z')],
+        specifications={'subject': 'calculus', 'format': 'in person'})
+
+
+def test_service_matches_without_item_terms(service_need, service_listing):
+    entry = only(service_need, service_listing, 'confirmed')
+    assert entry['mode'] == 'service'
+    assert any('at least 60 minutes' in r for r in entry['reasons'])
+    assert not any('deposit' in r or 'collateral' in r for r in entry['reasons'] + entry['shortcomings'])
+
+
+@pytest.mark.parametrize('changes,reason', [
+    ({'service_price_cents': 3001}, 'Service price 3001'),
+    ({'category': 'proofreading'}, 'Category mismatch'),
+    ({'service_duration_minutes': 30}, 'shorter than requested'),
+    ({'specifications': {'subject': 'physics'}}, 'subject mismatch'),
+    ({'status': 'reserved'}, 'unavailable'),
+])
+def test_service_known_incompatibilities(service_need, service_listing, changes, reason):
+    service_listing.update(changes)
+    entry = only(service_need, service_listing, 'rejected')
+    assert any(reason in s for s in entry['shortcomings'])
+
+
+@pytest.mark.parametrize('start,end,bucket', [
+    ('2026-10-14T14:00:00Z', '2026-10-14T16:00:00Z', 'rejected'),
+    ('2026-10-14T13:45:00Z', '2026-10-14T15:00:00Z', 'rejected'),
+    ('2026-10-14T13:00:00Z', '2026-10-14T15:00:00Z', 'confirmed'),
+    ('2026-10-14T09:00:00-04:00', '2026-10-14T11:00:00-04:00', 'confirmed'),
+])
+def test_service_contiguous_overlap_and_boundary(service_need, service_listing, start, end, bucket):
+    service_listing['service_available_windows'] = [dict(start=start, end=end)]
+    entry = only(service_need, service_listing, bucket)
+    if bucket == 'rejected':
+        assert any('overlap is long enough' in s for s in entry['shortcomings'])
+
+
+def test_service_shorter_requested_session_can_fit(service_need, service_listing):
+    service_need.update(service_duration_minutes=30,
+        service_time_windows=[dict(start='2026-10-14T13:30:00Z', end='2026-10-14T14:00:00Z')])
+    only(service_need, service_listing, 'confirmed')
+
+
+@pytest.mark.parametrize('field,target', [
+    ('service_duration_minutes', 'request'), ('service_duration_minutes', 'listing'),
+    ('service_time_windows', 'request'), ('service_available_windows', 'listing'),
+    ('service_price_cents', 'listing'), ('specifications', 'listing')])
+def test_service_missing_information_needs_confirmation(service_need, service_listing, field, target):
+    (service_need if target == 'request' else service_listing).pop(field)
+    entry = only(service_need, service_listing, 'needs_confirmation')
+    assert (field if field != 'specifications' else 'subject') in entry['unknown_required']
+
+
+def test_service_deadline_only_does_not_imply_user_availability(service_need, service_listing):
+    service_need.pop('service_time_windows')
+    entry = only(service_need, service_listing, 'needs_confirmation')
+    assert 'service_time_windows' in entry['unknown_required']
+    service_need['needed_by'] = '2026-10-14T11:00:00Z'
+    only(service_need, service_listing, 'rejected')
+
+
+def test_service_deadline_caps_session_completion(service_need, service_listing):
+    service_need['needed_by'] = '2026-10-14T12:30:00Z'
+    only(service_need, service_listing, 'rejected')
+
+
+def test_service_ambiguous_dates_need_confirmation(service_need, service_listing):
+    service_need['normalized']['ambiguous_dates'] = [dict(text='tomorrow', proposed=None, needs_confirmation=True)]
+    entry = only(service_need, service_listing, 'needs_confirmation')
+    assert 'service_schedule_confirmation' in entry['unknown_required']
+
+
+def test_service_item_separation_both_directions(service_need, service_listing, need, suit):
+    for request, listing in ((service_need, suit), (need, service_listing)):
+        entry = only(request, listing, 'rejected')
+        assert any('cannot match each other' in s for s in entry['shortcomings'])
+
+
+def test_service_ranking_uses_preferences_then_price(service_need, service_listing):
+    cheaper = deepcopy(service_listing)
+    cheaper.update(id='cheaper-tutor', service_price_cents=1500)
+    remote = deepcopy(service_listing)
+    remote.update(id='remote-tutor', service_price_cents=0, specifications={'subject': 'calculus', 'format': 'remote'})
+    result = match_listings(service_need, [remote, service_listing, cheaper])
+    assert [e['listing_id'] for e in result['confirmed']] == ['cheaper-tutor', 'test-tutor', 'remote-tutor']
+
+
+def test_service_does_not_combine_disjoint_overlap(service_need, service_listing):
+    service_listing['service_available_windows'] = [
+        dict(start='2026-10-14T12:00:00Z', end='2026-10-14T12:30:00Z'),
+        dict(start='2026-10-14T13:00:00Z', end='2026-10-14T13:30:00Z')]
+    only(service_need, service_listing, 'rejected')
