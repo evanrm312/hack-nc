@@ -1,17 +1,77 @@
 # Campus Current
 
-Campus exchange for UNC: describe what you need, find a compatible item to buy
-or borrow, agree terms, and coordinate a campus handoff. See `BUILD_BRIEF.md`
-for the plan, `AGENTS.md` for team rules, `docs/contracts.md` for the API, and
-`docs/tasks.md` for who is doing what.
+A campus exchange for UNC students. Describe what you need in plain language,
+see which real listings fit and why, agree terms privately with the other
+student, and hand off in person at a public campus spot. Items can be bought or
+borrowed; services such as tutoring can be booked. Payments and deposits are
+simulated and labeled as such; no real money moves.
 
-Stack: Flask + SQLAlchemy + Flask-Migrate (Alembic), Jinja + vanilla JS,
-pytest. SQLite locally, PostgreSQL (Supabase) when deployed. Gemini is called
-only from Flask (Person 2).
+Live deployment: https://hack-nc.onrender.com (Supabase email and password
+sign-in, UNC addresses only). Local development uses sandbox identities instead.
+
+Project documents: `BUILD_BRIEF.md` (original plan), `AGENTS.md` (team rules),
+`docs/contracts.md` (API shapes), `docs/tasks.md` (ownership),
+`docs/design.md` (UI system), `docs/ai-behavior.md` (Gemini behavior),
+`docs/demo.md` (exchange walkthrough), `docs/submission-draft.md` (Devpost draft).
+
+## Features
+
+- **Natural-language requests.** Gemini extracts mode (buy or borrow), category,
+  required and preferred specifications, budget, deposit limit, dates, and
+  area. Unknown fields stay unknown. The student reviews and edits every
+  proposal before a request is saved. Ambiguous dates are shown as explicit
+  Eastern-time dates that must be acknowledged.
+- **Reference photos.** An optional photo yields broad visual attributes
+  (category, type, color, pattern, style) that must be accepted or dismissed.
+  A photo alone cannot create a request.
+- **Deterministic matching.** Python checks mode, known required
+  specifications, dates, budget, deposit affordability, and availability
+  against real listings. Results are grouped into confirmed, needs
+  confirmation, and rejected, each with reasons and shortcomings.
+- **Public requests.** When nothing fits, the student previews the public
+  fields and publishes. The feed hides precise schedules and contact details.
+- **Item and service listings.** Sale, borrow, or both for items; eight service
+  categories with price, duration, and availability windows. Listings are
+  private drafts until the owner uploads a photo that the server decodes.
+  Owners can replace photos and manage listings from My Listings.
+- **Private exchanges.** Per-exchange messages (polling), versioned offers,
+  acceptances that reset on any term change, explicit lender acknowledgment
+  of a lower deposit, atomic reservation so an item cannot be double-booked,
+  and a labeled simulated deposit status.
+- **Pickup, loan, and return.** Private condition photos before handoff,
+  mutual confirmation, loan tracking, before and after return photos, mutual
+  return confirmation, cancellation before pickup, and a disputed state that
+  never triggers a charge.
+- **Services.** Scheduled sessions inside the provider's window, remote or
+  in-person with a public meeting spot, and separate completion confirmations.
+- **Reviews, notifications, profiles.** One structured review per participant
+  on a completed exchange; a notification inbox; public profiles with avatar,
+  bio, aggregate review and completion counts, and nothing private.
+- **Clubs.** Seeded fictional clubs with join codes. Members can post club-only
+  listings whose exchanges wait for a club manager's approval.
+- **Home recommendations.** A bounded, explainable list based on the viewer's
+  own open requests and completed history, with an honest cold start.
+- **Frutiger Aero UI.** Shared components, keyboard-visible focus, readable
+  contrast, reduced-motion support, desktop and 390 px phone layouts.
+
+## Tech stack
+
+| Layer | What is used |
+|---|---|
+| Server | Python 3.14, Flask 3.1, SQLAlchemy 2, Flask-Migrate (Alembic), Pydantic 2, Pillow, Gunicorn |
+| Browser | Jinja templates, hand-written CSS, vanilla JavaScript with one shared API helper |
+| AI | Gemini through the `google-genai` SDK, called only from Flask. Structured output with a JSON schema generated from Pydantic. Default model `gemini-3.5-flash-lite`, falling back to `gemini-3.5-flash` and `gemini-3.6-flash` only on 429 or 503, inside a 32-second budget. Image input for reference photos. Provider failure returns an editable manual form. |
+| Data | SQLite locally; PostgreSQL on Supabase in production |
+| Auth and files | Sandbox identities locally; Supabase Auth (email and password, confirmed `unc.edu` address) and Supabase Storage (public listing photos, private evidence bucket) in production |
+| Deployment | Render web service with a pinned migration pre-deploy step and `/api/ready` health check; a Docker image is also defined [CONFIRM] which Render uses |
+| Tests | pytest (522 cases) and Node's built-in test runner (27 cases) |
 
 ## Setup
 
-Built on Python 3.14; 3.11+ should work with the pinned requirements.
+Built and verified on Python 3.14.7 with the pinned `requirements.txt`. The
+Windows commands below were run on October 11, 2026 (fresh virtualenv, install,
+migrate, seed, run, tests); the bash block is the same steps and was not re-run.
+Python 3.11+ should work with the same pins. [CONFIRM]
 
 PowerShell (Windows):
 
@@ -22,7 +82,7 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-bash / macOS / Linux:
+bash, macOS, Linux:
 
 ```bash
 python3 -m venv .venv
@@ -31,87 +91,49 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-`requirements-dev.txt` also installs the pinned project environment for test
-work: `python -m pip install -r requirements-dev.txt`.
+`.env` is ignored by git. Its defaults are SQLite at `var/dev.sqlite3`,
+`AUTH_MODE=sandbox` with `alice@unc.edu` and `bob@unc.edu`, local uploads under
+`var/uploads/`, and `APP_ENV=development`. To use the third demo account, edit
+the line to `SANDBOX_USERS=alice@unc.edu,bob@unc.edu,carol@unc.edu`. Add a
+`GEMINI_API_KEY` to try live extraction; without it the request form falls back
+to manual entry.
 
-`.env` defaults to SQLite at `var/dev.sqlite3`, `AUTH_MODE=sandbox` with two
-seeded identities (`alice@unc.edu`, `bob@unc.edu`), and local file uploads under
-`var/uploads/`. It sets `APP_ENV=development` for the optional demo seed.
-Nothing in `.env` is committed.
-
-## Database
-
-```bash
-flask --app server.app db upgrade     # apply migrations (creates var/dev.sqlite3)
-flask --app server.app seed-demo      # meeting spots + labeled demo inventory + fixture price ranges
-```
-
-`seed-demo` refuses nondevelopment mode and databases other than the local
-`var/dev.sqlite3`, another explicitly named `*_dev` SQLite file, or a PostgreSQL
-database ending in `_dev`. It is idempotent. Run migrations before seeding and
-never seed a shared database.
-
-For a **dedicated Supabase development project** whose database is named
-`postgres`, use its Session pooler URL with the `postgresql+psycopg` driver
-and the pooler's project-qualified username in `DATABASE_URL`. Percent-encode
-reserved characters in the database password. After confirming
-`APP_ENV=development` and that no teammates or users rely on the database, run:
+## Database and demo data
 
 ```bash
-flask --app server.app db upgrade
-flask --app server.app seed-demo --allow-supabase-postgres-dev
+flask --app server.app db upgrade      # apply migrations; creates var/dev.sqlite3
+flask --app server.app seed-demo       # demo profiles, listings, meeting spots, clubs
 ```
 
-The flag is required on each seed invocation, accepts only a Supabase session
-pooler database named `postgres`, and is rejected in production. It inserts or
-updates only labeled demo rows and does not delete other data.
+Run the migration before seeding, and run `seed-demo` before signing in for the
+first time so the demo display names are applied. `seed-demo` is idempotent: a
+second run prints "nothing to do". It refuses production mode and any database
+other than `var/dev.sqlite3`, a SQLite file whose name ends in `_dev`, or a
+PostgreSQL database ending in `_dev`. A dedicated Supabase development project
+whose database is named `postgres` needs the Session pooler URL with the
+`postgresql+psycopg` driver, `APP_ENV=development`, and the
+`--allow-supabase-postgres-dev` flag on every seed run; the flag is rejected in
+production. Never seed a shared database.
 
-To update an already-seeded **development** database, repeat the applicable
-`seed-demo` command above (including the flag for Supabase `postgres`). It adds
-the missing `type: "suit"` to both labeled suit rows
-and availability bounds to the existing navy suit row in place. Their IDs,
-other specifications, pickup notes, other listings, and user data remain intact.
-An explicitly set type or date bound is left alone; review that listing if it was
-customized. No database reset or new migration is needed for these JSON fields.
+What the seed creates on an empty development database:
 
-The seeded navy suit is available from `2026-10-12T12:00:00Z` through
-`2026-10-16T22:00:00Z` (Monday 8 a.m. through Friday 6 p.m. in New York).
-For the dated interview demo, confirm this editable request and submit it to
-`POST /api/requests` as a different user from the demo lender. This is example
-A, with an $80 maximum deposit:
+| Rows | Count |
+|---|---|
+| Profiles | 13: 12 fictional catalog owners (two of them are the Alice and Bob sign-in identities) plus Carol |
+| Listings | 59 (54 catalog listings, 21 of them services, plus 5 sign-in demo listings including one tutoring service); 52 carry licensed reference photos, 7 have none |
+| Meeting spots | 3 |
+| Clubs and memberships | 2 fictional clubs, 5 memberships |
+| Price references | 2 labeled fixture ranges (not used by any rule yet) |
 
-```json
-{
-  "original_text": "Borrow a navy 40R suit for an interview Wednesday, October 14, 2026. Pickup Tuesday 2-4pm; return Thursday by 6pm. Rental budget $40.",
-  "normalized": {"source": "manual", "category": "formalwear", "required_specifications": {"type": "suit", "jacket_size": "40R"}, "preferred_specifications": {"color": "navy"}},
-  "modes": ["borrow"],
-  "budget_cents": 4000,
-  "max_deposit_cents": 8000,
-  "needed_by": "2026-10-14T13:00:00Z",
-  "use_start": "2026-10-13T18:00:00Z",
-  "use_end": "2026-10-15T22:00:00Z",
-  "pickup_windows": [{"start": "2026-10-13T18:00:00Z", "end": "2026-10-13T20:00:00Z"}],
-  "area": "Central campus"
-}
-```
+No exchanges, messages, reviews, or notifications are seeded.
 
-Example B submits the **same request body**, changing only
-`"max_deposit_cents": 20000` ($200). The original text, normalized fields,
-mode, rental budget, dates, pickup window, and area stay identical.
-
-`GET /api/requests/{id}/matches` places the navy suit in
-`needs_confirmation` for example A: type, size, rental budget, and dates fit,
-while its proposed $200 deposit exceeds the $80 limit. It places the navy suit
-in `confirmed` for example B, where the deposit fits. The charcoal 46L suit is
-rejected in both. A lower deposit still requires negotiation and explicit lender
-acknowledgment; matching does not change the owner's proposal.
-
-After changing a model (Person 1 only):
-
-```bash
-flask --app server.app db migrate -m "describe change"
-flask --app server.app db upgrade
-```
+**Windows note.** On Windows `seed-demo` currently fails with
+`ValueError: Orphan/missing files` because
+`fixtures/demo_catalog/validate_images.py` line 120 compares Windows path
+strings against forward-slash manifest paths. Changing that line to
+`path.relative_to(BASE).as_posix()` fixes it; this was verified locally and
+then reverted because the file belongs to another teammate. The same issue
+causes 24 test failures on Windows (see Tests). macOS and Linux are unaffected.
 
 ## Run
 
@@ -119,193 +141,153 @@ flask --app server.app db upgrade
 flask --app server.app run --debug
 ```
 
-Open http://127.0.0.1:5000/sign-in, pick a sandbox identity, and the header
-shows the labeled profile. `GET /healthz` reports `{"ok": true, "auth_mode": "..."}`.
-`GET /api/health` returns `{"status": "ok"}` for HTTP availability; neither
-endpoint establishes database readiness.
-
-Quick API check from a second terminal:
+Open http://127.0.0.1:5000/sign-in and pick a sandbox identity. Verified
+locally: `/`, `/sign-in`, `/about`, `/api/listings`, `/api/ready`, and
+`/api/me` with a sandbox bearer token all return 200.
 
 ```bash
-curl -H "Authorization: Bearer sandbox:alice@unc.edu" http://127.0.0.1:5000/api/me
+curl http://127.0.0.1:5000/healthz
 curl http://127.0.0.1:5000/api/listings
+curl -H "Authorization: Bearer sandbox:alice@unc.edu" http://127.0.0.1:5000/api/me
 ```
 
-## Test
+Restart Flask after editing `.env`.
+
+## Tests
 
 ```bash
-pytest -q            # or: python -m pytest -q
+python -m pytest -q                       # Python suite
+node --test tests/browser_*.test.cjs      # browser session, time zone, notification logic
 ```
 
-`pytest.ini` puts the project root on the import path. Each test gets a fresh SQLite file, sandbox auth, and a temp upload folder
-(`tests/conftest.py`). Person 1 tests cover auth, listings and ownership,
-requests and sanitized views, reservation atomicity, storage validation, and
-the error shape. Person 2's normalization and matching tests use mocked Gemini
-responses and synthetic inventory; price appraisal and Person 4's
-exchange/review tests exercise persisted state, participant authorization and
-invalid transitions. Supabase auth/Storage provider checks are mocked unless
-explicitly reported as live.
+Each pytest case gets a fresh SQLite file, sandbox auth, a temp upload folder,
+and mocked Gemini. Six PostgreSQL tests skip unless `TEST_DATABASE_URL` points
+at a dedicated database whose name ends in `_test`; never point it at the
+application database.
 
-The migration and persistence tests apply the committed migration to a new
-temporary SQLite file. PostgreSQL validation uses a separate database whose
-name ends in `_test`; the test refuses the live `DATABASE_URL` and creates a
-unique test schema. Set `TEST_DATABASE_URL` only to that isolated target:
+Results on October 11, 2026 (Windows 11, Python 3.14.7):
+
+| Run | Result |
+|---|---|
+| `python -m pytest -q` as committed | 492 passed, 24 failed, 6 skipped. All 24 failures are the Windows path issue above (`test_catalog`, `test_catalog_import`, `test_community`, `test_demo_catalog`, and the exchange preview test). |
+| Same, with the one-line `as_posix()` change applied locally | 516 passed, 0 failed, 6 skipped |
+| `node --test tests/browser_*.test.cjs` | 27 passed |
+
+Pillow must be installed from `requirements.txt`; without it two test modules
+fail to import and photo validation fails closed with 503.
+
+## Demo accounts
+
+Local sandbox sign-in has no password. Choose the identity on `/sign-in`, or
+send the header `Authorization: Bearer sandbox:<email>`. Profiles are labeled
+"Sandbox identity (not verified)" and `is_demo: true`.
+
+| Email | After `seed-demo` | Suggested role |
+|---|---|---|
+| `alice@unc.edu` | Owns the clothing showcase listings (display name "Demo Wardrobe A (demo account)"), the navy 40R suit, a TI-84, and calculus tutoring (7 listings) | Lender or provider |
+| `bob@unc.edu` | Owns the services showcase listings (display name "Demo Study A (demo account)") and a desk lamp for sale (8 listings) | Borrower, buyer, or second owner |
+| `carol@unc.edu` | Owns the intentionally incompatible black 44L suit; manager of the Study Circle demo club. Must be added to `SANDBOX_USERS` first | Third party and club manager |
+
+Of the 12 fictional catalog owners, two are mapped to Alice and Bob as shown
+above; the other 10 ("Demo Tech A (demo account)" and similar) cannot sign in.
+Fictional club join codes are listed in `docs/community-clubs.md`.
+
+To walk through an exchange with two accounts, sign in as each one in a
+separate browser profile or a private window; ordinary tabs share one identity.
+`docs/demo.md` has the full pickup, return, dispute, and review sequence.
+
+On the deployed app there are no sandbox accounts. Sign in with a real UNC
+address and password; see `docs/team-test-scenario.md`.
+
+## Deployment and operations
+
+The production app runs on Render with Supabase for PostgreSQL, Auth, and
+Storage. The repo carries both a `Procfile` and a `Dockerfile`; which one the
+Render service uses was not checked for this README. [CONFIRM] Operational
+details were kept in separate documents rather than here:
+
+- `docs/deployment.md`: Docker build, release command, readiness, quotas,
+  reverse proxy, hourly cleanup job, backup and recovery, migration chain.
+- `docs/render-backend-repair.md`: the Render service configuration, the
+  one-time schema repair, the reviewed 52-listing catalog import, and the live
+  auth and Gemini checks that were recorded there. [CONFIRM] for the current
+  state of the service.
+- `docs/team-test-scenario.md`: the three-account acceptance test against the
+  deployed app.
+- `deploy/`: release script, nginx example, systemd units, CI workflow template.
+
+Useful commands:
 
 ```bash
-export TEST_DATABASE_URL='postgresql+psycopg://test_user:PASSWORD@localhost:5432/campus_current_test'
-python -m pytest -q tests/test_postgres_catalog.py
+flask --app server.app backend-diagnostics             # read-only identity, counts, readiness
+flask --app server.app import-demo-catalog --dry-run   # reviewed catalog import plan (never seed-demo in production)
+flask --app server.app purge-exchange-locations        # hourly cleanup of expired private locations
+docker compose build --pull && docker compose up -d web
 ```
 
-The PostgreSQL test skips when `TEST_DATABASE_URL` is unset. Never point it at
-the application database. The URL must use the installed `postgresql+psycopg`
-driver; the test creates and removes only a unique schema in the dedicated
-`*_test` database. Do not use the live Supabase application database for tests.
+`REQUIRE_EMAIL_CONFIRMATION=false` is a temporary team-testing mode: accounts
+created without inbox confirmation are labeled "Test account (email not
+verified)" and are blocked again when confirmation is re-enabled.
 
-Browser session checks (Node.js, no package install):
+## Known limitations
 
-```bash
-node --test tests/browser_*.test.cjs
-```
+- Payments and deposits are simulated. There is no payment provider,
+  authorization expiry, or claims process. Disputes are flagged for manual
+  review only.
+- The price-range rule from the brief is not implemented. `evaluate_price`
+  returns `insufficient_data`, item offers reject price references, and
+  `tests/test_pricing.py` contains no tests.
+- Reviews are stored and aggregated on public profiles, but there is no
+  points or level system and no delayed mutual publication.
+- Clubs are seeded fixtures. There is no club creation, roster, or role
+  management.
+- Service listings cannot store structured attributes such as a tutoring
+  subject, so those requirements show as needs confirmation.
+- `/listings/mine` has no dedicated page route; it is served through the
+  listing-detail route and works, but should get its own route.
+- Two catalog listings have no licensed reference photo.
+- Gemini extraction is a proposal, not a verified fact. Everything it returns
+  is editable, and the deterministic matcher does not guess size conversions or
+  missing attributes.
+- `seed-demo` and 24 tests fail on Windows until the one-line path fix above
+  is applied.
+- Meeting-spot safety attributes are recorded as unknown; the app makes no
+  safety claims.
+- Live Gemini and real UNC sign-in on the deployed app were verified by the
+  deployment owner and recorded in `docs/render-backend-repair.md`; they were
+  not re-run for this README. [CONFIRM]
 
-`POST /api/requests/normalize` returns a validated Gemini proposal when
-`GEMINI_API_KEY` is configured, or an editable manual fallback with unknown
-fields preserved as unknown. `GET /api/requests/{id}/matches` uses deterministic
-checks against available catalog records and requires requester ownership.
-The automated tests mock Gemini; a live call requires an explicit configured
-development key and network access.
+## Team
 
-## Auth modes
+Four UNC Chapel Hill students. Roles follow `docs/tasks.md`; commit authors
+and branch names are consistent with them. Last names and the final split of
+later work should be confirmed by the team. [CONFIRM]
 
-- `AUTH_MODE=sandbox` (default locally): bearer token `sandbox:<email>` for an
-  email in `SANDBOX_USERS`. No real verification; profiles are labeled
-  "Sandbox identity (not verified)" and `is_demo=true`. Never use this on a
-  public deployment.
-- `AUTH_MODE=supabase`: the browser signs in with Supabase email/password
-  (`static/js/auth.js`); Flask verifies every request's access token against
-  Supabase Auth and requires `email_confirmed_at` plus an exact `@unc.edu`
-  domain. The client initializes on every page, updates the shared API token
-  on refresh, and calls Supabase sign-out. Set `SUPABASE_URL` and
-  `SUPABASE_ANON_KEY` (public) and
-  `DATABASE_URL` to the Supabase Postgres URL. The service-role key stays
-  backend-only.
+| Person | Role | Main work |
+|---|---|---|
+| Evan (`evanrm312`) | Backend foundation and integration lead | Flask scaffold, models and migrations, sandbox and Supabase auth, storage, API contracts, service listings backend, draft publication, notifications, private meeting locations, recommendations, About page, Aero desktop shell polish, Docker, Render deployment and repair, password sign-in, most merges |
+| Aarush (`adixit`) | Gemini and matching | Request normalization with structured output and model fallback, deterministic matching, reference-photo vision, service normalization and matching, the licensed demo catalog, community clubs and manager approval, public profiles |
+| Emily (`Emily`, `Emily Zhu`) | Frutiger Aero and marketplace UI | Theme and shared components, home request flow, results, listing form and detail, public request feed, services UI, My Listings, listing photo upload and placeholders, exchange entry points, demo sign-in profiles in the seed |
+| Sid (`Siddhant697`) | Exchange workflow and demo QA | Private negotiation and atomic reservation, condition photos, pickup and return, My Exchanges dashboard, reviews, cancellation, disputes, the exchange preview |
 
-Temporary team testing: set `REQUIRE_EMAIL_CONFIRMATION=false` on Render and
-disable **Confirm email** in Supabase Authentication → Sign In / Providers.
-New password signups receive an immediate session without an email. Flask still
-validates the real token and exact UNC domain, and enforces owner/participant
-permissions. New profiles use `verification_source=supabase_test`, `is_demo=true`,
-an empty `confirmed_email_domain`, and “Test account (email not verified)”.
-Existing verified profiles keep their identity and records.
+## AI coding assistants
 
-To end testing, re-enable Supabase **Confirm email** first, then set
-`REQUIRE_EMAIL_CONFIRMATION=true` and redeploy. Existing test profiles remain
-blocked until a separate inbox-verification process explicitly upgrades them;
-Supabase's automatic confirmation timestamp must not be treated as proof.
-Password recovery still sends an email. Fresh test accounts do not need it.
-
-`server/config.py` loads `.env` when the app starts; an already-exported shell
-variable takes precedence. Restart Flask after editing `.env`. For the shared
-Supabase Session pooler, use the URL copied from **Connect → Session pooler**,
-change only the scheme to `postgresql+psycopg://`, and percent-encode reserved
-password characters. If a read-only `SELECT 1` fails, compare the application's
-effective driver, host, port, database, and username with a working PSQL command
-without logging the password or full URL. An authentication error alone does not
-identify whether the cause is a wrong secret, URL encoding, stale process
-configuration, or another connection setting. Run migrations only after the
-application connection succeeds.
-
-Browser storage is scoped to the exact origin. Start account confirmation or recovery and
-open its callback on the same scheme, hostname, and port (for example, use
-`127.0.0.1:5055` throughout, not `localhost:5000` for one step). A saved
-Supabase session can outlive a temporary `/api/me` database failure; the
-header then reports that account details are unavailable without treating
-the user as signed out. Confirm the actual `/api/me` status before concluding
-that authentication failed.
-
-Existing verified users can set a password in Account, or use **Forgot password /
-first password** once. New users create a password and confirm their UNC email
-once. Ordinary password sign-in sends no email; confirmation/recovery still use
-the provider's email quota. Passwords go only to Supabase, never Flask or app
-storage. See [the team acceptance scenario](docs/team-test-scenario.md).
-
-## Supabase project setup and live checks
-
-In the Supabase dashboard, enable email/password with email confirmation and set the site URL to
-the deployed origin. Add `https://YOUR_HOST/sign-in` to the allowed redirect
-URLs. Configure email delivery if the default sender does not reach the team's
-actual addresses. Copy the project URL and anon key into `SUPABASE_URL` and
-`SUPABASE_ANON_KEY`; keep `SUPABASE_SERVICE_ROLE_KEY` server-side only. A live
-auth check requires a real confirmed `@unc.edu` inbox: sign in at `/sign-in`,
-confirm the email once (or recover an existing account), set a password,
-verify `/api/me` shows the UNC badge, refresh the page, then
-sign out and confirm a protected request returns 401. Wrong-domain and
-unconfirmed-email behavior is covered by mocked provider tests, not a live
-Supabase project check yet.
-
-For `STORAGE_BACKEND=supabase`, create two distinct buckets:
-`SUPABASE_PUBLIC_BUCKET=public-listings` (public) and
-`SUPABASE_PRIVATE_BUCKET=private-evidence` (private). Browser clients must not
-have direct write access to either bucket or direct read access to private
-evidence; only Flask uses the service-role key. A live public upload/retrieval
-check is: sign in, create a listing, publish its draft with a PNG through
-`POST /api/listings/<id>/publish` as its owner, then request the returned
-`public_photo_url` through Flask and compare the image bytes. Repeat the GET
-after a server restart. The private bucket can be checked for direct anonymous
-denial now; an end-to-end participant evidence check requires two consenting real
-accounts and the implemented exchange evidence route. Private `SupabaseStorage.send` also requires
-`authorize_private_read` in the current Flask request. If using local storage
-on a persistent disk, keep `UPLOAD_DIR/private` outside directly served paths.
-
-## Docker deployment preparation
-
-Docker runtime, release migrations, readiness, quotas, server-only Supabase
-permissions, backup/recovery and hourly cleanup are documented in
-[docs/deployment.md](docs/deployment.md). `.env.production` must remain private.
-The Docker image is never built with credentials. Do not deploy publicly until
-Evan approves the release and the live verification gates pass.
-
-```bash
-docker compose build --pull
-docker compose run --rm --no-deps -T web flask --app server.app db upgrade
-docker compose up -d web
-```
-
-`/api/ready` verifies database connectivity and migration head; `/healthz` remains
-process liveness. Supabase Auth site URL/callback allowlist must use the final
-HTTPS origin. No web-worker scheduler or automatic seed runs.
-
-## Targeted Render backend repair
-
-The public app is `https://hack-nc.onrender.com`; Render settings were inspected,
-and its schema and 52-record catalog import have been repaired. A real
-login, refresh, sign-out and both live Gemini checks passed. Release settings,
-backups and evidence are in
-[docs/render-backend-repair.md](docs/render-backend-repair.md).
-
-```bash
-flask --app server.app backend-diagnostics
-flask --app server.app import-demo-catalog --dry-run > reviewed-catalog.json
-# Review the exact target/schema/assets/changes first:
-flask --app server.app import-demo-catalog --apply --plan reviewed-catalog.json
-```
-
-Dry-run is the default and makes no database or Storage writes. The Docker
-image packages the licensed assets and provenance; startup never imports them.
-After merging this branch, use `/bin/sh deploy/render-release.sh` for predeploy.
-Current main uses the equivalent pinned migration command without diagnostics.
-Never run the broad `seed-demo` command on production or a shared database.
-The user approved repair operations; merging into `main` still requires approval.
+We used Claude Code and Codex as coding assistants throughout the build, with
+each teammate directing the work on their own module. The humans chose the
+scope, reviewed the changes, and ran the checks described above. [CONFIRM] the
+exact split between the two tools before publishing.
 
 ## Layout
 
 ```
-server/            Flask app, config, db, models, auth, storage, reservation, routes
-server/intelligence/  Person 2: normalize_request, match_listings, evaluate_price
-server/exchanges/  Item and service exchange workflows
-migrations/        Alembic migrations (Person 1)
-templates/, static/  Jinja pages and browser code (base/marketplace: Person 3; exchanges: Person 4; auth: Person 1)
-tests/             pytest
-docs/              contracts, tasks, ai-behavior, design, demo
-fixtures/matching/ Person 2 test fixtures
-var/               local SQLite DB and uploads (ignored by git)
+server/               Flask app, config, db, models, auth, storage, reservation, routes, seed
+server/intelligence/  normalize_request, match_listings, vision, evaluate_price (stub)
+server/exchanges/     item and service exchange workflows, evidence, lifecycle
+migrations/           Alembic migrations
+templates/, static/   Jinja pages, CSS theme, browser JavaScript
+tests/                pytest and Node tests
+fixtures/             demo catalog (JSON, licensed images, validators) and matching fixtures
+deploy/               release script, nginx example, systemd units, CI template
+docs/                 contracts, tasks, design, ai-behavior, demo, deployment, handoffs
+var/                  local SQLite database and uploads (ignored by git)
 ```
