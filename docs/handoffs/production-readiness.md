@@ -97,7 +97,9 @@ callback allowlist, review migrations/permissions and install the hourly timer.
 Exact entrance/safety metadata remains unknown unless sourced; no guarantees.
 Aarush: publish ratings/levels branch and agree on the additive contract in
 `ratings-integration.md`, including service review applicability and reversal
-points. Evan integrates when ready. No merge or deployment approval requested
+points. Existing comparable-price evaluation is also still a stub and item
+offers reject reference fields; exact source evidence is in the Aarush handoff.
+Evan integrates reviewed intelligence when ready. No merge or deployment approval requested
 until these concrete release gates are reviewable.
 
 ## Screenshots and previews

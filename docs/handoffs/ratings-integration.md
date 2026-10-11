@@ -51,3 +51,14 @@ Flask's server DB role provides authorization. Its migration role must bypass
 RLS. If Aarush already has another migration head, Evan should reconcile the
 chain explicitly before applying it. Publish the branch and eligibility/point
 policy so Evan can integrate UI and run combined checks.
+
+## Existing intelligence gap observed
+
+`server/intelligence/pricing.py:evaluate_price` still always returns
+`insufficient_data` with `stub: true`; `tests/test_pricing.py` has no tests.
+Item offers explicitly reject `price_reference_id` and `pricing_range_version`
+with “price-reference integration is not available yet” in
+`server/exchanges/routes.py`. No price appraisal or comparable-price enforcement
+is implemented or claimed by this follow-up. Aarush owns the evaluator and
+boundary tests; Evan owns wiring the reviewed contract into item offers when
+available. Preserve honest unknown-price behavior until then.
