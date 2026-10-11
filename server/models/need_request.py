@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import UniqueConstraint, JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import db, iso_utc, new_id, utcnow
@@ -21,6 +21,9 @@ REQUEST_STATUSES = ("draft", "open", "fulfilled", "cancelled", "expired")
 class NeedRequest(db.Model):
     __tablename__ = "need_requests"
 
+    __table_args__ = (UniqueConstraint("requester_id","creation_key",name="uq_need_requests_creation"),)
+    creation_key: Mapped[str | None] = mapped_column(String(80))
+    creation_fingerprint: Mapped[str | None] = mapped_column(String(64))
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     requester_id: Mapped[str] = mapped_column(String(32), ForeignKey("profiles.id"), nullable=False, index=True)
 

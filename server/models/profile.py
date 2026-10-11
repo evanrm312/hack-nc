@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db import db, iso_utc, new_id, utcnow
@@ -28,6 +28,8 @@ class Profile(db.Model):
     verification_source: Mapped[str] = mapped_column(String(16), nullable=False)
     is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    preferred_meeting_spot_id: Mapped[str | None] = mapped_column(ForeignKey("meeting_spots.id"))
 
     @property
     def badge(self) -> str:
@@ -48,5 +50,6 @@ class Profile(db.Model):
 
     def to_me_dict(self) -> dict:
         data = self.to_public_dict()
+        data["preferred_meeting_spot_id"] = self.preferred_meeting_spot_id
         data["created_at"] = iso_utc(self.created_at)
         return data

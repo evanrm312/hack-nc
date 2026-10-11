@@ -30,6 +30,9 @@ EVIDENCE_STAGES = ("pre_handoff", "handoff", "pre_return", "post_return")
 
 class Exchange(db.Model):
     __tablename__ = "exchanges"
+    __table_args__ = (UniqueConstraint("requester_id","creation_key",name="uq_exchanges_creation"),)
+    creation_key: Mapped[str | None] = mapped_column(String(80))
+    creation_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     listing_id: Mapped[str] = mapped_column(String(32), ForeignKey("listings.id"), nullable=False, index=True)
@@ -96,6 +99,8 @@ class OfferRevision(db.Model):
     service_price_cents: Mapped[int | None] = mapped_column(Integer)
     service_duration_minutes: Mapped[int | None] = mapped_column(Integer)
     service_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    service_delivery: Mapped[str | None] = mapped_column(String(16))
+    service_meeting_spot_id: Mapped[str | None] = mapped_column(ForeignKey("meeting_spots.id"))
     # Required true when deposit_cents < agreed_item_value_cents.
     lower_deposit_acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -151,7 +156,9 @@ class OfferRevision(db.Model):
                         "return_meeting_spot_id", "return_deadline", "pricing_range_version",
                         "price_reference_id"):
                 result.pop(key)
-            result.update(service_price_cents=self.service_price_cents,
+            result.update(service_delivery=self.service_delivery or "remote",
+                          service_meeting_spot_id=self.service_meeting_spot_id,
+                          service_price_cents=self.service_price_cents,
                           service_duration_minutes=self.service_duration_minutes,
                           service_scheduled_at=iso_utc(self.service_scheduled_at))
         return result
@@ -159,6 +166,9 @@ class OfferRevision(db.Model):
 
 class Message(db.Model):
     __tablename__ = "messages"
+    __table_args__ = (UniqueConstraint("sender_id","creation_key",name="uq_messages_creation"),)
+    creation_key: Mapped[str | None] = mapped_column(String(80))
+    creation_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     exchange_id: Mapped[str] = mapped_column(String(32), ForeignKey("exchanges.id"), nullable=False, index=True)
