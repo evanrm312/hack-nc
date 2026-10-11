@@ -156,3 +156,32 @@ def test_supabase_storage_rejects_invalid_paths_and_provider_errors(monkeypatch,
         with pytest.raises(ApiError) as missing:
             storage.send("public", "ab/" + "a" * 32 + ".png")
     assert missing.value.status == 404
+
+
+def test_partial_local_write_failure_removes_orphan(tmp_path, monkeypatch):
+    from pathlib import Path
+    original = Path.write_bytes
+    def partial_write(path, data):
+        original(path, data[:8])
+        raise OSError('isolated write failure')
+    monkeypatch.setattr(Path, 'write_bytes', partial_write)
+    with pytest.raises(OSError):
+        LocalStorage(tmp_path).save('public', io.BytesIO(b'\x89PNG\r\n\x1a\n' + b'0'*16), 100)
+    assert list(tmp_path.rglob('*.png')) == []
+
+
+def test_supabase_unknown_upload_result_attempts_orphan_cleanup(monkeypatch):
+    import requests
+    calls = []
+    def provider(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if method == 'POST':
+            raise requests.Timeout('simulated lost upload response')
+        return ProviderResponse()
+    monkeypatch.setattr('server.storage.requests.request', provider)
+    with pytest.raises(ApiError) as failure:
+        SupabaseStorage('https://example.supabase.co', 'mock-key').save(
+            'public', io.BytesIO(b'\x89PNG\r\n\x1a\n' + b'0'*16), 100)
+    assert failure.value.code == 'storage_unavailable'
+    assert [call[0] for call in calls] == ['POST', 'DELETE']
+    assert calls[1][2]['json']['prefixes'][0] == calls[0][1].split('public-listings/')[1]
