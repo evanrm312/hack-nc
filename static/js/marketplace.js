@@ -225,9 +225,9 @@
 
       // Step 2: anything that still needs the user's decision stops here, on
       // the page, before a request exists: photo proposals to accept or
-      // dismiss, a missing description, or no buy/borrow choice.
+      // dismiss, ambiguous dates, a missing description, or no mode choice.
       const pendingProposals = (normalized.photo_proposals || []).length > 0;
-      if (pendingProposals || !text || !cleanModes(normalized.modes).length) {
+      if (pendingProposals || (normalized.ambiguous_dates || []).length || !text || !cleanModes(normalized.modes).length) {
         status.textContent = "";
         C.setBusy(submit, false);
         submitting = false;
@@ -244,7 +244,10 @@
         status.textContent = "";
         C.setBusy(submit, false);
         submitting = false;
-        if (C.isAuthError(err)) {
+        if (err instanceof api.ApiError && err.code === "validation_error") {
+          renderConfirmStep(text, normalized);
+          showNotice($("confirm-error"), C.errorMessage(err));
+        } else if (C.isAuthError(err)) {
           if (err.status === 401) api.setToken(null);
           showNotice(formError, authMessage(err));
         } else {
@@ -395,7 +398,7 @@
         creating = true;
         C.setBusy(findBtn, true, "Saving your request");
         try {
-          const request = (await api.post("/api/requests", requestBodyFrom(v, merged, descText))).request;
+          const request = (await postRequest(requestBodyFrom(v, merged, descText))).request;
           window.location.href = "/results/" + enc(request.id);
         } catch (err) {
           creating = false;
@@ -460,6 +463,12 @@
   // Direct creation from an interpretation that already has a mode (text
   // requests that skip the confirmation step).
   const requestRetryKeys = new Map();
+  async function postRequest(body) {
+    const fingerprint = JSON.stringify(body);
+    if (!requestRetryKeys.has(fingerprint)) requestRetryKeys.set(fingerprint, crypto.randomUUID());
+    return api.post("/api/requests", body, { headers: { "Idempotency-Key": requestRetryKeys.get(fingerprint) } });
+  }
+
   async function createRequestFrom(text, normalized) {
     const modes = cleanModes(normalized.modes);
     const service = modes.length === 1 && modes[0] === "service";
@@ -481,27 +490,7 @@
       body.use_end = normalized.use_end || null;
       body.pickup_windows = [];
     }
-    try {
-      const fingerprint = JSON.stringify(body);
-      if (!requestRetryKeys.has(fingerprint)) requestRetryKeys.set(fingerprint,crypto.randomUUID());
-      return (await api.post("/api/requests",body,{headers:{"Idempotency-Key":requestRetryKeys.get(fingerprint)}})).request;
-    } catch (err) {
-      if (!(err instanceof api.ApiError && err.code === "validation_error")) throw err;
-      // Interpreted values were rejected by the server. Keep the text, drop
-      // the rejected values, and tell the user on the results page.
-      const rejected = Object.keys(err.fields || {}).join(", ");
-      const retry = {
-        original_text: text,
-        normalized: Object.assign({}, normalized, {
-          budget_cents: null, max_deposit_cents: null, needed_by: null, use_start: null, use_end: null, area: null,
-          follow_up_questions: (normalized.follow_up_questions || []).concat(
-            "Some interpreted values were rejected by the server (" + (rejected || "unknown fields") + ") and were cleared. Please enter them."),
-        }),
-        modes: DEFAULT_MODES.slice(),
-        pickup_windows: [],
-      };
-      return (await api.post("/api/requests", retry)).request;
-    }
+    return (await postRequest(body)).request;
   }
 
   // =================================================================== RESULTS
@@ -1089,6 +1078,16 @@
       else if (!values[key]) markLabel(f, unknownBadge());
     });
 
+    const dateReview = (meta.ambiguous || []).length ? C.el("input", { type: "checkbox", id: "f-date-review" }) : null;
+    const dateReviewError = C.el("p", { className: "field__error", role: "alert" });
+    const dateReviewPanel = dateReview ? C.el("fieldset", {},
+      C.el("legend", { text: "Confirm the dates" }),
+      C.el("ul", {}, (meta.ambiguous || []).map((a) => C.el("li", { text: String(a.text || "Ambiguous date") + (a.proposed ? " → " + api.formatTime(a.proposed) : " — choose a date or leave it unknown") }))),
+      C.el("label", { className: "choice" }, dateReview, C.el("span", { text: "I reviewed and corrected these dates, or left them unknown." })), dateReviewError) : null;
+    if (dateReview) {
+      [F.needed_by, F.use_start, F.use_end].forEach((f) => f.control.addEventListener("input", () => { dateReview.checked = false; }));
+    }
+
     F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "Unknown", value: values.area || "", attrs: { maxlength: 80 } });
     if (!values.area) markLabel(F.area, unknownBadge());
 
@@ -1112,6 +1111,7 @@
       preferredSpecs.root,
       C.el("div", { className: "field-row" }, F.budget_cents.root, F.max_deposit_cents.root),
       C.el("div", { className: "field-row" }, F.needed_by.root, F.use_start.root, F.use_end.root),
+      dateReviewPanel,
       serviceOnly,
     );
 
@@ -1147,6 +1147,12 @@
       const modes = Array.from(container.querySelectorAll('input[name="modes"]:checked')).map((i) => i.value);
       const service = modes.includes("service");
       let bad = false;
+      dateReviewError.textContent = "";
+      if (dateReview && !dateReview.checked) {
+        dateReviewError.textContent = "Review the dates, then confirm them.";
+        dateReview.setAttribute("aria-invalid", "true");
+        bad = true;
+      } else if (dateReview) dateReview.removeAttribute("aria-invalid");
       if (!modes.length) { F.modes.setError("Choose buy, borrow, or a service."); bad = true; }
       if (service && modes.length > 1) { F.modes.setError("A service cannot be combined with buy or borrow."); bad = true; }
       if (service && !isServiceCategory(F.category.value())) { F.category.setError("Choose tutoring, proofreading, or moving help."); bad = true; }
@@ -1341,8 +1347,8 @@
     // ---- borrow terms
     F.rental_fee_cents = C.field({ id: "l-rental-fee", label: "Rental fee", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "0", value: "0",
       hint: "Payment for use; $0 is a free loan." });
-    F.proposed_item_value_cents = C.field({ id: "l-item-value", label: "Agreed item value", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 200",
-      hint: "Required for borrowing; separate from the deposit." });
+    F.proposed_item_value_cents = C.field({ id: "l-item-value", label: "Proposed item value (required)", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 200",
+      hint: "The value you propose for borrowing; agreed terms are set in the offer." });
     F.collateral_percent = C.field({ id: "l-percent", label: "Deposit you propose", type: "number", value: "100", attrs: { min: 0, max: 100, step: 1, inputmode: "numeric" },
       hint: "Percent of the agreed value, 0 to 100. Default 100%. Lowering it is voluntary and leaves the rest of the value at your risk." });
     const slider = C.el("input", { type: "range", min: 0, max: 100, step: 1, value: 100, "aria-label": "Deposit percent slider", className: "range" });
@@ -1492,7 +1498,7 @@
       if (Number.isNaN(pct)) pct = null;
       C.clear(depositCalc);
       if (value.cents == null || pct == null || pct < 0 || pct > 100) {
-        depositCalc.append(C.el("p", { className: "muted", text: "Enter the agreed value and a percent to see the proposed deposit." }));
+        depositCalc.append(C.el("p", { className: "muted", text: "Enter a value and percentage to see the proposed deposit." }));
         lowNote.hidden = true;
         return;
       }
@@ -1819,7 +1825,7 @@
       if (allowed.includes("sale")) row("Sale price", api.formatCents(listing.sale_price_cents));
       if (allowed.includes("borrow")) {
         row("Rental fee", listing.rental_fee_cents === 0 ? "Free loan ($0.00)" : api.formatCents(listing.rental_fee_cents));
-        row("Agreed item value", api.formatCents(listing.proposed_item_value_cents));
+        row("Proposed item value", api.formatCents(listing.proposed_item_value_cents));
         const value = listing.proposed_item_value_cents, pct = listing.collateral_percent;
         if (Number.isInteger(value) && Number.isInteger(pct)) {
           const deposit = Math.round((value * pct) / 100);
