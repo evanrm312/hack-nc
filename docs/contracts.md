@@ -94,7 +94,10 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 #### Service Listing (public view)
 
 Services use the same listing endpoints and `allowed_modes: ["service"]`.
-Categories are exactly `tutoring`, `proofreading`, or `moving help`.
+Categories are exactly `tutoring`, `proofreading`, `moving help`, `tech help`,
+`repair and mending`, `bike repair`, `photography`, or `event help`.
+`server.models.listing.SERVICE_CATEGORIES` is the backend source of truth;
+these are category string values, requiring no database migration.
 `service_price_cents` may be zero; `service_duration_minutes` is 1–1440;
 `service_available_windows` is a nonempty list of offset-aware UTC intervals.
 Item condition, collateral, deposit, agreed value, sale price, and rental fee
@@ -165,7 +168,7 @@ Example `201 {"listing": ...}` record:
 
 #### Service NeedRequest (owner view)
 
-Service requests use `modes: ["service"]` and one of the three service
+Service requests use `modes: ["service"]` and one of the eight service
 categories in `normalized.category`. `max_deposit_cents`, loan dates, and pickup
 windows are rejected and omitted. `service_duration_minutes` and
 `service_time_windows` may be omitted when unknown; a missing constraint stays

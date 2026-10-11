@@ -337,3 +337,22 @@ def test_service_does_not_combine_disjoint_overlap(service_need, service_listing
         dict(start='2026-10-14T12:00:00Z', end='2026-10-14T12:30:00Z'),
         dict(start='2026-10-14T13:00:00Z', end='2026-10-14T13:30:00Z')]
     only(service_need, service_listing, 'rejected')
+
+
+@pytest.mark.parametrize('category', [
+    'tech help', 'repair and mending', 'bike repair', 'photography', 'event help',
+])
+def test_additional_service_categories_preserve_price_duration_and_overlap(service_need, service_listing, category):
+    service_need['normalized'].update(category=category, required_specifications={})
+    service_listing.update(category=category, specifications={})
+    only(service_need, service_listing, 'confirmed')
+    for changes in (
+        {'service_price_cents': 3001},
+        {'service_duration_minutes': 30},
+        {'service_available_windows': [dict(start='2026-10-14T13:30:00Z', end='2026-10-14T15:00:00Z')]},
+        {'category': 'tutoring'},
+    ):
+        other = {**service_listing, **changes}
+        entry = only(service_need, other, 'rejected')
+        assert not any('deposit' in reason or 'collateral' in reason
+                       for reason in entry['reasons'] + entry['shortcomings'])

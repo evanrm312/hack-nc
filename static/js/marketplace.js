@@ -14,9 +14,9 @@
   const CATEGORIES = [
     ["", "Unknown / not sure"],
     ["formalwear", "Formalwear"], ["clothing", "Clothing"], ["electronics", "Electronics"],
-    ["textbooks", "Textbooks"], ["calculators", "Calculators"], ["furniture", "Furniture"],
-    ["appliances", "Appliances"], ["sports", "Sports & outdoors"], ["tools", "Tools"],
-    ["kitchen", "Kitchen"], ["other", "Other"],
+    ["academic supplies", "Academic supplies"], ["dorm essentials", "Dorm essentials"],
+    ["event equipment", "Event equipment"], ["outdoor gear", "Outdoor gear"],
+    ["mobility", "Mobility"], ["tools", "Tools"],
   ];
   // Search preference used only when the interpreter gave no mode. It is
   // shown as "needs confirmation" until the user confirms it.
@@ -25,7 +25,7 @@
   // =============================================================== SERVICES
   // Third listing kind, per docs/contracts.md (Person 1, p1-services):
   //   Listing: allowed_modes exactly ["service"], category in
-  //     tutoring | proofreading | moving help, description required,
+  //     the eight service categories below, description required,
   //     service_price_cents (may be 0), service_duration_minutes (1-1440),
   //     service_available_windows (nonempty, at least one fits the duration).
   //     Item fields (condition, specs, accessories, defects, prices, collateral,
@@ -34,8 +34,12 @@
   //     category; max_deposit_cents, use_start, use_end, pickup_windows must be
   //     absent/null; optional service_duration_minutes and private
   //     service_time_windows. Public view adds service_duration_minutes.
-  const SERVICE_CATEGORIES = [["tutoring", "Tutoring"], ["proofreading", "Proofreading"], ["moving help", "Moving help"]];
-  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "Unknown"])[1];
+  const SERVICE_CATEGORIES = [
+    ["tutoring", "Tutoring"], ["proofreading", "Proofreading"], ["moving help", "Moving help"],
+    ["tech help", "Tech help"], ["repair and mending", "Repair and mending"],
+    ["bike repair", "Bike repair"], ["photography", "Photography"], ["event help", "Event help"],
+  ];
+  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "unknown"])[1];
   const categoryLabel = (c) => ([...CATEGORIES, ...SERVICE_CATEGORIES].find(([v]) => v && v === c) || [c, c ? String(c) : "Uncategorized"])[1];
   const modeLabel = (m) => ({ sale: "Buy", borrow: "Borrow", service: "Service" })[m] || String(m);
   const isServiceCategory = (c) => SERVICE_CATEGORIES.some(([v]) => v === c);
@@ -45,6 +49,7 @@
 
   const CONDITIONS = [["", "Unknown"], ["new", "New"], ["like_new", "Like new"], ["good", "Good"], ["fair", "Fair"], ["worn", "Worn"]];
   const conditionLabel = C.conditionLabel;
+  let listingLoadVersion = 0;
 
   if (page === "home") initHome();
   if (page === "results") initResults();
@@ -410,6 +415,24 @@
       confirmSection.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
     }
 
+    const kindFilter = C.field({ id: "catalog-kind", label: "Offer type", type: "select",
+      options: [{ value: "", label: "All offers" }, { value: "sale", label: "Buy" },
+        { value: "borrow", label: "Borrow" }, { value: "service", label: "Services" }] });
+    const categoryFilter = C.field({ id: "catalog-category", label: "Category", type: "select",
+      options: [{ value: "", label: "All categories" }] });
+    $("catalog-filters").append(kindFilter.root, categoryFilter.root);
+    function refreshCatalogCategories() {
+      const selected = categoryFilter.value();
+      const kind = kindFilter.value();
+      const options = kind === "service" ? SERVICE_CATEGORIES : kind ? CATEGORIES.slice(1) : CATEGORIES.slice(1).concat(SERVICE_CATEGORIES);
+      C.clear(categoryFilter.control);
+      categoryFilter.control.append(C.el("option", { value: "", text: "All categories" }));
+      options.forEach(([value, label]) => categoryFilter.control.append(C.el("option", { value, text: label })));
+      if (options.some(([value]) => value === selected)) categoryFilter.control.value = selected;
+    }
+    kindFilter.control.addEventListener("change", () => { refreshCatalogCategories(); loadListings(); });
+    categoryFilter.control.addEventListener("change", loadListings);
+    refreshCatalogCategories();
     loadListings();
   }
 
@@ -1037,7 +1060,7 @@
       C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("Required", "info") : null),
       C.el("p", { className: "field__hint", id: "modes-hint", text: meta.modesUnknown
         ? "The interpreter did not say. Buy and borrow are selected as a search preference; confirm or narrow it."
-        : (meta.requireModes ? "Required. " : "") + "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person (tutoring, proofreading, moving help)." }),
+        : (meta.requireModes ? "Required. " : "") + "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person, such as tutoring, repair, or photography." }),
       C.el("div", { className: "choices" },
         choice("modes", "borrow", "Borrow an item", (values.modes || []).includes("borrow")),
         choice("modes", "sale", "Buy an item", (values.modes || []).includes("sale")),
@@ -1142,7 +1165,7 @@
       let bad = false;
       if (!modes.length) { F.modes.setError("Choose buy, borrow, or a service."); bad = true; }
       if (service && modes.length > 1) { F.modes.setError("A service cannot be combined with buy or borrow."); bad = true; }
-      if (service && !isServiceCategory(F.category.value())) { F.category.setError("Choose tutoring, proofreading, or moving help."); bad = true; }
+      if (service && !isServiceCategory(F.category.value())) { F.category.setError("Choose a supported service category."); bad = true; }
       const budget = C.dollarsToCents(F.budget_cents.value());
       if (budget.error) { F.budget_cents.setError(budget.error); bad = true; }
       const deposit = service ? { cents: null } : C.dollarsToCents(F.max_deposit_cents.value());
@@ -1685,7 +1708,7 @@
       subtitle: serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes),
       badges: [C.modeBadge("service")],
       body: [
-        listing.description ? C.el("p", { text: listing.description }) : null,
+        listing.description ? C.el("p", { style: { whiteSpace: "pre-line", overflowWrap: "anywhere" }, text: listing.description }) : null,
         C.el("dl", { className: "kv-list" },
           C.el("dt", { text: "Price per session" }), C.el("dd", { text: api.formatCents(listing.service_price_cents) }),
           C.el("dt", { text: "Session length" }), C.el("dd", { text: formatDuration(listing.service_duration_minutes) }),
@@ -1725,7 +1748,7 @@
         ]);
         root.removeAttribute("aria-busy");
         const auth = { signedIn: !!api.getToken(), me: meRes.profile, error: meRes.error };
-        if (isService(listing)) renderService(listing, spotsRes ? spotsRes.meeting_spots : null, auth);
+        if (isService(listing)) renderService(listing, auth);
         else render(listing, spotsRes ? spotsRes.meeting_spots : null, auth);
       } catch (err) {
         root.removeAttribute("aria-busy");
@@ -1772,7 +1795,7 @@
         C.el("div", { className: "cluster" }, badges),
         C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
         C.el("div", { className: "meta" }, C.el("span", { text: categoryLabel(listing.category) }), C.el("span", { text: "Condition: " + conditionLabel(listing.condition) })),
-        listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
+        listing.description ? C.el("p", { style: { whiteSpace: "pre-line", overflowWrap: "anywhere" }, text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
         section("Specifications", kv(listing.specifications, "No specifications listed.")),
         section("Included accessories", stringList(listing.accessories, "None listed.")),
         section("Known defects", stringList(listing.known_defects, "None listed.")));
@@ -1830,7 +1853,7 @@
     }
 
     // Service detail: category, price, duration, time windows. No deposit section.
-    function renderService(listing, spots, auth) {
+    function renderService(listing, auth) {
       C.clear(root);
       document.title = listing.title + " · Campus Current";
       const owner = listing.owner || {};
@@ -1842,11 +1865,15 @@
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
       if (isMine) badges.push(C.badge("Your listing", "info"));
 
+      const media = listing.public_photo_url
+        ? C.el("div", { className: "detail-media" }, C.el("img", { src: listing.public_photo_url, alt: "Reference scene for " + listing.title }))
+        : null;
+
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
         C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
         C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "Session: " + formatDuration(listing.service_duration_minutes) })),
-        listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
+        listing.description ? C.el("p", { style: { whiteSpace: "pre-line", overflowWrap: "anywhere" }, text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
         section("Available time windows", serviceWindowsNode(listing)));
 
       const terms = C.el("dl", { className: "kv-list" },
@@ -1854,24 +1881,17 @@
         C.el("dt", { text: "Session length" }), C.el("dd", { text: formatDuration(listing.service_duration_minutes) }),
         C.el("dt", { text: "Category" }), C.el("dd", { text: serviceCategoryLabel(listing.category) }));
 
-      const spotIds = new Set(listing.meeting_spot_ids || []);
-      let spotsNode;
-      if (!spotIds.size) spotsNode = C.el("p", { className: "muted", text: "No preferred spots listed; agree a place when you book." });
-      else if (!spots) spotsNode = C.el("p", { className: "muted", text: spotIds.size + " preferred spot(s); details could not be loaded." });
-      else spotsNode = C.el("ul", { className: "spot-list" }, spots.filter((s) => spotIds.has(s.id)).map((s) => C.el("li", {}, C.el("strong", { text: s.label }), C.el("span", { className: "muted", text: " · " + s.public_area }))));
-
       const side = C.el("div", { className: "stack" },
         C.el("section", { className: "card card--sky", "aria-labelledby": "terms-heading" },
           C.el("h2", { id: "terms-heading", text: "Terms" }), terms,
           C.el("p", { className: "muted", style: { marginTop: "var(--space-3)" }, text: "Services have no deposit, collateral, or agreed item value." }),
           C.simulationNotice("Simulated: payment for services is not collected or charged in this prototype.")),
-        C.el("section", { className: "card", "aria-labelledby": "spots-heading" }, C.el("h2", { id: "spots-heading", text: "Meeting spots" }), spotsNode),
         C.el("section", { className: "card card--leaf", "aria-labelledby": "owner-heading" },
           C.el("h2", { id: "owner-heading", text: "Provider" }),
           C.el("div", { className: "cluster" }, C.el("strong", { text: owner.display_name || "Unknown" }), C.profileBadge(owner)),
           exchangeEntry(listing, auth, { label: "Request this service", noun: "service" })));
 
-      root.append(C.el("div", { className: "detail-grid" }, C.el("div", { className: "card" }, facts), side));
+      root.append(C.el("div", { className: "detail-grid" }, C.el("div", { className: "card" }, media, facts), side));
       const h1 = root.querySelector("h1"); h1.setAttribute("tabindex", "-1"); h1.focus();
     }
 
@@ -2433,13 +2453,18 @@
     if (!grid) return;
     grid.setAttribute("aria-busy", "true");
     C.state.loading(grid, "Loading available listings…");
+    const version = ++listingLoadVersion;
     try {
-      const { listings } = await api.get("/api/listings");
+      const query = new URLSearchParams();
+      if ($("catalog-kind") && $("catalog-kind").value) query.set("mode", $("catalog-kind").value);
+      if ($("catalog-category") && $("catalog-category").value) query.set("category", $("catalog-category").value);
+      const { listings } = await api.get("/api/listings" + (query.size ? "?" + query.toString() : ""));
+      if (version !== listingLoadVersion) return;
       grid.removeAttribute("aria-busy");
       if (!listings || !listings.length) {
         C.state.empty(grid, {
-          title: "Nothing listed yet",
-          message: "Be the first to offer something for sale or to borrow.",
+          title: query.size ? "No listings match these filters" : "Nothing listed yet",
+          message: query.size ? "Try another offer type or category." : "Be the first to offer an item or service.",
           action: C.button({ label: "New Listing", variant: "primary", size: "sm", href: "/listings/new" }),
         });
         return;
@@ -2447,6 +2472,7 @@
       C.clear(grid);
       listings.forEach((listing) => grid.append(listingCard(listing)));
     } catch (err) {
+      if (version !== listingLoadVersion) return;
       grid.removeAttribute("aria-busy");
       C.state.error(grid, err, { title: "Could not load listings", retry: loadListings });
     }
@@ -2460,7 +2486,7 @@
     return Math.min(Number((window.CAMPUS_CONFIG || {}).max_upload_bytes) || Infinity, 5 * 1024 * 1024);
   }
   function cardMedia(listing) {
-    if (listing.public_photo_url) return { src: listing.public_photo_url, alt: "Photo of " + (listing.title || "listing") };
+    if (listing.public_photo_url) return { src: listing.public_photo_url, alt: (isService(listing) ? "Reference scene for " : "Photo of ") + (listing.title || "listing") };
     return isService(listing)
       ? { placeholder: { category: listing.category, kind: "service", label: serviceCategoryLabel(listing.category) } }
       : { placeholder: { category: listing.category } };
