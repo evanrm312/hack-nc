@@ -172,8 +172,14 @@
     const root = el(opts.tag || "article", { className: classes.join(" ") });
 
     if (opts.media !== undefined) {
-      const media = el("div", { className: "card__media" + (opts.media && opts.media.src ? "" : " card__media--empty") });
+      // media: {src, alt} shows the owner's uploaded photo; without src the
+      // area keeps the same 4:3 box and shows a category placeholder
+      // ({placeholder: {category, kind, label, action}}). Photos are never
+      // fetched from anywhere but the listing's own public_photo_url.
+      const ph = (opts.media && opts.media.placeholder) || {};
+      const media = el("div", { className: "card__media" + (opts.media && opts.media.src ? "" : " card__media--empty" + (ph.kind === "service" ? " card__media--service" : "")) });
       if (opts.media && opts.media.src) media.append(el("img", { src: opts.media.src, alt: opts.media.alt || "", loading: "lazy" }));
+      else media.append(mediaPlaceholder(ph));
       root.append(media);
     }
     if (opts.title || opts.badges) {
@@ -194,6 +200,46 @@
   // Returns {root, open(opener?), close(returnValue?), setBody(node)}.
   // Uses native <dialog>.showModal() for focus trapping and Escape.
   function dialog(opts) {
+    return buildDialog(opts);
+  }
+
+  // Category icons for photo placeholders: simple strokes inside a glossy
+  // Frutiger Aero bubble. Keys are a fixed whitelist; anything else gets the
+  // generic box. Static markup only (never built from server strings).
+  const ICON_PATHS = {
+    formalwear: '<path d="M9 3h6l-1.5 4L15 18l-3 3-3-3 1.5-11z"/><path d="M9 3l3 4 3-4"/>',
+    clothing: '<path d="M8 4l4 2 4-2 4 3-2 4-2-1v11H8V10l-2 1-2-4z"/>',
+    electronics: '<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>',
+    textbooks: '<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h12"/>',
+    calculators: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 7h6"/><path d="M9 11h.01M12 11h.01M15 11h.01M9 15h.01M12 15h.01M15 15h.01M9 18h6"/>',
+    furniture: '<path d="M5 11V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4"/><path d="M4 11h16v7H4z"/><path d="M6 18v2M18 18v2"/>',
+    appliances: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 10h12"/><path d="M9 6v2M9 13v3"/>',
+    sports: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18"/><path d="M5.6 5.6c3.5 3.5 3.5 9.3 0 12.8M18.4 5.6c-3.5 3.5-3.5 9.3 0 12.8"/>',
+    tools: '<path d="M14.5 3.5a5 5 0 0 0-5.3 6.8L3 16.5 7.5 21l6.2-6.2a5 5 0 0 0 6.8-5.3l-3 3-3-1-1-3z"/>',
+    kitchen: '<path d="M5 9h14v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M2 11h3M19 11h3M9 9V6M15 9V6"/>',
+    tutoring: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/><path d="M22 9v6"/>',
+    proofreading: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M9.5 15l2 2 3.5-4"/>',
+    "moving help": '<rect x="9" y="4" width="10" height="8" rx="1"/><path d="M3 4h2l3 12h11"/><circle cx="10" cy="19" r="2"/><circle cx="17" cy="19" r="2"/>',
+    other: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+  };
+  function categoryIcon(category) {
+    const key = Object.prototype.hasOwnProperty.call(ICON_PATHS, category) ? category : "other";
+    return el("span", { className: "media-icon", "aria-hidden": "true",
+      html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICON_PATHS[key] + "</svg>" });
+  }
+
+  // mediaPlaceholder({category, kind: "item"|"service", label, action})
+  // The friendly "no photo" box: icon, a short label, and an optional owner
+  // action (e.g. an Add photo button).
+  function mediaPlaceholder(opts) {
+    opts = opts || {};
+    return el("div", { className: "media-placeholder" },
+      categoryIcon(opts.category),
+      el("span", { className: "media-label", text: opts.label || (opts.kind === "service" ? "Service" : "No photo yet") }),
+      opts.action || null);
+  }
+
+  function buildDialog(opts) {
     opts = opts || {};
     const titleId = nextId("dialog-title");
     const body = el("div", { className: "dialog__body" }, opts.body);
@@ -525,6 +571,12 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountCirculations);
   else mountCirculations();
 
+  // Input modality for focus styling: headings that get programmatic focus
+  // (page load, "Update results") show a ring only after keyboard use.
+  // Pointer users never see a box on a heading they did not click.
+  document.addEventListener("keydown", (e) => { if (!e.metaKey && !e.ctrlKey && !e.altKey) document.documentElement.dataset.input = "keyboard"; }, true);
+  document.addEventListener("pointerdown", () => { document.documentElement.dataset.input = "pointer"; }, true);
+
   // Circulation mark for completed exchanges (static under reduced motion via CSS).
   function circulationMark(spin) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -545,6 +597,7 @@
     offerSummary,
     state, notice, simulationNotice, toast,
     errorMessage, isAuthError,
+    categoryIcon, mediaPlaceholder,
     dollarsToCents, centsToDollars, localToIso, isoToLocal,
     circulation, mountCirculations, circulationMark,
   };

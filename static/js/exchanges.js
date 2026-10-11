@@ -27,6 +27,7 @@
   function hidePrivateContent() {
     if ($("room-content")) $("room-content").hidden = true;
     if ($("exchange-list")) $("exchange-list").replaceChildren();
+    if ($("exchange-empty")) $("exchange-empty").hidden = true;
     if ($("start-card")) $("start-card").hidden = true;
     if ($("participants")) $("participants").textContent = "";
     if ($("room-title")) $("room-title").textContent = "Exchange room";
@@ -59,11 +60,204 @@
     let loading = false;
     const requested = new URLSearchParams(location.search);
     const selectedId = requested.get("listing_id");
+    const stageLabels = {
+      pre_handoff: "Before pickup", handoff: "At pickup",
+      pre_return: "Before return (borrower)", post_return: "After return (owner)",
+    };
+    const timeText = (value) => value ? api.formatTime(value) + " Eastern" : "Not agreed yet";
+    function meetingText(spot, id) {
+      return spot ? spot.label + (spot.access_notes ? "\n" + spot.access_notes : "")
+        : id ? "Meeting spot unavailable; confirm in the exchange room" : "Not agreed yet";
+    }
+    function addRows(target, rows) {
+      rows.forEach(([label, value]) => target.append(node("dt", label), node("dd", value)));
+    }
+    function addPhotos(card, exchange) {
+      const photos = exchange.evidence || [];
+      const disclosure = node("details");
+      disclosure.append(node("summary", "Private condition photos (" + photos.length + ")"));
+      const gallery = node("div", undefined, "exchange-photos");
+      disclosure.append(gallery);
+      card.append(disclosure);
+      if (!photos.length) {
+        gallery.append(node("p", "No condition photos have been uploaded for this exchange."));
+        return;
+      }
+      let loaded = false;
+      disclosure.addEventListener("toggle", () => {
+        if (!disclosure.open || loaded) return;
+        loaded = true;
+        photos.forEach((photo) => {
+          const figure = node("figure");
+          const image = node("img", undefined, "exchange-photo");
+          image.alt = (stageLabels[photo.stage] || "Condition") + " evidence";
+          image.hidden = true;
+          const name = Object.values(exchange.participants).find((person) => person.id === photo.uploader_id)?.display_name || "Participant";
+          const status = node("p", "Loading private preview…", "exchange-help");
+          status.setAttribute("role", "status");
+          const retry = node("button", "Retry preview");
+          retry.type = "button"; retry.hidden = true;
+          figure.append(image, node("figcaption", (stageLabels[photo.stage] || photo.stage) + " · " + name
+            + " · " + timeText(photo.created_at)), status, retry);
+          gallery.append(figure);
+          async function loadPreview() {
+            retry.hidden = true; status.textContent = "Loading private preview…";
+            try {
+              const result = await api.get(photo.url + "?preview=1");
+              if (!sessionIsCurrent() || !figure.isConnected) return;
+              image.src = result.data_url; image.hidden = false; status.textContent = "";
+            } catch (error) {
+              if (!sessionIsCurrent() || !figure.isConnected) return;
+              status.textContent = errorText(error); retry.hidden = false;
+              if ([401, 403].includes(error.status)) pageError(error);
+            }
+          }
+          retry.addEventListener("click", loadPreview);
+          loadPreview();
+        });
+      });
+    }
+    function addReview(card, exchange) {
+      if (exchange.my_review) {
+        const review = exchange.my_review;
+        card.append(node("h3", "Your review"), node("p", review.stars + "/5 · Submitted " + timeText(review.created_at)));
+        if (review.comment) card.append(node("p", review.comment));
+        return;
+      }
+      if (!exchange.can_review) return;
+      const disclosure = node("details");
+      disclosure.append(node("summary", "Leave a review"), node("p", "Feedback is optional. Review the other participant based on this completed exchange. Your review is saved immediately and cannot be edited."));
+      const form = node("form");
+      const fields = node("fieldset");
+      const answers = {};
+      function selectField(key, label, options) {
+        const wrapper = node("div", undefined, "exchange-field");
+        const id = "review-" + exchange.id + "-" + key;
+        const fieldLabel = node("label", label); fieldLabel.htmlFor = id;
+        const select = node("select"); select.id = id; select.required = true;
+        const placeholder = node("option", "Choose an answer"); placeholder.value = "";
+        select.append(placeholder);
+        options.forEach(([value, text]) => {
+          const option = node("option", text); option.value = value; select.append(option);
+        });
+        wrapper.append(fieldLabel, select); fields.append(wrapper);
+        return select;
+      }
+      const stars = selectField("stars", "Overall rating", [1, 2, 3, 4, 5].map((value) => [String(value), value + (value === 1 ? " star" : " stars")]));
+      const answerOptions = [["yes", "Yes"], ["no", "No"], ["not_applicable", "Not applicable / unable to assess"]];
+      [["description_accurate", "Description was accurate"], ["condition_as_agreed", "Condition was as agreed"],
+        ["punctual", "Participant was punctual"], ["communicative", "Communication was clear"]].forEach(([key, label]) => {
+        answers[key] = selectField(key, label, answerOptions);
+      });
+      if (exchange.mode === "borrow") answers.returned_on_time = selectField("returned_on_time", "Item was returned on time", answerOptions);
+      const commentId = "review-" + exchange.id + "-comment";
+      const commentLabel = node("label", "Comment (optional)"); commentLabel.htmlFor = commentId;
+      const comment = node("textarea"); comment.id = commentId; comment.maxLength = 2000; comment.rows = 3;
+      const commentField = node("div", undefined, "exchange-field"); commentField.append(commentLabel, comment);
+      const status = node("p"); status.setAttribute("role", "status");
+      const errorMessage = node("p", "", "exchange-error"); errorMessage.setAttribute("role", "alert");
+      const submit = node("button", "Submit review", "button"); submit.type = "submit";
+      fields.append(commentField, submit);
+      form.append(fields, status, errorMessage); disclosure.append(form); card.append(disclosure);
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (fields.disabled || !sessionIsCurrent()) return;
+        const structured = Object.fromEntries(Object.entries(answers).map(([key, select]) => [key, select.value]));
+        if (exchange.mode === "sale") structured.returned_on_time = "not_applicable";
+        fields.disabled = true; errorMessage.textContent = ""; status.textContent = "Saving your review…";
+        try {
+          const result = await api.post("/api/exchanges/" + encodeURIComponent(exchange.id) + "/review", {
+            stars: Number(stars.value), structured_answers: structured, comment: comment.value || null,
+          });
+          if (!sessionIsCurrent() || !card.isConnected) return;
+          exchange.my_review = result.review; exchange.can_review = false;
+          disclosure.remove(); addReview(card, exchange);
+          $("page-status").textContent = "Your review was saved.";
+        } catch (error) {
+          if (!sessionIsCurrent() || !card.isConnected) return;
+          status.textContent = ""; errorMessage.textContent = errorText(error); fields.disabled = false;
+          if ([401, 403].includes(error.status)) pageError(error);
+        }
+      });
+    }
+    function renderExchange(exchange) {
+      const card = node("article", undefined, "card exchange-card");
+      card.dataset.exchangeId = exchange.id;
+      const roomUrl = "/exchanges/" + encodeURIComponent(exchange.id);
+      const heading = node("div", undefined, "exchange-heading");
+      const title = node("h2"), link = node("a", exchange.listing.title);
+      link.href = roomUrl; title.append(link);
+      heading.append(title, node("span", statusLabels[exchange.status] || exchange.status, "exchange-status"));
+      const owner = exchange.owner_id === profile.id;
+      const other = exchange.participants[owner ? "requester" : "owner"];
+      card.append(heading, node("p", (exchange.mode === "borrow" ? owner ? "Lending" : "Borrowing" : owner ? "Selling" : "Buying")
+        + " · With " + other.display_name + " · " + other.badge));
+      const offer = exchange.current_offer;
+      const terms = node("dl", undefined, "exchange-terms");
+      if (offer) {
+        addRows(terms, [
+          ["Pickup time", timeText(offer.pickup_at)],
+          ["Pickup location", meetingText(exchange.pickup_meeting_spot, offer.pickup_meeting_spot_id)],
+        ]);
+        if (exchange.mode === "borrow") {
+          addRows(terms, [["Return deadline", timeText(offer.return_deadline)],
+            ["Return location", meetingText(exchange.return_meeting_spot, offer.return_meeting_spot_id)],
+            ["Rental fee", api.formatCents(offer.rental_fee_cents)],
+            ["Agreed item value", api.formatCents(offer.agreed_item_value_cents)],
+            ["Simulated deposit", api.formatCents(offer.deposit_cents)],
+            ["Value not covered by deposit", api.formatCents(offer.uncovered_value_cents)]]);
+        } else addRows(terms, [["Sale price", api.formatCents(offer.sale_price_cents)]]);
+        const condition = offer.condition_snapshot || {};
+        addRows(terms, [["Agreed condition", condition.condition?.replaceAll("_", " ") || "Unknown / needs confirmation"],
+          ["Included accessories", condition.accessories == null ? "Unknown" : condition.accessories.length ? condition.accessories.join(", ") : "None listed"]]);
+      } else card.append(node("p", "No current offer is recorded. Open the exchange to check its terms."));
+      card.append(terms);
+      const confirmations = exchange.confirmations || [];
+      const count = (stage) => confirmations.filter((record) => record.stage === stage).length;
+      const confirmed = (stage) => confirmations.some((record) => record.stage === stage && record.participant_id === profile.id);
+      let actionLabel = "Open private exchange";
+      let section = "";
+      if (exchange.status === "negotiating") {
+        card.append(node("p", "Both participants must accept the same offer revision before pickup. The item is not reserved yet."));
+        actionLabel = "Review terms and messages";
+      } else if (exchange.status === "reserved") {
+        card.append(node("p", count("handoff") + "/2 pickup confirmations · " + (confirmed("handoff")
+          ? "Your confirmation is saved; waiting for the other participant." : "Review the condition photos and confirm after handoff.")));
+        actionLabel = "Photos and pickup confirmation"; section = "#pickup-card";
+      } else if (exchange.status === "on_loan") {
+        card.append(node("p", owner ? "Active loan. Waiting for the borrower to initiate return." : "Active loan. Upload before-return photos to start the return."));
+        actionLabel = owner ? "View loan and photos" : "Photos and start return"; section = "#return-card";
+      } else if (exchange.status === "return_pending") {
+        card.append(node("p", count("return") + "/2 return confirmations · " + (confirmed("return")
+          ? "Your confirmation is saved; waiting for the other participant." : "Review before/after photos, then confirm the return or report a specific issue.")));
+        actionLabel = "Photos and return confirmation"; section = "#return-card";
+      } else if (exchange.status === "disputed") {
+        card.append(node("p", exchange.dispute_reason || "No dispute reason recorded.", "exchange-error"),
+          node("p", "Disputed; awaiting manual review. A dispute never automatically triggers a charge."));
+        actionLabel = "View dispute and evidence"; section = "#dispute-card";
+      } else if (exchange.status === "cancelled") {
+        card.append(node("p", exchange.cancellation_reason || "Exchange cancelled."));
+      } else if (exchange.status === "completed") {
+        card.append(node("p", exchange.mode === "borrow" ? "Loan completed. Return status: completed." : "Purchase completed."));
+      }
+      card.append(node("p", "Offer revision " + exchange.current_offer_revision + " · Updated " + timeText(exchange.updated_at), "exchange-help"));
+      const deposit = exchange.deposit_status;
+      if (exchange.mode === "borrow" && deposit) {
+        const depositLabel = { simulated_pending: "Simulated deposit: pending", simulated_held: "Simulated deposit: held", simulated_released: "Simulated deposit: released" };
+        card.append(node("p", depositLabel[deposit.state] || "Simulated deposit status unavailable", "exchange-help"));
+      }
+      card.append(node("p", "Simulated: no real funds are reserved or charged.", "simulated-notice"));
+      const actions = node("div", undefined, "exchange-actions");
+      const action = node("a", actionLabel, "button"); action.href = roomUrl + section;
+      actions.append(action); card.append(actions);
+      addPhotos(card, exchange); addReview(card, exchange);
+      return card;
+    }
     function updateModes() {
       const listing = listings.find((item) => item.id === $("start-listing").value);
       $("start-mode").replaceChildren();
       if (!listing) return;
-      listing.allowed_modes.forEach((mode) => {
+      listing.allowed_modes.filter((mode) => ["sale", "borrow"].includes(mode)).forEach((mode) => {
         const option = node("option", modeLabel(mode));
         option.value = mode;
         $("start-mode").append(option);
@@ -89,6 +283,8 @@
       $("refresh-exchanges").disabled = true;
       $("page-error").textContent = "";
       $("page-status").textContent = "Loading your exchanges…";
+      $("exchange-list").setAttribute("aria-busy", "true");
+      $("exchange-empty").hidden = true;
       try {
         const me = await api.get("/api/me");
         if (!sessionIsCurrent()) return;
@@ -98,35 +294,23 @@
         ]);
         if (!sessionIsCurrent()) return;
         if (exchangesResult.status === "rejected") throw exchangesResult.reason;
+        if (exchangesResult.value.fixture) throw new Error("This server is serving sample exchanges. Restart it with the current exchange backend to load your saved exchanges.");
         $("sign-in-hint").hidden = true;
         $("exchange-list").replaceChildren();
         const exchanges = exchangesResult.value.exchanges;
         $("page-status").textContent = exchanges.length
           ? exchanges.length + " private exchange" + (exchanges.length === 1 ? "" : "s")
-          : "No exchanges yet. Choose an available item below to start a conversation.";
-        exchanges.forEach((exchange) => {
-          const card = node("article", undefined, "card");
-          const link = node("a", exchange.listing.title);
-          link.href = "/exchanges/" + encodeURIComponent(exchange.id);
-          const heading = node("h2");
-          heading.append(link);
-          const role = exchange.owner_id === profile.id ? "Your item" : "Requested by you";
-          card.append(heading,
-            node("p", modeLabel(exchange.mode) + " · " + role),
-            node("span", statusLabels[exchange.status] || exchange.status, "exchange-status"),
-            node("p", "Offer revision " + exchange.current_offer_revision + " · Updated " + api.formatTime(exchange.updated_at) + " Eastern", "exchange-help"));
-          if (exchange.status === "disputed") {
-            card.append(node("p", "Disputed. No charge is triggered automatically.", "exchange-error"));
-          }
-          $("exchange-list").append(card);
-        });
+          : "Your private exchanges are up to date.";
+        $("exchange-empty").hidden = exchanges.length > 0;
+        exchanges.forEach((exchange) => $("exchange-list").append(renderExchange(exchange)));
         $("start-card").hidden = false;
         if (listingsResult.status === "rejected") {
           $("listing-status").textContent = "Could not load available listings. Refresh to try again.";
           $("start-fields").disabled = true;
           return;
         }
-        listings = listingsResult.value.listings.filter((listing) => listing.owner_id !== profile.id);
+        listings = listingsResult.value.listings.filter((listing) => listing.owner_id !== profile.id
+          && listing.allowed_modes.some((mode) => ["sale", "borrow"].includes(mode)));
         $("start-listing").replaceChildren();
         listings.forEach((listing) => {
           const option = node("option", listing.title);
@@ -146,6 +330,7 @@
         if (sessionIsCurrent()) pageError(error);
       } finally {
         loading = false;
+        $("exchange-list").setAttribute("aria-busy", "false");
         $("refresh-exchanges").disabled = false;
       }
     }
@@ -271,6 +456,14 @@
         : returning && returnConfirmed ? "Your return confirmation is saved. Waiting for the other participant." : "";
       $("dispute-card").hidden = exchange.status !== "disputed";
       $("dispute-reason").textContent = exchange.dispute_reason || "";
+      const canCancel = ["negotiating", "reserved"].includes(exchange.status) && !confirmations("handoff").length;
+      $("cancel-card").hidden = !canCancel && exchange.status !== "cancelled";
+      $("cancel-form").hidden = !canCancel;
+      $("cancel-fields").disabled = busy || !canCancel;
+      $("cancel-heading").textContent = exchange.status === "cancelled" ? "Exchange cancelled" : "Cancel before pickup";
+      $("cancel-help").textContent = exchange.status === "cancelled"
+        ? exchange.cancellation_reason || "No cancellation reason recorded."
+        : "Either participant can cancel before anyone confirms pickup. An unused reservation is released. No cancellation charge is triggered.";
     }
     function renderEvidence() {
       const signature = JSON.stringify(evidence);
@@ -627,6 +820,10 @@
     $("return-issue-form").addEventListener("submit", (event) => {
       event.preventDefault();
       action("return-error", () => api.post(base + "/return", { action: "issue", reason: $("return-reason").value }));
+    });
+    $("cancel-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      action("cancel-error", () => api.post(base + "/cancel", { reason: $("cancel-reason").value }));
     });
     async function loadInitial() {
       if (initializing) return;

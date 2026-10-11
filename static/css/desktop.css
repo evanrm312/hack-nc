@@ -410,6 +410,14 @@ h3 { font-size: 19px; font-weight: 600; line-height: 1.35; }
 .exchange-message--mine { border-radius: 16px 16px 5px 16px; }
 .exchange-terms { border-radius: 13px; box-shadow: inset 1px 2px #fff, 0 2px 3px #244b4c15; }
 .exchange-status { border-radius: 999px; }
+/* Secondary depth: small contact shadows for status chrome and hover choices. */
+.session { box-shadow: inset 0 1px #fff, 0 3px 6px #244e5626; }
+.window-toolbar { box-shadow: inset 0 2px #fff, inset 0 -1px #9fbac636, 0 2px 3px #294e5b14; position: relative; }
+.sidebar-list a { transition: background-color var(--dur), box-shadow var(--dur); }
+.sidebar-list a:hover, .sidebar-list a:focus-visible { box-shadow: inset 0 1px #fff, 0 2px 4px #31554424; }
+.start-menu nav a:hover, .start-menu nav a:focus-visible { box-shadow: inset 0 1px #fff, 0 2px 4px #17465026; }
+.detail-media { border-radius: 16px; box-shadow: inset 0 2px 5px #1d514b1c, 0 3px 7px #294e5b24; }
+.detail-photo-actions { margin-top: 10px; }
 /* Reserve the taskbar region even for long modal content on desktop/tablet. */
 dialog.dialog { max-height: calc(100dvh - 110px - env(safe-area-inset-bottom)); margin-top: 18px; margin-bottom: calc(92px + env(safe-area-inset-bottom)); overflow: hidden; }
 dialog.dialog[open] { display: flex; flex-direction: column; }

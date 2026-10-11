@@ -11,7 +11,7 @@
   <div class="hero-grid">
     <div class="request-box">
       <h1 id="request-heading">What do you need?</h1>
-      <p class="lede">Tell us what you need, when you need it, and whether you want to buy or borrow.</p>
+      <p class="lede">Describe the item, dates, and whether you want to buy or borrow.</p>
 
       <div id="auth-gate" class="notice notice--info" role="status" hidden>
         <div>
@@ -23,7 +23,7 @@
       <form id="request-form" novalidate>
         <div class="field">
           <label class="field__label" for="request-text"><span>Your request</span></label>
-          <p class="field__hint" id="request-text-hint">Include size or model and budget. Review and edit the proposed details before searching.</p>
+          <p class="field__hint" id="request-text-hint">Include size or model and budget. Confirm the proposed details before searching.</p>
           <textarea id="request-text" name="text" rows="3" required maxlength="4000"
                     aria-describedby="request-text-hint request-text-error"
                     placeholder="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit."></textarea>
@@ -31,8 +31,7 @@
         </div>
         <div class="field photo-field">
           <label class="field__label" for="request-photo"><span>Add a reference photo</span><span class="field__optional">Optional</span></label>
-          <details class="photo-guidance"><summary>Private, not stored · JPEG, PNG, or WebP</summary><p class="field__hint" id="request-photo-hint">A picture of the kind of item you mean, for example a suit you like. JPEG, PNG, or WebP.
-            Only broad visual details (category, type, color, pattern, style) are proposed, never size, price, or condition. The photo is private, is not stored, and never appears on public cards.</p></details>
+          <details class="photo-guidance"><summary>Private, not stored · JPEG, PNG, or WebP</summary><p class="field__hint" id="request-photo-hint">Use a photo of the kind of item you need. It proposes category, type, color, pattern, and style—never size, price, condition, or dates. Your photo is not stored or made public.</p></details>
           <input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="request-photo-hint request-photo-error">
           <div class="photo-preview photo-preview--row" id="request-photo-preview" hidden>
             <img alt="Preview of your reference photo">
@@ -61,12 +60,12 @@
       <div class="sidebar-nature" aria-hidden="true"></div>
       <section class="sidebar-section" aria-labelledby="recommended-heading">
         <h2 id="recommended-heading">{{ icon('search') }} Recommended</h2>
-        <p class="sidebar-caption">Browsing suggestions from the catalog. Not personalized.</p>
+        <p class="sidebar-caption">Catalog suggestions, not personalized.</p>
         <div id="recommended-items" aria-live="polite"></div>
       </section>
       <section class="sidebar-section" aria-labelledby="previous-buys-heading">
         <h2 id="previous-buys-heading">{{ icon('listing') }} Previous buys</h2>
-        <p class="sidebar-caption">Your completed purchases. Private to your account.</p>
+        <p class="sidebar-caption">Completed purchases, visible only to you.</p>
         <div id="previous-buys" aria-live="polite"></div>
       </section>
     </aside>
@@ -135,7 +134,7 @@
   <div class="section__head">
     <h2 id="listings-heading">Available on campus now</h2>
     <div class="cluster">
-      <a href="{{ url_for('pages.listing_form') }}">New listing</a>
+      <a href="{{ url_for('pages.listing_form') }}">New Listing</a>
     </div>
   </div>
   <div id="listings" class="grid catalog-list" aria-live="polite" aria-busy="true"></div>

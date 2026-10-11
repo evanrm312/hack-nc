@@ -31,3 +31,11 @@
     .exchange-layout { grid-template-columns: minmax(0, 1fr); }
     .exchange-fields { grid-template-columns: minmax(0, 1fr); }
   }
+
+
+.exchange-card { overflow-wrap: anywhere; }
+.exchange-card h2 { margin-top: 0; }
+.exchange-card h3 { margin-bottom: 8px; }
+.exchange-card details { margin-top: 16px; border-top: 1px solid #b9cfdb; padding-top: 12px; }
+.exchange-card summary { cursor: pointer; font-weight: 600; }
+.exchange-card .exchange-actions a { display: inline-block; }

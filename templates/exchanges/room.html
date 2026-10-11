@@ -3,11 +3,10 @@
 {% block page_id %}exchange-room{% endblock %}
 {% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/exchanges.css') }}">{% endblock %}
 {% block content %}
-
 <div class="exchanges" id="exchange-room-page" data-exchange-id="{{ exchange_id }}">
   {% if config.get("EXCHANGE_PREVIEW") %}<p class="simulated-notice" role="note">Sandbox preview: demo inventory and identities. Exchanges here are local examples.</p>{% endif %}
   <section class="card">
-    <a href="{{ url_for('pages.my_exchanges') }}">← My exchanges</a>
+    <a href="{{ url_for('pages.my_exchanges') }}">← My Exchanges</a>
     <div class="exchange-heading"><h1 id="room-title">Exchange room</h1><span id="exchange-status" class="exchange-status"></span></div>
     <p id="participants"></p>
     <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
@@ -17,95 +16,6 @@
     <button type="button" id="refresh-room">Refresh exchange</button>
   </section>
   <div id="room-content" hidden>
-    <div class="exchange-layout">
-      <div>
-        <section class="card">
-          <h2 id="offer-heading">Current offer</h2>
-          <p id="pricing-notice" class="exchange-help">Insufficient comparable data. No validated price range is attached to this offer.</p>
-          <dl id="offer-summary" class="exchange-terms"></dl>
-          <p id="deposit-status" class="exchange-help"></p>
-          <p id="owner-acceptance"></p>
-          <p id="requester-acceptance"></p>
-          <form id="accept-form">
-            <label id="acknowledgment-label" class="exchange-check" hidden>
-              <input type="checkbox" id="lower-deposit-acknowledged">
-              <span id="acknowledgment-text"></span>
-            </label>
-            <p id="accept-help" class="exchange-help"></p>
-            <p id="accept-error" class="exchange-error" role="alert"></p>
-            <button type="submit" id="accept-offer" class="button">Accept current offer</button>
-          </form>
-        </section>
-        <details class="card" id="offer-editor-card">
-          <summary>Propose updated terms</summary>
-          <p>Any changed term creates a new revision and clears both acceptances and the lender's collateral acknowledgment.</p>
-          <p id="draft-status" role="status" class="exchange-help"></p>
-          <form id="offer-form">
-            <fieldset id="offer-fields">
-              <div class="exchange-fields">
-                <div class="exchange-field" data-mode="sale">
-                  <label for="sale-price">Sale price (USD)</label>
-                  <input id="sale-price" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
-                </div>
-                <div class="exchange-field" data-mode="borrow">
-                  <label for="rental-fee">Rental fee (USD)</label>
-                  <input id="rental-fee" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
-                </div>
-                <div class="exchange-field" data-mode="borrow">
-                  <label for="item-value">Agreed item value (USD)</label>
-                  <input id="item-value" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
-                </div>
-                <div class="exchange-field" data-mode="borrow">
-                  <label for="deposit">Simulated deposit (USD)</label>
-                  <input id="deposit" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
-                </div>
-                <div class="exchange-field">
-                  <label for="pickup-spot">Pickup meeting spot</label><select id="pickup-spot" required></select>
-                </div>
-                <div class="exchange-field">
-                  <label for="pickup-at">Pickup time (Eastern)</label><input id="pickup-at" type="datetime-local" required>
-                </div>
-                <div class="exchange-field" data-mode="borrow">
-                  <label for="return-spot">Return meeting spot</label><select id="return-spot"></select>
-                </div>
-                <div class="exchange-field" data-mode="borrow">
-                  <label for="return-deadline">Return deadline (Eastern)</label><input id="return-deadline" type="datetime-local">
-                </div>
-              </div>
-              <p class="exchange-help">Times use America/New_York. Check the displayed meeting times before accepting.</p>
-              <p id="meeting-notes" class="exchange-help"></p>
-              <div class="exchange-field">
-                <label for="condition">Agreed condition</label>
-                <select id="condition"><option value="">Unknown / needs confirmation</option><option value="new">New</option><option value="like_new">Like new</option><option value="good">Good</option><option value="fair">Fair</option><option value="worn">Worn</option></select>
-              </div>
-              <div class="exchange-field"><label for="accessories">Included accessories (one per line)</label><textarea id="accessories" rows="2"></textarea></div>
-              <div class="exchange-field"><label for="known-defects">Known defects (one per line)</label><textarea id="known-defects" rows="2"></textarea></div>
-              <p id="draft-deposit" class="exchange-help"></p>
-              <p id="offer-error" class="exchange-error" role="alert"></p>
-              <div class="exchange-actions"><button type="submit" class="button">Propose terms</button><button type="button" id="reset-draft">Use current terms</button></div>
-            </fieldset>
-          </form>
-        </details>
-        <details class="card">
-          <summary>Offer history</summary>
-          <div id="offer-history"></div>
-        </details>
-      </div>
-      <section class="card conversation-pane">
-        <h2>Private messages</h2>
-        <p class="exchange-help">Only you and the other participant can read this conversation. Messages refresh every five seconds.</p>
-        <p id="message-status" role="status"></p>
-        <ol id="message-list" class="exchange-messages" aria-label="Private conversation"></ol>
-        <form id="message-form">
-          <fieldset id="message-fields">
-            <div class="exchange-field"><label for="message-body">Message</label><textarea id="message-body" rows="3" maxlength="4000" required></textarea></div>
-            <p id="message-error" class="exchange-error" role="alert"></p>
-            <button type="submit" class="button">Send message</button>
-          </fieldset>
-        </form>
-      </section>
-    </div>
-    <div class="exchange-lifecycle">
     <section class="card" id="reservation-notice" hidden>
       <h2>Item reserved</h2>
       <p>Both participants accepted the same offer revision. The item is reserved for this exchange.</p>
@@ -166,6 +76,104 @@
       <p id="dispute-reason"></p>
       <p>The item remains reserved for manual review. A dispute never automatically triggers a charge. No real funds are reserved or charged.</p>
     </section>
+    <section class="card" id="cancel-card" hidden>
+      <h2 id="cancel-heading">Cancel before pickup</h2>
+      <p id="cancel-help">Either participant can cancel before anyone confirms pickup. An unused reservation is released. No cancellation charge is triggered.</p>
+      <form id="cancel-form">
+        <fieldset id="cancel-fields">
+          <div class="exchange-field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" maxlength="2000" rows="2" required></textarea></div>
+          <button type="submit" id="cancel-exchange">Cancel exchange</button>
+        </fieldset>
+      </form>
+      <p id="cancel-error" class="exchange-error" role="alert"></p>
+    </section>
+    <div class="exchange-layout">
+      <div>
+        <section class="card">
+          <h2 id="offer-heading">Current offer</h2>
+          <p id="pricing-notice" class="exchange-help">Insufficient comparable data. No validated price range is attached to this offer.</p>
+          <dl id="offer-summary" class="exchange-terms"></dl>
+          <p id="deposit-status" class="exchange-help"></p>
+          <p id="owner-acceptance"></p>
+          <p id="requester-acceptance"></p>
+          <form id="accept-form">
+            <label id="acknowledgment-label" class="exchange-check" hidden>
+              <input type="checkbox" id="lower-deposit-acknowledged">
+              <span id="acknowledgment-text"></span>
+            </label>
+            <p id="accept-help" class="exchange-help"></p>
+            <p id="accept-error" class="exchange-error" role="alert"></p>
+            <button type="submit" id="accept-offer" class="button">Accept current offer</button>
+          </form>
+        </section>
+        <section class="card" id="offer-editor-card">
+          <h2>Propose updated terms</h2>
+          <p>Any changed term creates a new revision and clears both acceptances and the lender's collateral acknowledgment.</p>
+          <p id="draft-status" role="status" class="exchange-help"></p>
+          <form id="offer-form">
+            <fieldset id="offer-fields">
+              <div class="exchange-fields">
+                <div class="exchange-field" data-mode="sale">
+                  <label for="sale-price">Sale price (USD)</label>
+                  <input id="sale-price" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="rental-fee">Rental fee (USD)</label>
+                  <input id="rental-fee" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="item-value">Agreed item value (USD)</label>
+                  <input id="item-value" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="deposit">Simulated deposit (USD)</label>
+                  <input id="deposit" type="number" min="0" max="1000000" step="0.01" inputmode="decimal">
+                </div>
+                <div class="exchange-field">
+                  <label for="pickup-spot">Pickup meeting spot</label><select id="pickup-spot" required></select>
+                </div>
+                <div class="exchange-field">
+                  <label for="pickup-at">Pickup time (Eastern)</label><input id="pickup-at" type="datetime-local" required>
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="return-spot">Return meeting spot</label><select id="return-spot"></select>
+                </div>
+                <div class="exchange-field" data-mode="borrow">
+                  <label for="return-deadline">Return deadline (Eastern)</label><input id="return-deadline" type="datetime-local">
+                </div>
+              </div>
+              <p class="exchange-help">Times use America/New_York. Check the displayed meeting times before accepting.</p>
+              <p id="meeting-notes" class="exchange-help"></p>
+              <div class="exchange-field">
+                <label for="condition">Agreed condition</label>
+                <select id="condition"><option value="">Unknown / needs confirmation</option><option value="new">New</option><option value="like_new">Like new</option><option value="good">Good</option><option value="fair">Fair</option><option value="worn">Worn</option></select>
+              </div>
+              <div class="exchange-field"><label for="accessories">Included accessories (one per line)</label><textarea id="accessories" rows="2"></textarea></div>
+              <div class="exchange-field"><label for="known-defects">Known defects (one per line)</label><textarea id="known-defects" rows="2"></textarea></div>
+              <p id="draft-deposit" class="exchange-help"></p>
+              <p id="offer-error" class="exchange-error" role="alert"></p>
+              <div class="exchange-actions"><button type="submit" class="button">Propose terms</button><button type="button" id="reset-draft">Use current terms</button></div>
+            </fieldset>
+          </form>
+        </section>
+        <section class="card">
+          <h2>Offer history</h2>
+          <div id="offer-history"></div>
+        </section>
+      </div>
+      <section class="card conversation-pane">
+        <h2>Private messages</h2>
+        <p class="exchange-help">Only you and the other participant can read this conversation. Messages refresh every five seconds.</p>
+        <p id="message-status" role="status"></p>
+        <ol id="message-list" class="exchange-messages" aria-label="Private conversation"></ol>
+        <form id="message-form">
+          <fieldset id="message-fields">
+            <div class="exchange-field"><label for="message-body">Message</label><textarea id="message-body" rows="3" maxlength="4000" required></textarea></div>
+            <p id="message-error" class="exchange-error" role="alert"></p>
+            <button type="submit" class="button">Send message</button>
+          </fieldset>
+        </form>
+      </section>
     </div>
   </div>
 </div>

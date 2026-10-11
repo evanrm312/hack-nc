@@ -981,12 +981,15 @@
         C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: owner.display_name || "Owner" }), C.profileBadge(owner)),
         C.el("span", { className: "cluster" },
           typeof entry.score === "number" ? C.badge("Fit " + entry.score.toFixed(2), "neutral") : null,
-          C.button({ label: service ? "View service" : "View listing", size: "sm", variant: kind === "confirmed" ? "primary" : "default", href: "/listings/" + enc(listing.id || "") })),
+          // Carry the request along so the detail page can link the exchange
+          // to it (source_request_id) and preselect the matched mode.
+          C.button({ label: service ? "View service" : "View listing", size: "sm", variant: kind === "confirmed" ? "primary" : "default",
+            href: "/listings/" + enc(listing.id || "") + "?from_request=" + enc(requestId) + (mode ? "&mode=" + enc(mode) : "") })),
       ];
 
       return C.card({
         variant: ["compact"].concat(kind === "needs" ? ["needs"] : []),
-        media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + (listing.title || "listing") : "" },
+        media: cardMedia(listing),
         title: listing.title || "Untitled listing",
         subtitle: service
           ? serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes)
@@ -1415,6 +1418,56 @@
     modeService.input.addEventListener("change", syncModes);
     syncModes();
 
+    // ---- prefill from a public request (/listings/new?from_request=<id>),
+    // reached from "Post a listing for this" on the feed. Only what the
+    // request publicly says about the kind of thing wanted is copied: the
+    // modes, the category, and a title seed. Everything that describes the
+    // owner's own item (condition, specs, prices, photo) stays blank, so
+    // nothing about the listing is invented from the request.
+    const fromRequestId = new URLSearchParams(window.location.search).get("from_request");
+    if (fromRequestId) prefillFromRequest(fromRequestId);
+    async function prefillFromRequest(id) {
+      const box = C.el("div", { id: "l-from-request" });
+      fieldsBox.prepend(box);
+      C.state.loading(box, "Loading the request you are answering…");
+      try {
+        const request = (await api.get("/api/requests/" + enc(id))).request;
+        const service = isServiceRequest(request);
+        const modes = cleanModes(request.modes);
+        const category = request.category || (request.normalized && request.normalized.category) || null;
+        modeService.input.checked = service;
+        modeSale.input.checked = !service && modes.includes("sale");
+        modeBorrow.input.checked = !service && modes.includes("borrow");
+        if (service) {
+          if (isServiceCategory(category)) F.service_category.control.value = category;
+        } else if (category) {
+          const sel = F.category.control;
+          if (!Array.from(sel.options).some((o) => o.value === category)) sel.append(C.el("option", { value: category, text: capitalize(category) }));
+          sel.value = category;
+        }
+        if (category && !F.title.value()) F.title.control.value = service ? serviceCategoryLabel(category) : capitalize(category);
+        syncModes();
+        const specs = Object.entries(request.required_specifications || {});
+        const wants = [service ? serviceCategoryLabel(category) : (category ? capitalize(category) : "an item")]
+          .concat(specs.map(([k, v]) => k.replace(/_/g, " ") + " " + String(v)))
+          .concat(request.needed_by_date ? ["needed by " + formatDateOnly(request.needed_by_date)] : [])
+          .concat(request.area ? ["near " + request.area] : []);
+        C.clear(box);
+        box.append(C.notice("info", C.el("span", {},
+          C.el("strong", { text: "Answering a public request. " }),
+          "Someone needs " + wants.join(", ") + (service ? "" : modes.length ? " (" + modes.map((m) => m === "sale" ? "to buy" : "to borrow").join(" or ") + ")" : "") + ". ",
+          "We prefilled what you offer and the category; describe your own " + (service ? "service" : "item") + " exactly as it is. ",
+          "The requester finds your listing through matching and starts the exchange; nothing is sent to them directly.")));
+        F.title.control.focus();
+        F.title.control.select();
+      } catch (err) {
+        C.clear(box);
+        box.append(C.notice("warn", C.el("span", {}, C.el("strong", { text: "Could not load that request. " }),
+          err instanceof api.ApiError && err.status === 404 ? "It may have been closed or was never public." : C.errorMessage(err),
+          " You can still post a listing from scratch; matching will find the requester if it fits.")));
+      }
+    }
+
     function updateDeposit() {
       const value = C.dollarsToCents(F.proposed_item_value_cents.value());
       let pct = parseInt(F.collateral_percent.value(), 10);
@@ -1661,14 +1714,19 @@
       root.setAttribute("aria-busy", "true");
       C.state.loading(root, "Loading listing…");
       try {
-        const [{ listing }, spotsRes, me] = await Promise.all([
+        // Identity comes from /api/me (the token), never from the page. Keep
+        // the failure so "signed out" and "signed in but not verified" differ.
+        const [{ listing }, spotsRes, meRes] = await Promise.all([
           api.get("/api/listings/" + enc(listingId)),
           api.get("/api/meeting-spots").catch(() => null),
-          api.getToken() ? api.get("/api/me").catch(() => null) : Promise.resolve(null),
+          api.getToken()
+            ? api.get("/api/me").then((r) => ({ profile: r.profile, error: null })).catch((err) => ({ profile: null, error: err }))
+            : Promise.resolve({ profile: null, error: null }),
         ]);
         root.removeAttribute("aria-busy");
-        if (isService(listing)) renderService(listing, spotsRes ? spotsRes.meeting_spots : null, me ? me.profile : null);
-        else render(listing, spotsRes ? spotsRes.meeting_spots : null, me ? me.profile : null);
+        const auth = { signedIn: !!api.getToken(), me: meRes.profile, error: meRes.error };
+        if (isService(listing)) renderService(listing, spotsRes ? spotsRes.meeting_spots : null, auth);
+        else render(listing, spotsRes ? spotsRes.meeting_spots : null, auth);
       } catch (err) {
         root.removeAttribute("aria-busy");
         if (err instanceof api.ApiError && err.status === 404) {
@@ -1679,15 +1737,16 @@
       }
     }
 
-    function render(listing, spots, me) {
+    function render(listing, spots, auth) {
       C.clear(root);
       document.title = listing.title + " · Campus Current";
       const owner = listing.owner || {};
+      const me = auth.me;
       const isMine = me && me.id === listing.owner_id;
       const allowed = listing.allowed_modes || [];
 
       if (params.get("created") === "1") root.append(C.notice("leaf", C.el("span", {}, C.el("strong", { text: "Listing published. " }), "It now appears in search results and on the home page.")));
-      if (params.get("photo") === "failed") root.append(C.notice("warn", "The listing was saved, but the photo upload failed. You can add a photo later."));
+      if (params.get("photo") === "failed") root.append(C.notice("warn", "The listing was saved, but the photo upload failed. You can add one below with Add photo."));
 
       // ---- header
       const badges = [];
@@ -1698,7 +1757,16 @@
 
       const media = C.el("div", { className: "detail-media" + (listing.public_photo_url ? "" : " detail-media--empty") });
       if (listing.public_photo_url) media.append(C.el("img", { src: listing.public_photo_url, alt: "Photo of " + listing.title }));
-      else media.append(C.el("span", { text: "No photo provided" }));
+      else media.append(C.mediaPlaceholder({ category: listing.category, label: isMine ? "No photo yet. Add one so people can see what you are offering." : "No photo provided" }));
+      // Owner: add or replace the photo here; the server swaps the file and
+      // the page reloads from the returned listing.
+      let photoActions = null;
+      if (isMine) {
+        const btn = C.button({ label: listing.public_photo_url ? "Replace photo" : "Add photo", size: "sm", variant: listing.public_photo_url ? "default" : "primary" });
+        btn.addEventListener("click", () => openPhotoDialog(listing, btn, () => load()));
+        photoActions = C.el("div", { className: "detail-photo-actions" }, btn,
+          C.el("span", { className: "muted", text: "Only photos you upload are shown; nothing is filled in automatically." }));
+      }
 
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
@@ -1743,12 +1811,6 @@
         spotsNode = C.el("ul", { className: "spot-list" }, chosen.map((s) => C.el("li", {}, C.el("strong", { text: s.label }), C.el("span", { className: "muted", text: " · " + s.public_area + (s.access_notes ? " · " + s.access_notes : "") }))));
       }
 
-      const startBtn = C.button({ label: "Start exchange", variant: "primary", attrs: { disabled: true, "aria-describedby": "start-hint" } });
-      const startHint = C.el("p", { className: "muted", id: "start-hint", text: isMine
-        ? "This is your own listing."
-        : listing.status !== "available" ? "This item is " + listing.status + " right now."
-        : "Messaging and offers are coming next (exchange room). This button will open a private exchange with the owner." });
-
       const side = C.el("div", { className: "stack" },
         C.el("section", { className: "card card--sky", "aria-labelledby": "terms-heading" },
           C.el("h2", { id: "terms-heading", text: "Terms" }), terms,
@@ -1759,19 +1821,20 @@
           C.el("h2", { id: "owner-heading", text: "Owner" }),
           C.el("div", { className: "cluster" }, C.el("strong", { text: owner.display_name || "Unknown" }), C.profileBadge(owner)),
           C.el("p", { className: "muted", style: { marginTop: "8px" }, text: "A verification badge only confirms a UNC email; it is not proof of student status or trustworthiness." }),
-          C.el("div", { style: { marginTop: "var(--space-3)" } }, startBtn), startHint));
+          exchangeEntry(listing, auth, { label: "Start exchange", noun: "item" })));
 
       root.append(C.el("div", { className: "detail-grid" },
-        C.el("div", { className: "card" }, media, facts),
+        C.el("div", { className: "card" }, media, photoActions, facts),
         side));
       const h1 = root.querySelector("h1"); h1.setAttribute("tabindex", "-1"); h1.focus();
     }
 
     // Service detail: category, price, duration, time windows. No deposit section.
-    function renderService(listing, spots, me) {
+    function renderService(listing, spots, auth) {
       C.clear(root);
       document.title = listing.title + " · Campus Current";
       const owner = listing.owner || {};
+      const me = auth.me;
       const isMine = me && me.id === listing.owner_id;
       if (params.get("created") === "1") root.append(C.notice("leaf", C.el("span", {}, C.el("strong", { text: "Service published. " }), "It now appears in search results and on the home page.")));
 
@@ -1797,9 +1860,6 @@
       else if (!spots) spotsNode = C.el("p", { className: "muted", text: spotIds.size + " preferred spot(s); details could not be loaded." });
       else spotsNode = C.el("ul", { className: "spot-list" }, spots.filter((s) => spotIds.has(s.id)).map((s) => C.el("li", {}, C.el("strong", { text: s.label }), C.el("span", { className: "muted", text: " · " + s.public_area }))));
 
-      const startBtn = C.button({ label: "Request this service", variant: "primary", attrs: { disabled: true, "aria-describedby": "start-hint" } });
-      const startHint = C.el("p", { className: "muted", id: "start-hint", text: isMine ? "This is your own listing." : "Booking a service is coming with the exchange flow." });
-
       const side = C.el("div", { className: "stack" },
         C.el("section", { className: "card card--sky", "aria-labelledby": "terms-heading" },
           C.el("h2", { id: "terms-heading", text: "Terms" }), terms,
@@ -1809,10 +1869,146 @@
         C.el("section", { className: "card card--leaf", "aria-labelledby": "owner-heading" },
           C.el("h2", { id: "owner-heading", text: "Provider" }),
           C.el("div", { className: "cluster" }, C.el("strong", { text: owner.display_name || "Unknown" }), C.profileBadge(owner)),
-          C.el("div", { style: { marginTop: "var(--space-3)" } }, startBtn), startHint));
+          exchangeEntry(listing, auth, { label: "Request this service", noun: "service" })));
 
       root.append(C.el("div", { className: "detail-grid" }, C.el("div", { className: "card" }, facts), side));
       const h1 = root.querySelector("h1"); h1.setAttribute("tabindex", "-1"); h1.focus();
+    }
+
+    // Entry point into the exchange flow (POST /api/exchanges, then
+    // /exchanges/{id}). Shown as a live button only to a signed-in user whose
+    // identity the server confirmed (/api/me 200), who is not the owner, on an
+    // available listing; every other case explains itself in the hint.
+    // ?from_request=<id> (set by the results page) links the exchange to the
+    // user's own request; ?mode=<sale|borrow> preselects a mode.
+    function exchangeEntry(listing, auth, opts) {
+      const MODE_LABEL = { sale: "Buy it", borrow: "Borrow it", service: "Book a session" };
+      const allowed = (listing.allowed_modes || []).filter((m) => MODE_LABEL[m]);
+      const isMine = auth.me && auth.me.id === listing.owner_id;
+      const box = C.el("div", { className: "start-exchange stack--tight" });
+      const hint = (text) => C.el("p", { className: "muted", id: "start-hint", text });
+
+      if (isMine) {
+        box.append(hint("This is your own listing. Only another member can start an exchange for it; manage it from My listings."));
+        return box;
+      }
+      if (listing.status !== "available") {
+        box.append(hint("This " + opts.noun + " is " + String(listing.status).replace(/_/g, " ") + " right now, so a new exchange cannot be started."));
+        return box;
+      }
+      if (!allowed.length) {
+        box.append(hint("This listing has no exchange terms yet."));
+        return box;
+      }
+      if (!auth.signedIn) {
+        box.append(C.button({ label: "Sign in to start an exchange", variant: "primary", href: "/sign-in" }),
+          hint("Browsing is open to everyone. Starting an exchange needs a confirmed UNC email."));
+        return box;
+      }
+      if (!auth.me) {
+        // A token exists but the server did not accept it (401) or the account
+        // is not a verified, allowed-domain user (403).
+        box.append(C.notice("warn", C.el("span", {},
+          C.el("strong", { text: "Cannot start an exchange yet. " }), C.errorMessage(auth.error), " ",
+          C.el("a", { href: "/sign-in", text: "Sign in" }), ".")));
+        return box;
+      }
+
+      // ---- live button
+      let sourceId = params.get("from_request") || null;
+      let mode = allowed.length === 1 ? allowed[0] : (allowed.includes(params.get("mode")) ? params.get("mode") : null);
+      let starting = false;
+      const btn = C.button({ label: opts.label, variant: "primary", attrs: { "aria-describedby": "start-hint start-todo start-error" } });
+      const todo = C.el("p", { className: "field__todo", id: "start-todo" });
+      const errorBox = C.el("div", { className: "notice notice--error", role: "alert", id: "start-error", hidden: true });
+      const statusLine = C.el("span", { className: "muted", "aria-live": "polite" });
+
+      let picker = null;
+      if (allowed.length > 1) {
+        const choices = C.el("div", { className: "choices", role: "radiogroup", "aria-labelledby": "start-mode-legend" });
+        allowed.forEach((m) => {
+          const input = C.el("input", { type: "radio", name: "exchange_mode", value: m });
+          input.checked = m === mode;
+          input.addEventListener("change", () => { if (input.checked) { mode = m; refresh(); } });
+          choices.append(C.el("label", { className: "choice" }, input, C.el("span", { text: MODE_LABEL[m] })));
+        });
+        picker = C.el("fieldset", { className: "start-exchange__modes" },
+          C.el("legend", { id: "start-mode-legend", text: "How do you want it?" }),
+          C.el("p", { className: "field__hint", text: "This listing offers more than one way. Pick one; the terms for that way start the offer." }),
+          choices);
+      }
+
+      const intro = sourceId
+        ? hint("Opens a private exchange with the owner, linked to your request. Terms start from the listing; both of you must accept them.")
+        : hint("Opens a private exchange with the owner where you agree the terms. Both of you must accept before anything is reserved.");
+
+      function refresh() {
+        todo.textContent = mode ? "" : "Choose one way first.";
+        btn.disabled = !mode || starting;
+      }
+      refresh();
+
+      function fail(content, action) {
+        starting = false;
+        C.setBusy(btn, false);
+        refresh();
+        statusLine.textContent = "";
+        C.clear(errorBox);
+        errorBox.append(C.el("div", {}, content, action ? C.el("div", { style: { marginTop: "8px" } }, action) : null));
+        errorBox.hidden = false;
+        errorBox.setAttribute("tabindex", "-1");
+        errorBox.focus();
+      }
+      const reloadBtn = () => C.button({ label: "Reload listing", size: "sm", onClick: load });
+      const dropSourceBtn = () => C.button({ label: "Start without linking the request", size: "sm", onClick: () => { sourceId = null; errorBox.hidden = true; start(); } });
+
+      async function start() {
+        if (starting || !mode) return;
+        starting = true;
+        errorBox.hidden = true;
+        C.setBusy(btn, true, "Starting exchange");
+        statusLine.textContent = "Starting exchange…";
+        const body = { listing_id: listing.id, mode };
+        if (sourceId) body.source_request_id = sourceId;
+        try {
+          const res = await api.post("/api/exchanges", body);
+          const id = res && res.exchange && res.exchange.id;
+          if (!id) { fail("The server did not return an exchange id. Check My exchanges before trying again.", C.button({ label: "My exchanges", size: "sm", href: "/exchanges" })); return; }
+          statusLine.textContent = "Opening your exchange…";
+          window.location.href = "/exchanges/" + enc(id);
+        } catch (err) {
+          if (!(err instanceof api.ApiError)) { fail(C.errorMessage(err)); return; }
+          const aboutSource = err.code === "request_closed"
+            || (err.code === "validation_error" && err.fields && err.fields.source_request_id)
+            || (err.status === 404 && /request/i.test(err.message || ""));
+          if (aboutSource && sourceId) {
+            fail(C.el("span", {}, C.el("strong", { text: "Your request could not be linked. " }),
+              err.code === "request_closed" ? "That request is closed." : (err.fields && err.fields.source_request_id) || err.message || "It was not found.",
+              " You can still start the exchange on its own."), dropSourceBtn());
+          } else if (err.code === "forbidden") {
+            // Owner on their own listing (or similar permission rule); not a sign-in problem.
+            fail(err.message || "You cannot start an exchange for this listing.");
+          } else if (err.status === 401 || err.code === "email_not_confirmed" || err.code === "domain_not_allowed" || err.code === "auth_required" || err.code === "invalid_token") {
+            fail(C.el("span", {}, C.errorMessage(err), " ", C.el("a", { href: "/sign-in", text: "Sign in" }), "."));
+          } else if (err.code === "reservation_conflict" || err.code === "listing_unavailable") {
+            fail(C.el("span", {}, C.el("strong", { text: "No longer available. " }),
+              "Someone else reserved this " + opts.noun + ", or it was withdrawn, since you opened this page. No funds were charged."), reloadBtn());
+          } else if (err.status === 404) {
+            fail("This listing no longer exists.", C.button({ label: "Browse listings", size: "sm", href: "/" }));
+          } else if (err.code === "validation_error") {
+            const fields = err.fields || {};
+            if (fields.mode) fail(C.el("span", {}, C.el("strong", { text: "That way is not offered. " }), "The listing's terms changed; reload to see the current ones."), reloadBtn());
+            else fail("Please fix: " + (Object.entries(fields).map(([k, v]) => k.replace(/_/g, " ") + ": " + v).join("; ") || err.message || "the request was invalid."));
+          } else {
+            fail(C.errorMessage(err), err.status === 409 ? reloadBtn() : null);
+          }
+        }
+      }
+      btn.addEventListener("click", start);
+
+      if (picker) box.append(picker);
+      box.append(todo, C.el("div", { className: "cluster", style: { marginTop: "var(--space-2)" } }, btn, statusLine), errorBox, intro);
+      return box;
     }
 
     function section(title, node) { return C.el("section", {}, C.el("h2", { style: { fontSize: "1.05rem", marginBottom: "6px" }, text: title }), node); }
@@ -1829,13 +2025,20 @@
 
   // ============================================================ MY LISTINGS
   function initMyListings(root) {
-    document.title = "My listings · Campus Current";
+    document.title = "My Listings · Campus Current";
     document.body.dataset.page = "my-listings";
     let me = null;
     let listings = [];
     let tab = "active";
-    const ACTIVE = ["available", "reserved"];       // "on loan" keeps the listing reserved
+    let kind = "all";                               // all | items | services
+    // Listing status is available | reserved | sold | withdrawn for every kind
+    // (docs/contracts.md). A loan keeps an item `reserved`; a booked session
+    // keeps a service `reserved` and completion releases it to `available`.
+    // "Scheduled" and "completed" are exchange statuses, not listing ones.
+    const ACTIVE = ["available", "reserved"];
     const PAST = ["sold", "withdrawn"];
+    const KINDS = [["all", "All"], ["items", "Items"], ["services", "Services"]];
+    const ofKind = (l) => kind === "all" || (kind === "services" ? isService(l) : !isService(l));
     const withdrawing = new Set();                  // ids with a withdraw in flight
 
     document.addEventListener("campus:auth-changed", load);
@@ -1860,19 +2063,36 @@
 
     function render() {
       C.clear(root);
-      const counts = { active: listings.filter((l) => ACTIVE.includes(l.status)).length, past: listings.filter((l) => PAST.includes(l.status)).length };
+      const inKind = listings.filter(ofKind);
+      const counts = { active: inKind.filter((l) => ACTIVE.includes(l.status)).length, past: inKind.filter((l) => PAST.includes(l.status)).length };
       const tabs = C.el("div", { className: "tabs", role: "tablist", "aria-label": "Listing status" },
         tabButton("active", "Active", counts.active), tabButton("past", "Past", counts.past));
+      const kindFilter = C.el("div", { className: "cluster mine-kind", role: "group", "aria-label": "Show items or services" },
+        C.el("span", { className: "muted", id: "mine-kind-label", text: "Show" }),
+        KINDS.map(([key, label]) => {
+          const n = key === "all" ? listings.length : listings.filter((l) => (key === "services" ? isService(l) : !isService(l))).length;
+          return C.el("button", {
+            type: "button", className: "btn btn--sm" + (kind === key ? " btn--primary" : ""), "aria-pressed": kind === key ? "true" : "false",
+            onClick: () => { kind = key; render(); root.querySelector('.mine-kind [aria-pressed="true"]').focus(); },
+          }, label + " ", C.badge(String(n), kind === key ? "info" : "neutral"));
+        }));
       root.append(
         C.el("section", { className: "card" },
           C.el("div", { className: "section__head" },
-            C.el("h1", { id: "mine-heading", tabindex: "-1", style: { margin: 0 }, text: "My listings" }),
+            C.el("h1", { id: "mine-heading", tabindex: "-1", style: { margin: 0 }, text: "My Listings" }),
             C.button({ label: "Post a new listing", variant: "primary", size: "sm", href: "/listings/new" })),
-          C.el("p", { className: "lede", text: "Everything you have posted. Withdraw an available listing to hide it; reserved, on-loan, and sold items belong to an exchange and cannot be withdrawn here." }),
-          tabs),
+          C.el("p", { className: "lede", text: "Manage your items and services. Only available listings can be withdrawn; a completed session releases its service listing." }),
+          kindFilter, tabs),
         C.el("div", { id: "mine-grid", className: "grid catalog-list", role: "tabpanel", "aria-live": "polite" }));
       renderGrid();
       if (!root.dataset.focused) { root.dataset.focused = "1"; $("mine-heading").focus(); }
+    }
+
+    // Status wording for a service listing: a reserved service is a scheduled
+    // session (reserve_listing runs when both accept); nothing is invented.
+    function mineStatusBadge(listing) {
+      if (isService(listing) && listing.status === "reserved") return C.badge("Scheduled", "info");
+      return C.statusBadge(listing.status);
     }
 
     function tabButton(key, label, count) {
@@ -1892,9 +2112,12 @@
           action: C.button({ label: "Post a new listing", variant: "primary", size: "sm", href: "/listings/new" }) });
         return;
       }
-      const shown = listings.filter((l) => (tab === "active" ? ACTIVE : PAST).includes(l.status));
+      const shown = listings.filter(ofKind).filter((l) => (tab === "active" ? ACTIVE : PAST).includes(l.status));
       if (!shown.length) {
-        C.state.empty(grid, { title: tab === "active" ? "No active listings" : "No past listings", message: tab === "active" ? "Withdrawn and sold listings are under Past." : "Sold and withdrawn listings will appear here." });
+        const noun = kind === "services" ? "services" : kind === "items" ? "items" : "listings";
+        C.state.empty(grid, { title: tab === "active" ? "No active " + noun : "No past " + noun,
+          message: tab === "active" ? "Withdrawn and sold " + noun + " are under Past." : "Sold and withdrawn " + noun + " will appear here.",
+          action: kind !== "all" ? C.button({ label: "Show all", size: "sm", onClick: () => { kind = "all"; render(); root.querySelector('.mine-kind [aria-pressed="true"]').focus(); } }) : undefined });
         return;
       }
       shown.forEach((l) => grid.append(mineCard(l)));
@@ -1903,22 +2126,40 @@
     function mineCard(listing) {
       const service = isService(listing);
       const badges = service ? [C.modeBadge("service")] : (listing.allowed_modes || []).map((m) => C.modeBadge(m));
-      badges.push(C.statusBadge(listing.status));
+      badges.push(mineStatusBadge(listing));
       if (listing.status === "reserved" && listing.active_exchange_id) badges.push(C.badge("In an exchange", "info"));
 
       const price = C.el("div", { className: "stack--tight" });
-      if (service) price.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.service_price_cents) }), C.el("span", { className: "muted", text: " per session" })));
+      if (service) price.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.service_price_cents) }), C.el("span", { className: "muted", text: " per " + formatDuration(listing.service_duration_minutes) + " session" })));
       if (!service && (listing.allowed_modes || []).includes("sale")) price.append(C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.sale_price_cents) }), C.el("span", { className: "muted", text: " to buy" })));
       if (!service && (listing.allowed_modes || []).includes("borrow")) price.append(C.el("div", {}, C.el("span", { className: "price", text: listing.rental_fee_cents === 0 ? "Free loan" : api.formatCents(listing.rental_fee_cents) + " fee" }), C.el("span", { className: "muted", text: " · value " + api.formatCents(listing.proposed_item_value_cents) })));
 
       const actions = C.el("span", { className: "cluster" });
       actions.append(C.button({ label: "View", size: "sm", href: "/listings/" + enc(listing.id) }));
+      // Photo: items only (services show their category icon). Add from the
+      // placeholder, replace from the actions; both open the same dialog.
+      const media = cardMedia(listing);
+      const onUploaded = (updated) => {
+        listings = listings.map((l) => (l.id === updated.id ? updated : l));
+        render();
+        const next = root.querySelector('[data-photo-for="' + updated.id + '"]');
+        if (next) next.focus();
+      };
+      if (!service && listing.public_photo_url) {
+        const btn = C.button({ label: "Replace photo", size: "sm", attrs: { "data-photo-for": listing.id } });
+        btn.addEventListener("click", () => openPhotoDialog(listing, btn, onUploaded));
+        actions.append(btn);
+      } else if (!service) {
+        const add = C.button({ label: "Add photo", size: "sm", variant: "primary", attrs: { className: "btn btn--sm btn--primary media-action", "data-photo-for": listing.id, "aria-label": "Add a photo to " + listing.title } });
+        add.addEventListener("click", () => openPhotoDialog(listing, add, onUploaded));
+        media.placeholder.action = add;
+      }
       if (listing.status === "available") {
         const btn = C.button({ label: "Withdraw", size: "sm", variant: "danger", attrs: { "aria-describedby": "withdraw-hint" } });
         btn.addEventListener("click", () => confirmWithdraw(listing, btn));
         actions.append(btn);
       } else if (listing.status === "reserved") {
-        actions.append(C.el("span", { className: "muted", text: "Reserved or on loan; manage it in the exchange." }));
+        actions.append(C.el("span", { className: "muted", text: service ? "Session scheduled; manage it in the exchange." : "Reserved or on loan; manage it in the exchange." }));
       } else if (listing.status === "withdrawn") {
         const btn = C.button({ label: "Relist", size: "sm", variant: "leaf" });
         btn.addEventListener("click", () => relist(listing, btn));
@@ -1927,7 +2168,7 @@
 
       return C.card({
         variant: ["compact"],
-        media: service ? undefined : { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + listing.title : "" },
+        media,
         title: C.el("a", { href: "/listings/" + enc(listing.id), text: listing.title }),
         subtitle: categoryLabel(listing.category),
         badges,
@@ -2103,13 +2344,17 @@
         C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "Up to " + api.formatCents(r.budget_cents) : "Not given" }),
         service ? C.el("dt", { text: "Session" }) : null, service ? C.el("dd", { text: formatDuration(r.service_duration_minutes) }) : null);
 
+      // Only the requester can start an exchange, so an owner responds by
+      // posting a listing; matching brings it to the requester.
       let action;
+      let respondNote = null;
       if (mine) {
         action = C.button({ label: "View matches", size: "sm", href: "/results/" + enc(r.id) });
       } else if (me) {
-        action = C.el("span", { className: "cluster" },
-          C.button({ label: "I have this", variant: "leaf", size: "sm", attrs: { disabled: true, "aria-describedby": "have-hint-" + r.id } }),
-          C.el("span", { className: "visually-hidden", id: "have-hint-" + r.id, text: "Responding to requests is coming soon." }));
+        action = C.button({ label: service ? "Offer this service" : "Post a listing for this", variant: "leaf", size: "sm",
+          href: "/listings/new?from_request=" + enc(r.id), attrs: { "aria-describedby": "respond-note-" + r.id } });
+        respondNote = C.el("p", { className: "muted feed-respond", id: "respond-note-" + r.id,
+          text: "Have one? Post it as a listing; the requester finds it through matching and starts the exchange." });
       } else {
         action = C.button({ label: "Sign in to respond", size: "sm", href: "/sign-in" });
       }
@@ -2117,7 +2362,7 @@
       return C.card({
         variant: ["compact"],
         badges,
-        body: [item, facts],
+        body: [item, facts, respondNote],
         footer: [
           C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: requester.display_name || "Member" }), C.profileBadge(requester),
             C.el("span", { className: "muted", text: "Posted " + api.formatTime(r.created_at) })),
@@ -2195,7 +2440,7 @@
         C.state.empty(grid, {
           title: "Nothing listed yet",
           message: "Be the first to offer something for sale or to borrow.",
-          action: C.button({ label: "New listing", variant: "primary", size: "sm", href: "/listings/new" }),
+          action: C.button({ label: "New Listing", variant: "primary", size: "sm", href: "/listings/new" }),
         });
         return;
       }
@@ -2207,6 +2452,108 @@
     }
   }
 
+  // ---------------------------------------------------------- LISTING PHOTOS
+  // Only photos the owner uploaded (listing.public_photo_url) are ever shown;
+  // nothing is fetched from the web or generated. Cards without one get the
+  // category placeholder from components.mediaPlaceholder.
+  function photoLimitBytes() {
+    return Math.min(Number((window.CAMPUS_CONFIG || {}).max_upload_bytes) || Infinity, 5 * 1024 * 1024);
+  }
+  function cardMedia(listing) {
+    if (listing.public_photo_url) return { src: listing.public_photo_url, alt: "Photo of " + (listing.title || "listing") };
+    return isService(listing)
+      ? { placeholder: { category: listing.category, kind: "service", label: serviceCategoryLabel(listing.category) } }
+      : { placeholder: { category: listing.category } };
+  }
+
+  // Add or replace a listing's photo through POST /api/listings/{id}/photo
+  // (owner only; the server swaps the file and returns the updated listing).
+  // onUploaded(listing) receives the server's listing.
+  function openPhotoDialog(listing, opener, onUploaded) {
+    const limit = photoLimitBytes();
+    const limitMb = Math.round(limit / (1024 * 1024));
+    const hasPhoto = !!listing.public_photo_url;
+    const field = C.field({ id: C.nextId("photo"), label: hasPhoto ? "New photo" : "Photo", type: "file", required: true,
+      attrs: { accept: "image/jpeg,image/png,image/webp" },
+      hint: "JPEG, PNG, or WebP up to " + limitMb + " MB. It is shown publicly on the listing. Only photos you upload are ever shown; nothing is filled in for you." });
+    const preview = C.el("div", { className: "photo-preview", hidden: true }, C.el("img", { alt: "Preview of the chosen photo" }));
+    const errorBox = C.el("div", { className: "notice notice--error", role: "alert", hidden: true });
+    const current = hasPhoto
+      ? C.el("div", { className: "cluster" }, C.el("div", { className: "photo-preview", style: { marginTop: 0, width: "120px" } }, C.el("img", { src: listing.public_photo_url, alt: "Current photo of " + listing.title })),
+          C.el("span", { className: "muted", text: "Current photo. The new one replaces it." }))
+      : null;
+    let objectUrl = null;
+    let uploading = false;
+    let file = null;
+    const cancel = C.button({ label: "Cancel", onClick: () => dlg.close("cancel") });
+    const submit = C.button({ label: hasPhoto ? "Replace photo" : "Add photo", variant: "leaf", attrs: { disabled: true } });
+
+    function clearPreview() {
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+      preview.hidden = true;
+      file = null;
+      submit.disabled = true;
+    }
+    field.control.addEventListener("change", () => {
+      field.clearError();
+      showNotice(errorBox, null);
+      const chosen = field.control.files[0];
+      clearPreview();
+      if (!chosen) return;
+      if (!/^image\/(jpeg|png|webp)$/.test(chosen.type)) { field.setError("Choose a JPEG, PNG, or WebP image."); field.control.value = ""; return; }
+      if (chosen.size > limit) { field.setError("That photo is over " + limitMb + " MB. Choose a smaller one."); field.control.value = ""; return; }
+      file = chosen;
+      objectUrl = URL.createObjectURL(chosen);
+      preview.querySelector("img").src = objectUrl;
+      preview.hidden = false;
+      submit.disabled = false;
+    });
+
+    const dlg = C.dialog({
+      title: hasPhoto ? "Replace the photo" : "Add a photo",
+      body: C.el("div", { className: "stack--tight" },
+        C.el("p", {}, C.el("strong", { text: listing.title })),
+        current, field.root, preview, errorBox),
+      actions: [cancel, submit],
+      onClose: () => { if (objectUrl) URL.revokeObjectURL(objectUrl); dlg.root.remove(); },
+    });
+    submit.addEventListener("click", async () => {
+      if (uploading || !file) return;
+      uploading = true;
+      C.setBusy(submit, true, "Uploading photo");
+      cancel.disabled = true;
+      showNotice(errorBox, null);
+      try {
+        const data = await api.upload("/api/listings/" + enc(listing.id) + "/photo", "photo", file);
+        dlg.close("done");
+        C.toast(hasPhoto ? "Photo replaced." : "Photo added.", "leaf");
+        if (onUploaded) onUploaded(data.listing);
+      } catch (err) {
+        uploading = false;
+        C.setBusy(submit, false);
+        cancel.disabled = false;
+        if (err instanceof api.ApiError && (err.code === "unsupported_image" || err.code === "payload_too_large")) {
+          field.setError((err.fields && err.fields.photo) || err.message || "That file could not be used.");
+          field.control.focus();
+        } else if (err instanceof api.ApiError && err.code === "validation_error") {
+          field.setError((err.fields && err.fields.photo) || err.message);
+        } else if (err instanceof api.ApiError && err.code === "forbidden") {
+          showNotice(errorBox, "Only the owner can change this listing's photo.");
+        } else if (err instanceof api.ApiError && err.status === 404) {
+          showNotice(errorBox, "This listing no longer exists.");
+        } else if (C.isAuthError(err)) {
+          if (err.status === 401) api.setToken(null);
+          showNotice(errorBox, authMessage(err));
+        } else {
+          showNotice(errorBox, C.errorMessage(err));
+        }
+      }
+    });
+    dlg.open(opener);
+    field.control.focus();
+    return dlg;
+  }
+
   function listingCard(listing) {
     const owner = listing.owner || {};
     if (isService(listing)) {
@@ -2215,6 +2562,7 @@
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
       return C.card({
         variant: ["compact"], interactive: true,
+        media: cardMedia(listing),
         title: C.el("a", { className: "card__link", href: "/listings/" + enc(listing.id), text: listing.title }),
         badges,
         body: [
@@ -2252,7 +2600,7 @@
 
     return C.card({
       variant: ["compact"], interactive: true,
-      media: { src: listing.public_photo_url, alt: listing.public_photo_url ? "Photo of " + listing.title : "" },
+      media: cardMedia(listing),
       title, badges,
       body: [meta, money, specList],
       footer: [C.el("span", { className: "muted", text: owner.display_name || "Owner" }), C.profileBadge(owner)],

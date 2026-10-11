@@ -27,8 +27,7 @@
       <div class="desktop-window">
         <div class="window-titlebar">
           <span class="window-emblem">{{ icon('leaf') }}</span>
-          <span>{% block window_title %}{% if request.path == '/' %}Campus exchange{% elif request.path == '/requests' %}Public requests{% elif request.path == '/listings/new' %}New listing{% elif request.path == '/listings/mine' %}My listings{% elif request.path.startswith('/listings/') %}Listing details{% elif request.path == '/sign-in' %}Your account{% elif request.path == '/exchanges' %}My exchanges{% elif request.path.startswith('/exchanges/') %}Private exchange{% else %}Request workspace{% endif %}{% endblock %}</span>
-          <span class="window-context">Campus Current</span>
+          <span>{% block window_title %}{% if request.path == '/' %}Campus Exchange{% elif request.path == '/requests' %}Public Requests{% elif request.path == '/listings/new' %}New Listing{% elif request.path == '/listings/mine' %}My Listings{% elif request.path.startswith('/listings/') %}Listing Details{% elif request.path == '/sign-in' %}Your Account{% elif request.path == '/exchanges' %}My Exchanges{% elif request.path.startswith('/exchanges/') %}Private Exchange{% else %}Request Workspace{% endif %}{% endblock %}</span>
         </div>
         <div class="window-toolbar">
           <a href="{{ url_for('pages.home') }}">{{ icon('home') }} Campus</a>
@@ -48,23 +47,23 @@
     <div class="start-menu__title">{{ icon('leaf') }} Campus Current</div>
     <div class="start-menu__body">
       <nav aria-label="Launcher destinations">
-        <a href="/">{{ icon('home') }}<span>Home<small>Describe what you need</small></span></a>
-        <a href="/requests">{{ icon('requests') }}<span>Public requests<small>See what campus needs</small></span></a>
-        <a href="/listings/new">{{ icon('add') }}<span>New listing<small>Offer an item or a service</small></span></a>
-        <a href="/listings/mine">{{ icon('listing') }}<span>My listings<small>Manage your offerings</small></span></a>
-        <a href="/exchanges">{{ icon('exchange') }}<span>My exchanges<small>Private agreements and messages</small></span></a>
+        <a href="/">{{ icon('home') }}<span>Home<small>Make a request</small></span></a>
+        <a href="/requests">{{ icon('requests') }}<span>Public Requests<small>Browse campus needs</small></span></a>
+        <a href="/listings/new">{{ icon('add') }}<span>New Listing<small>Offer an item or service</small></span></a>
+        <a href="/listings/mine">{{ icon('listing') }}<span>My Listings<small>Manage your listings</small></span></a>
+        <a href="/exchanges">{{ icon('exchange') }}<span>My Exchanges<small>Agreements and messages</small></span></a>
       </nav>
-      <div class="start-menu__aside"><span class="start-nature">{{ icon('leaf') }}</span><h2>Your workspace</h2><p>Requests, listings, and private exchanges in one place.</p><a href="/sign-in">{{ icon('user') }} Your account</a></div>
+      <div class="start-menu__aside"><span class="start-nature">{{ icon('leaf') }}</span><h2>Your Workspace</h2><p>Requests, listings, and private exchanges.</p><a href="/sign-in">{{ icon('user') }} Your Account</a></div>
     </div>
   </section>
   <nav class="taskbar" aria-label="Primary">
     <button class="start-orb" id="start-toggle" type="button" aria-expanded="false" aria-controls="start-menu" aria-label="Open Campus menu">{{ icon('leaf') }}</button>
     <div class="taskbar__tasks" id="primary-nav">
-      {% for href, label, glyph in [('/', 'Home', 'home'), ('/requests', 'Public requests', 'requests'), ('/listings/new', 'New listing', 'add'), ('/listings/mine', 'My listings', 'listing'), ('/exchanges', 'My exchanges', 'exchange')] %}
+      {% for href, label, glyph in [('/', 'Home', 'home'), ('/requests', 'Public Requests', 'requests'), ('/listings/new', 'New Listing', 'add'), ('/listings/mine', 'My Listings', 'listing'), ('/exchanges', 'My Exchanges', 'exchange')] %}
       <a class="task-button" href="{{ href }}"{% if request.path == href or (href == '/exchanges' and request.path.startswith('/exchanges/')) %} aria-current="page"{% elif href == '/' and (request.path.startswith('/results/') or (request.path.startswith('/listings/') and request.path not in ['/listings/mine', '/listings/new'])) %} aria-current="location"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
       {% endfor %}
     </div>
-    <a class="taskbar__account"{% if request.path == '/sign-in' %} aria-current="page"{% endif %} href="{{ url_for('pages.sign_in') }}">{{ icon('user') }}<span id="nav-sign-in">Sign in</span></a>
+    <a class="taskbar__account"{% if request.path == '/sign-in' %} aria-current="page"{% endif %} href="{{ url_for('pages.sign_in') }}">{{ icon('user') }}<span id="nav-sign-in">Sign In</span></a>
   </nav>
   <script>window.CAMPUS_CONFIG = {{ public_config | tojson }};</script>
   <script src="{{ url_for('static', filename='js/api.js') }}"></script>
