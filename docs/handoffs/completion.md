@@ -4,7 +4,9 @@
 
 Initial baseline: `origin/main` **3fb6df2**. PR #17 landed during final handoff;
 latest main **5597874** is merged into this branch without changing catalog records/assets.
-Final functional code tested: **2813c560acc149bdaeffee655848edf92f8c31af**.
+Full Python/flow checkout tested: **2813c560acc149bdaeffee655848edf92f8c31af**.
+Final UI copy alignment: **e5640fb87aab6235901f8dd42d21887403ff1ff7**, syntax
+checked and visually reviewed at desktop/mobile widths; backend behavior unchanged.
 Documentation is committed separately afterward. All changes remain on the
 feature branch; main and the older Aero worktree are untouched. No merge or deployment.
 
@@ -39,7 +41,8 @@ removed; listing/result context retains listing, mode and source request.
 Specifications are collapsed disclosures with entered-value summaries and
 error expansion. Repeated browsing notices are removed; sandbox identities
 stay truthful and agreement controls retain the simulated-payment disclosure.
-Listing copy says **Proposed item value**, not an already agreed value.
+Listing copy says **Item value (required)** with “Proposed value” guidance;
+the detail says **Proposed item value**. Borrowing inputs now align.
 
 ## Persisted functionality and contracts
 
@@ -109,7 +112,7 @@ before querying public catalog/matches. The combined suite passes.
 | Final notification ownership/condition acknowledgement tests at b4d6f77 | **9 passed** | Isolated data; mocked providers |
 | Final service/location/notification tests including offer retry at def3034 | **26 passed** | Isolated data; mocked providers |
 | Storage/publication fault-injection tests at 5f0c10f | **22 passed** | Local writes real; Supabase upload/cleanup mocked |
-| Node auth, launcher and purchase-history harnesses at 2813c56 | **15 passed, 0 failed, 0 skipped** | DOM/SDK/network mocked |
+| Node auth, launcher and purchase-history harnesses at e5640fb | **15 passed, 0 failed, 0 skipped** | DOM/SDK/network mocked |
 | JS syntax | **11 files passed** | `node --check static/js/*.js` individually |
 | Empty SQLite migration chain | **Passed inside full suite** | Through head c705exchangekeys; item/service schema columns verified |
 | Firefox page journeys, rerun at 2813c56 | **41/41 assertions passed** | Sandbox auth, isolated local API/storage, inference fallback |
@@ -118,8 +121,8 @@ before querying public catalog/matches. The combined suite passes.
 | Reduced-motion, closed-service controls, unknown safety and layout | **9/9 passed** | Actual Firefox reduced-motion preference |
 | Ambiguous-date acknowledgement + lost-response retry | **6/6 passed** | Gemini response mocked; request persistence/idempotency real |
 | `git diff --check` | **Passed** | Working diff and baseline diff |
-| Live text normalization API | **200, source gemini** | Real Gemini key server-side; sandbox API identity |
-| Live multipart photo normalization API | **200, source gemini** | Real Gemini, existing licensed leaves photo, no persistence |
+| Live text normalization API, repeated after latest-main reconciliation | **200, source gemini** | Real Gemini key server-side; sandbox API identity |
+| Live multipart photo normalization API, repeated after latest-main reconciliation | **200, source gemini** | Real Gemini, existing licensed leaves photo, no persistence |
 
 The full suite emits one existing Google SDK Python deprecation warning.
 `TEST_DATABASE_URL` is unset: the dedicated PostgreSQL migration/persistence
