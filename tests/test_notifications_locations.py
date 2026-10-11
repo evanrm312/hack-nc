@@ -141,3 +141,18 @@ def test_unchanged_service_offer_retry_preserves_acceptance_and_notifications(cl
     with app.app_context():
         from server.models import OfferRevision
         assert db.session.query(OfferRevision).filter_by(exchange_id=exchange['id']).count()==1
+
+
+def test_condition_acknowledgement_notifies_only_the_new_confirmation(client,alice,bob,app):
+    from tests.test_exchanges import ready_exchange, accept, photo_upload, handoff
+    with app.app_context():
+        spot=MeetingSpot(label='QA public spot',public_area='Campus')
+        db.session.add(spot);db.session.commit();spot_id=spot.id
+    exchange=ready_exchange(client,alice,bob,spot_id,mode='sale')
+    accept(client,exchange['id'],alice);accept(client,exchange['id'],bob)
+    assert photo_upload(client,exchange['id'],alice).status_code==201
+    assert handoff(client,exchange['id'],alice).status_code==200
+    assert handoff(client,exchange['id'],bob).status_code==200
+    for participant in [alice,bob]:
+        rows=[n for n in notices(client,participant)['notifications'] if n['kind']=='condition_confirmation']
+        assert len(rows)==1

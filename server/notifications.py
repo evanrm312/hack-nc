@@ -65,5 +65,7 @@ def exchange_notifications(session, flush_context, instances):
                 if obj in session.new:
                     emit(exchange,'confirmation_required','evidence:' + obj.id)
                 elif state.attrs.acknowledged_by.history.has_changes():
-                    for participant in (obj.acknowledged_by or {}):
-                        emit(exchange,'condition_confirmation',f'evidence-confirm:{obj.id}:{participant}')
+                    history = state.attrs.acknowledged_by.history
+                    previous = history.deleted[0] if history.deleted else {}
+                    if actor.id in (obj.acknowledged_by or {}) and actor.id not in previous:
+                        emit(exchange,'condition_confirmation',f'evidence-confirm:{obj.id}:{actor.id}')
