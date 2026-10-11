@@ -173,10 +173,7 @@ img { max-width: 100%; display: block; }
 .brand__tag { font-weight: 500; font-size: .8rem; color: var(--ink-muted); display: none; }
 
 .nav-toggle { grid-area: toggle; justify-self: end; }
-/* The <nav> element is the grid item (the ul inside it is not), so place it
-   explicitly; otherwise it auto-places into the brand column and widens it. */
-.aero-header__inner > nav { grid-area: nav; min-width: 0; }
-.nav { display: none; flex-wrap: wrap; gap: var(--space-1); padding: 0; margin: 0; list-style: none; }
+.nav { grid-area: nav; display: none; flex-wrap: wrap; gap: var(--space-1); padding: 0; margin: 0; list-style: none; }
 .nav[data-open="true"] { display: flex; flex-direction: column; }
 .nav a {
   display: block; padding: 8px 14px; border-radius: var(--r-pill); text-decoration: none;
@@ -203,12 +200,7 @@ img { max-width: 100%; display: block; }
   .session { justify-content: flex-end; }
 }
 @media (min-width: 720px) and (max-width: 1179px) {
-  /* One row of links between the two phone and wide layouts: no wrapping,
-     slightly tighter pills so six links (incl. Account) fit at 720px. */
-  /* Brand in a flexible column so the full-width nav row cannot inflate it. */
-  .aero-header__inner { grid-template-columns: minmax(0, 1fr) auto; }
-  .nav { justify-content: center; flex-wrap: nowrap; min-width: 0; }
-  .nav a { white-space: nowrap; padding: 8px 10px; font-size: .95rem; }
+  .nav { justify-content: center; }
 }
 @media (min-width: 1180px) {
   .aero-header__inner {
@@ -230,12 +222,6 @@ main.shell-main {
   padding: var(--space-5) var(--space-4) var(--space-7);
 }
 main.shell-main:focus { outline: none; }
-
-/* Headings that receive programmatic focus (page load, "Update results") show
-   the ring only after the user has used the keyboard; components.js sets
-   html[data-input] from the last keydown / pointerdown. */
-:is(h1, h2)[tabindex="-1"]:focus-visible { box-shadow: none; }
-html[data-input="keyboard"] :is(h1, h2)[tabindex="-1"]:focus-visible { box-shadow: var(--focus); }
 
 /* Legacy alias from Person 1's stub shell. */
 main.shell { max-width: var(--shell-max); margin: 0 auto; padding: var(--space-4); }
@@ -733,11 +719,3 @@ input[type="range"].range:focus-visible { box-shadow: var(--focus); }
 .proposal--dismissed { border-style: solid; border-color: var(--line-strong); background: #f3f6f8; }
 .proposal--dismissed .proposal__attr { text-decoration: line-through; color: var(--ink-muted); }
 @media (max-width: 480px) { .proposal { grid-template-columns: 1fr; } }
-
-/* ---------------------------------------------------- exchange entry points */
-.start-exchange { margin-top: var(--space-3); }
-.start-exchange__modes { margin: 0; }
-.start-exchange__modes legend { font-weight: 600; }
-.start-exchange .notice { margin-top: var(--space-2); }
-.feed-respond { font-size: .9rem; margin: 0; }
-.mine-kind { margin-top: var(--space-3); }
