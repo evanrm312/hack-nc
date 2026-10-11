@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone as utc
+from datetime import datetime, timedelta, timezone as utc
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -96,6 +96,22 @@ class AmbiguousDate(Structured):
         return utc_date(value)
 
 
+class ServiceWindow(Structured):
+    start: str
+    end: str
+
+    @field_validator('start', 'end')
+    @classmethod
+    def validate_date(cls, value):
+        return utc_date(value)
+
+    @model_validator(mode='after')
+    def validate_interval(self):
+        if datetime.fromisoformat(self.start.replace('Z', '+00:00')) >= datetime.fromisoformat(self.end.replace('Z', '+00:00')):
+            raise ValueError('Window end must follow start')
+        return self
+
+
 class Extraction(Structured):
     modes: list[Literal['sale', 'borrow', 'service']] | None
     category: str | None
@@ -109,6 +125,8 @@ class Extraction(Structured):
     area: str | None
     ambiguous_dates: list[AmbiguousDate]
     follow_up_questions: list[str]
+    service_duration_minutes: int | None = Field(default=None, strict=True, ge=1, le=1440)
+    service_time_windows: list[ServiceWindow] | None = None
 
     @field_validator('budget_dollars', 'max_deposit_dollars')
     @classmethod
@@ -131,6 +149,10 @@ class Extraction(Structured):
         if self.modes and 'service' in self.modes:
             if self.modes != ['service'] or self.max_deposit_dollars is not None or self.use_start or self.use_end:
                 raise ValueError('Services cannot have item modes, deposits, or loan dates')
+            if self.category not in (None, 'tutoring', 'proofreading', 'moving help'):
+                raise ValueError('Unsupported service category')
+        elif self.service_duration_minutes is not None or self.service_time_windows is not None:
+            raise ValueError('Service fields require service mode')
         for specs in (self.required_specifications, self.preferred_specifications):
             if len({s.name for s in specs}) != len(specs):
                 raise ValueError('Duplicate specifications')
@@ -147,6 +169,14 @@ trouser_size, color, type. Size is required; colors are preferred unless mandato
 For a service request, use only mode service and category tutoring, proofreading,
 or moving help. Never assign a deposit, agreed item value, condition, or loan dates
 to a service. Do not mix service with sale or borrow modes.
+Extract service_duration_minutes only from an explicitly supplied duration, using
+integer minutes (1-1440). Never assume one hour, a tutoring subject, course, language,
+session length or other requirement. service_time_windows contains only explicitly
+acceptable session intervals with start/end; unknown is null. A deadline such as
+'by Friday' goes in needed_by and ambiguous_dates, NEVER an availability window.
+Relative session times need ambiguous_dates and confirmation. Use subject as a
+required specification only when the user supplies it. Ask focused questions for
+missing subject (tutoring), document/work scope (proofreading), or moving scope.
 Extract monetary limits as decimal USD dollar strings, NOT cents. Under $20 means
 budget_dollars "20". Budget is sale price/rental fee/service price; refundable deposit is separate,
 never inferred from budget. Free is "0". Never infer an unmentioned borrowing duration.
@@ -175,14 +205,122 @@ def normalize_request(text: str, now: datetime, timezone: str) -> dict:
             return manual(text)
         local_now = now.astimezone(ZoneInfo(timezone))
         extracted = _extract(text, local_now, timezone, key)
+        extracted = _validate_weekdays(extracted, text, local_now)
         return _to_request(extracted, text)
     except Exception:
         # Never expose SDK errors, credentials, or unvalidated response content.
         return manual(text)
 
 
+WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+WEEKDAY_PATTERN = re.compile(r'\b(' + '|'.join(WEEKDAYS) + r')\b', re.I)
+
+
+def _validate_weekdays(extracted, text, local_now):
+    """Check named weekdays locally, without interpreting deadlines as windows.
+
+    Multiple weekdays are associated by Gemini's ambiguity text/proposal. If that
+    association is missing, clear the uncertain proposal rather than choose a day.
+    Only full weekday names are supported; no separate abbreviation parser exists.
+    """
+    matches = list(WEEKDAY_PATTERN.finditer(text))
+    if not matches:
+        return extracted
+    data = extracted.model_dump()
+    unique = {m.group().lower() for m in matches}
+    associations = {}
+    changes = {}
+
+    def correct(value, wording, *, explicit_time=True):
+        if value is None:
+            return None
+        named = {m.group().lower() for m in WEEKDAY_PATTERN.finditer(wording)} & unique
+        if not named:
+            named = unique
+        if len(named) != 1:
+            data['follow_up_questions'].append('Please confirm which weekday applies to each proposed date/time.')
+            return None
+        weekday = next(iter(named))
+        proposed = datetime.fromisoformat(value.replace('Z', '+00:00')).astimezone(local_now.tzinfo)
+        if proposed.weekday() == WEEKDAYS.index(weekday):
+            return value
+        # The user's explicit clock time overrides a conflicting model clock.
+        clocks = list(re.finditer(r'\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b', wording, re.I)) if explicit_time else []
+        clock = clocks[0] if len(clocks) == 1 else None
+        hour, minute = proposed.hour, proposed.minute
+        if clock:
+            hour = int(clock[1])
+            minute = int(clock[2] or 0)
+            if not 1 <= hour <= 12 or minute > 59:
+                raise ValueError('Invalid explicit local time')
+            hour = hour % 12 + (12 if clock[3].lower().startswith('p') else 0)
+        days = (WEEKDAYS.index(weekday) - local_now.weekday()) % 7
+        target = (local_now + timedelta(days=days)).replace(hour=hour, minute=minute,
+            second=0 if clock else proposed.second, microsecond=0, fold=proposed.fold)
+        if target.astimezone(utc.utc) <= local_now.astimezone(utc.utc):
+            target += timedelta(days=7)
+        # Nonexistent DST wall times cannot be proposed safely. Repeated times
+        # retain the model's fold and still require explicit confirmation.
+        corrected = target.astimezone(utc.utc)
+        if corrected.astimezone(local_now.tzinfo).replace(tzinfo=None) != target.replace(tzinfo=None):
+            data['follow_up_questions'].append(f'Please provide a valid local time on {weekday.title()}; the proposed time falls in a daylight-saving gap.')
+            return None
+        result = corrected.isoformat().replace('+00:00', 'Z')
+        changes[value] = result
+        return result
+
+    for ambiguity in data['ambiguous_dates']:
+        old = ambiguity['proposed']
+        new = correct(old, ambiguity['text'])
+        if old is not None and WEEKDAY_PATTERN.search(ambiguity['text']):
+            associations[old] = new
+        ambiguity['proposed'] = new
+
+    def field_date(value, explicit_time=True):
+        if value in associations:
+            return associations[value]
+        return correct(value, text, explicit_time=explicit_time)
+
+    for field in ('needed_by', 'use_start', 'use_end'):
+        data[field] = field_date(data[field], explicit_time=field != 'use_end')
+    for window in data['service_time_windows'] or []:
+        old_start, old_end = window['start'], window['end']
+        window['start'] = field_date(old_start)
+        if old_end in associations or len(unique) > 1:
+            window['end'] = field_date(old_end, explicit_time=False)
+        elif window['start'] is not None:
+            # Move the entire local interval; an overnight end belongs to the
+            # following day, not another occurrence of the start weekday.
+            start = datetime.fromisoformat(old_start.replace('Z', '+00:00')).astimezone(local_now.tzinfo)
+            end = datetime.fromisoformat(old_end.replace('Z', '+00:00')).astimezone(local_now.tzinfo)
+            new_start = datetime.fromisoformat(window['start'].replace('Z', '+00:00')).astimezone(local_now.tzinfo)
+            new_end = end + (new_start.replace(tzinfo=None) - start.replace(tzinfo=None))
+            end_utc = new_end.astimezone(utc.utc)
+            if end_utc.astimezone(local_now.tzinfo).replace(tzinfo=None) != new_end.replace(tzinfo=None):
+                window['end'] = None
+                data['follow_up_questions'].append('Please confirm a valid service end time; the proposal falls in a daylight-saving gap.')
+            else:
+                window['end'] = end_utc.isoformat().replace('+00:00', 'Z')
+        if window['start'] is None or window['end'] is None:
+            data['service_time_windows'] = None
+            break
+    # Do not keep stale model-generated confirmation timestamps.
+    for i, question in enumerate(data['follow_up_questions']):
+        for old, new in changes.items():
+            question = question.replace(old, new)
+        data['follow_up_questions'][i] = question
+    if not any(WEEKDAY_PATTERN.search(a['text']) for a in data['ambiguous_dates']):
+        windows = data['service_time_windows'] or []
+        proposal = data['needed_by'] or data['use_start'] or (windows[0]['start'] if windows else None)
+        data['ambiguous_dates'].append(dict(text=', '.join(m.group() for m in matches), proposed=proposal, needs_confirmation=True))
+    return Extraction.model_validate(data)
+
+
 def _to_request(extracted, text):
     result = extracted.model_dump(exclude={'budget_dollars', 'max_deposit_dollars'})
+    if extracted.modes != ['service']:
+        result.pop('service_duration_minutes')
+        result.pop('service_time_windows')
     for field in ('budget', 'max_deposit'):
         amount = getattr(extracted, field + '_dollars')
         result[field + '_cents'] = None if amount is None else int(Decimal(amount) * 100)
@@ -197,6 +335,10 @@ def _to_request(extracted, text):
                        budget_cents='What is your service price budget in USD?',
                        area='Where can the service take place?')
         missing['needed_by'] = 'When do you need the service?'
+        missing['service_duration_minutes'] = 'How many minutes of service do you need?'
+        missing['service_time_windows'] = 'What start and end times are acceptable for the service session?'
+        if extracted.category == 'tutoring' and not result['required_specifications'].get('subject'):
+            result['follow_up_questions'].append('What subject do you need tutoring in?')
     elif extracted.modes and 'borrow' in extracted.modes:
         missing.update(max_deposit_cents='What is the maximum refundable deposit you can afford?',
                        use_start='When does your borrowing period start?',
@@ -205,7 +347,7 @@ def _to_request(extracted, text):
         missing['needed_by'] = 'When do you need the item?'
     questions = result['follow_up_questions']
     for field, question in missing.items():
-        if result[field] is None and question not in questions:
+        if (result[field] is None or (field == 'service_time_windows' and not result[field])) and question not in questions:
             questions.append(question)
     for date in result['ambiguous_dates']:
         questions.append(f"Please confirm the date/time for '{date['text']}': {date['proposed'] or 'provide an explicit date and time'}.")
