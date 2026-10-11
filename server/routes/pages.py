@@ -20,7 +20,7 @@ def _public_config() -> dict:
     }
 
 
-@bp.context_processor
+@bp.app_context_processor
 def _inject_public_config():
     return {"public_config": _public_config()}
 
@@ -63,3 +63,8 @@ def my_exchanges():
 @bp.get("/exchanges/<exchange_id>")
 def exchange_room(exchange_id: str):
     return render_template("exchanges/room.html", exchange_id=exchange_id)
+
+
+@bp.get("/about")
+def about():
+    return render_template("about.html")
