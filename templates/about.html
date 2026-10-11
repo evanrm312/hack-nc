@@ -3,21 +3,78 @@
 {% block page_id %}about{% endblock %}
 {% block window_title %}About Campus Current{% endblock %}
 {% block content %}
-<section class="about-intro" aria-labelledby="about-heading">
-  <div class="about-copy">
-    <span class="about-mark" aria-hidden="true">{{ icon('leaf') }}</span>
-    <h1 id="about-heading">A campus full of possibilities.</h1>
-    <p class="lede">Find what you need in the UNC community. Buy an item, borrow it for a while, or arrange a service.</p>
-    <div class="cluster"><a class="btn btn--primary" href="/#listings-heading">Browse listings</a><a class="btn btn--leaf" href="/">Get started</a></div>
-  </div>
-  <div class="about-nature" role="img" aria-label="Sunlight through green leaves"></div>
-</section>
-<section class="about-guide" aria-labelledby="about-how"><h2 id="about-how">Find it. Agree. Connect.</h2>
-  <dl><dt>{{ icon('listing') }} Buy</dt><dd>Choose a listing and agree on the price and campus meetup.</dd>
-  <dt>{{ icon('exchange') }} Borrow</dt><dd>Agree on the fee, deposit, pickup, and return. Keep condition records private.</dd>
-  <dt>{{ icon('user') }} Services</dt><dd>Agree on a session and confirm together when it’s complete.</dd></dl>
-  <p class="field__hint">Request interpretations are editable proposals. You confirm the details before searching.</p>
-</section>
-<section class="about-community"><h2>Make more of what’s here.</h2><p>Sharing items can extend their use. Campus Current brings requests, listings, and private agreements into one place so the community can connect.</p>
-<h2>The team</h2><p class="about-team">Evan <span>·</span> Aarush <span>·</span> Emily <span>·</span> Sid</p></section>
+<div class="about-page">
+  <section class="about-story" aria-labelledby="about-heading">
+    <figure class="about-team-photo">
+      <img src="{{ url_for('static', filename='assets/team.webp') }}" width="1600" height="1200"
+           alt="The four Campus Current teammates gathered around a table with their laptops." fetchpriority="high">
+      <figcaption>Four students. One campus. A better way to share.</figcaption>
+    </figure>
+    <div class="about-story-copy">
+      <p class="about-eyebrow">Our story</p>
+      <h1 id="about-heading">Built by students,<br>for students.</h1>
+      <p class="about-team">Evan <span>·</span> Aarush <span>·</span> Emily <span>·</span> Sid</p>
+      <p>We’re students at <strong>UNC Chapel Hill</strong> who wanted a better way to safely trade and lend items to others.</p>
+      <p>A suit for one interview. A calculator for one exam. A bike for getting across campus. Sometimes what you need is already here, with someone nearby.</p>
+      <p>We built Campus Current to make those connections easier, with private conversations, clear agreements, and campus meetups.</p>
+      <a class="btn btn--leaf" href="/#listings-heading">{{ icon('exchange') }} Find your next campus connection</a>
+    </div>
+  </section>
+  <section class="about-values" aria-label="What we care about">
+    <article>{{ icon('user') }}<h2>A community, closer.</h2><p>Connect with people on campus, one useful item at a time.</p></article>
+    <article>{{ icon('shield') }}<h2>Clear from the start.</h2><p>Agree on price, condition, pickup, and return. Keep your conversations private.</p></article>
+    <article>{{ icon('leaf') }}<h2>More life in every item.</h2><p>Buy secondhand or borrow for a while. Make more of what’s already here.</p></article>
+  </section>
+  <section class="about-simulation" aria-labelledby="simulation-heading">
+    <div class="about-simulation-heading">
+      <div><p class="about-eyebrow">A month of sharing</p><h2 id="simulation-heading">Small exchanges. Room for real savings.</h2>
+        <p>Explore how a month of buying and borrowing could change what students spend.</p></div>
+      <span class="badge badge--warn">Illustrative simulation</span>
+    </div>
+    <p class="about-simulation-note">These are adjustable assumptions, not actual transactions, market prices, or measured Campus Current savings.</p>
+    <div class="about-simulation-grid">
+      <form id="monthly-simulation" class="about-assumptions" aria-label="Monthly savings assumptions">
+        <fieldset><legend>Imagine your campus community</legend>
+          <div class="about-presets" aria-label="Monthly exchange examples">
+            <button type="button" data-monthly-exchanges="20" aria-pressed="false">Small start <span>20 exchanges</span></button>
+            <button type="button" data-monthly-exchanges="40" aria-pressed="true">Campus circle <span>40 exchanges</span></button>
+            <button type="button" data-monthly-exchanges="100" aria-pressed="false">Growing community <span>100 exchanges</span></button>
+          </div>
+          <label for="monthly-exchanges">Completed exchanges per month <output id="monthly-exchanges-value" for="monthly-exchanges">40</output></label>
+          <input id="monthly-exchanges" type="range" min="0" max="200" step="1" value="40">
+          <label for="replacement-rate">Share replacing a new purchase <output id="replacement-rate-value" for="replacement-rate">60%</output></label>
+          <input id="replacement-rate" type="range" min="0" max="100" step="1" value="60" aria-describedby="replacement-hint">
+          <p id="replacement-hint" class="field__hint">Only count an item someone would otherwise have bought new.</p>
+          <label for="new-item-cost">Average price of that new item <output id="new-item-cost-value" for="new-item-cost">$80</output></label>
+          <input id="new-item-cost" type="range" min="0" max="250" step="1" value="80">
+          <label for="reuse-cost">Average used price or borrowing fee <output id="reuse-cost-value" for="reuse-cost">$25</output></label>
+          <input id="reuse-cost" type="range" min="0" max="250" step="1" value="25">
+        </fieldset>
+      </form>
+      <div class="about-projection">
+        <div class="about-savings" role="status" aria-live="polite" aria-atomic="true">
+          <span id="savings-label">Potential monthly savings</span>
+          <strong id="monthly-savings">$920</strong>
+          <p>Across buyers and borrowers in this scenario.</p>
+        </div>
+        <div class="about-cost-comparison" aria-label="Simulated monthly spending comparison">
+          <div class="about-cost-label"><span>New purchases otherwise made</span><strong id="new-spending">$1,920</strong></div>
+          <div class="about-cost-track"><div id="new-spending-bar" class="about-cost-bar about-cost-bar--new" style="width:100%"></div></div>
+          <div class="about-cost-label"><span>Used purchases &amp; borrowing fees</span><strong id="reuse-spending">$1,000</strong></div>
+          <div class="about-cost-track"><div id="reuse-spending-bar" class="about-cost-bar" style="width:52.0833%"></div></div>
+        </div>
+        <p id="simulation-summary" class="about-projection-summary">40 exchanges. 24 replace a new purchase. $1,920 in new purchases avoided, minus $1,000 in used prices and fees.</p>
+        <p class="field__hint">We count the cost of every exchange, including ones that don’t replace a new purchase.</p>
+      </div>
+    </div>
+    <noscript><p class="simulated-notice">The example above uses 40 exchanges, 60% replacing new purchases, an $80 new price, and a $25 used price or borrowing fee. Enable JavaScript to adjust it.</p></noscript>
+    <details class="about-method"><summary>How the simulation works</summary>
+      <p>New purchases replaced = completed exchanges × replacement share, rounded down to whole purchases. Monthly savings = (new purchases replaced × average new price) − (all exchanges × average used price or borrowing fee).</p>
+      <p>Refundable deposits aren’t expenses. Taxes, travel, repairs, and seller income are excluded. This estimates buyer and borrower spending, not net savings for the whole campus economy. A negative result means additional spending.</p>
+      <p>Sharing can extend an item’s useful life. Carbon savings depend on the item, how long it lasts, and whether it replaces new production; this simulation estimates money only.</p>
+    </details>
+  </section>
+  <div class="about-closing"><p>Something you need. Something someone else can share.</p><a class="btn btn--primary" href="/">Explore Campus Current {{ icon('exchange') }}</a></div>
+</div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/about.js') }}"></script>{% endblock %}
