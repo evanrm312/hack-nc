@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly Campus Current private location cleanup
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=campus-location-cleanup.service
+
+[Install]
+WantedBy=timers.target

@@ -226,59 +226,39 @@ For `STORAGE_BACKEND=supabase`, create two distinct buckets:
 `SUPABASE_PRIVATE_BUCKET=private-evidence` (private). Browser clients must not
 have direct write access to either bucket or direct read access to private
 evidence; only Flask uses the service-role key. A live public upload/retrieval
-check is: sign in, create a listing, upload a PNG through
-`POST /api/listings/<id>/photo` as its owner, then request the returned
+check is: sign in, create a listing, publish its draft with a PNG through
+`POST /api/listings/<id>/publish` as its owner, then request the returned
 `public_photo_url` through Flask and compare the image bytes. Repeat the GET
 after a server restart. The private bucket can be checked for direct anonymous
-denial now; an end-to-end participant evidence check waits for Person 4's
-exchange evidence route. Private `SupabaseStorage.send` also requires
+denial now; an end-to-end participant evidence check requires two consenting real
+accounts and the implemented exchange evidence route. Private `SupabaseStorage.send` also requires
 `authorize_private_read` in the current Flask request. If using local storage
 on a persistent disk, keep `UPLOAD_DIR/private` outside directly served paths.
 
-## Deploy (host pending)
+## Docker deployment preparation
 
-No host has been selected. `Procfile` declares a release command, but whether
-it runs depends on the chosen host; verify its release or predeploy feature
-before relying on it. Configure these environment variables on the host:
-
-| Variable | Value or purpose |
-|---|---|
-| `APP_ENV` | `production`; rejects sandbox auth and development secrets |
-| `SECRET_KEY` | unique, nondevelopment random value |
-| `DATABASE_URL` | deployed PostgreSQL URL using `postgresql+psycopg://` |
-| `AUTH_MODE` | `supabase` |
-| `ALLOWED_EMAIL_DOMAIN` | `unc.edu` |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | project URL and browser-safe anon key |
-| `AUTH_HTTP_TIMEOUT_SECONDS` | optional Auth provider timeout |
-| `STORAGE_BACKEND` | `supabase`, or `local` only with a persistent disk |
-| `SUPABASE_SERVICE_ROLE_KEY` | required for Supabase Storage; server only |
-| `SUPABASE_PUBLIC_BUCKET`, `SUPABASE_PRIVATE_BUCKET` | distinct public/private bucket names |
-| `UPLOAD_DIR` | required persistent path if using `local` storage |
-| `MAX_UPLOAD_BYTES`, `STORAGE_HTTP_TIMEOUT_SECONDS` | optional upload size and storage timeout |
-| `PORT` | supplied by the host for the web process |
-
-`TEST_DATABASE_URL` is only for an isolated test target and must not point to
-the deployed application database. `SANDBOX_USERS` is for local development.
-`GEMINI_API_KEY` is optional for the Person 2 integration and is not needed by
-the auth/storage scaffold. The host must supply `PORT` for the web command:
+Docker runtime, release migrations, readiness, quotas, server-only Supabase
+permissions, backup/recovery and hourly cleanup are documented in
+[docs/deployment.md](docs/deployment.md). `.env.production` must remain private.
+The Docker image is never built with credentials. Do not deploy publicly until
+Evan approves the release and the live verification gates pass.
 
 ```bash
-flask --app server.app db upgrade
-gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2
+docker compose build --pull
+docker compose run --rm --no-deps -T web flask --app server.app db upgrade
+docker compose up -d web
 ```
 
-Run the migration as a deliberate deployment step before starting the new web
-version. On the selected host, confirm how to run that first command once per
-deploy; do not assume the Procfile `release:` entry is honored. Check
-`/healthz`, the real magic-link flow, a public image upload/read, and listing
-persistence after a restart. Deployment and these live checks remain pending.
+`/api/ready` verifies database connectivity and migration head; `/healthz` remains
+process liveness. Supabase Auth site URL/callback allowlist must use the final
+HTTPS origin. No web-worker scheduler or automatic seed runs.
 
 ## Layout
 
 ```
 server/            Flask app, config, db, models, auth, storage, reservation, routes
 server/intelligence/  Person 2: normalize_request, match_listings, evaluate_price
-server/exchanges/  Person 4: exchange workflow (stubs now)
+server/exchanges/  Item and service exchange workflows
 migrations/        Alembic migrations (Person 1)
 templates/, static/  Jinja pages and browser code (base/marketplace: Person 3; exchanges: Person 4; auth: Person 1)
 tests/             pytest

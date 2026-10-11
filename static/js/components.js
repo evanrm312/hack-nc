@@ -485,21 +485,9 @@
     return (cents / 100).toFixed(2).replace(/\.00$/, "");
   }
 
-  // datetime-local value (browser local time) -> ISO UTC with Z, or null.
-  function localToIso(value) {
-    if (!value) return null;
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return undefined;
-    return d.toISOString();
-  }
-  // ISO UTC -> value for <input type="datetime-local"> in the browser's zone.
-  function isoToLocal(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
+  // Every date editor uses campus Eastern time, regardless of browser zone.
+  function localToIso(value) { try { return api.timeToUtc(value); } catch (_) { return undefined; } }
+  function isoToLocal(iso) { return api.timeInput(iso); }
 
   // ----------------------------------------------------- circulation scene
   // circulation({label, autoplay, replayButton, size}) -> {root, play(), stop()}

@@ -101,6 +101,20 @@
     if (event.key === TOKEN_KEY) document.dispatchEvent(new CustomEvent("campus:auth-changed"));
   });
 
+  const zone = "America/New_York";
+  const wallFormat = new Intl.DateTimeFormat("en-CA", {timeZone: zone, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hourCycle:"h23"});
+  function timeInput(iso) {
+    if (!iso || !Number.isFinite(new Date(iso).getTime())) return "";
+    const p = Object.fromEntries(wallFormat.formatToParts(new Date(iso)).map(x => [x.type,x.value]));
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  }
+  function timeToUtc(value) {
+    if (!value) return null;
+    const wall = Date.parse(value + "Z");
+    const candidates = [4,5].map(h => new Date(wall + h*3600000)).filter(d => Number.isFinite(d.getTime()) && timeInput(d.toISOString()) === value);
+    if (candidates.length !== 1) throw new Error("Choose an unambiguous Eastern time outside the daylight-saving change.");
+    return candidates[0].toISOString();
+  }
   window.api = {
     ApiError,
     getToken,
@@ -121,9 +135,18 @@
       if (cents === null || cents === undefined) return "unknown";
       return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
     },
+    timeInput, timeToUtc,
     formatTime: (iso) => {
       if (!iso) return "unknown";
-      return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York" });
+      const date = new Date(iso);
+      if (!Number.isFinite(date.getTime())) return "unknown";
+      return new Intl.DateTimeFormat("en-US", {timeZone: zone, month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit", timeZoneName:"short"}).format(date);
+    },
+    formatTimeRange: (start, end) => {
+      const a = new Date(start), b = new Date(end);
+      if (!start || !end || !Number.isFinite(a.getTime()) || !Number.isFinite(b.getTime()) || b < a) return "unknown";
+      const fmt = new Intl.DateTimeFormat("en-US", {timeZone:zone, month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit", timeZoneName:"short"});
+      return fmt.formatRange(a,b);
     },
   };
 })();

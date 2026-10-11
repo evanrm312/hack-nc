@@ -846,3 +846,61 @@ invalidates that acknowledgement. Visual photo proposals still require Accept or
 Dismiss. Confirmed request creation retains its retry key after a lost response.
 Server validation failures return to editable review rather than silently clearing
 terms or changing the selected mode.
+
+## Production follow-up contracts
+
+### `GET /api/recommendations` (public, optionally personalized)
+
+Returns `{"items":[{"listing":Listing,"reason":"Recently listed","mode":null}],
+"personalized":false,"label":"Browsing suggestions"}`. At most six entries.
+Authenticated responses use only the caller's private signals; every response
+is `private, no-store` with `nosniff`. No signal text, request IDs, scores,
+transaction details or locations are returned.
+
+Eligibility precedes ranking: available and unreserved public listings only;
+new image-required records must have an image; the caller's own listings and
+expired/invalid availability are excluded. Legacy sample inventory is preserved.
+The bounded pool is the newest 200 eligible-status listings (created time then
+ID), with joined owner data. At most ten active draft/open requests updated in
+30 days with no elapsed needed-by date, and twenty completed requester exchanges,
+are fetched in bulk. This is a small discovery window, not an exhaustive match
+search. No Gemini or N+1 per-card query.
+
+Weights: existing deterministic matcher confirmed compatibility = 100;
+conditional compatibility = 65 and explicitly labeled “Confirm details”;
+completed history in the same category **and mode** = 25; recency = 0–10,
+linearly decaying over 30 days. Strongest signal wins, not summed duplicates.
+A same-category known constraint/mode failure is excluded unless another recent
+request provides a valid match. Diversity subtracts 35 for each already selected
+entry in a category. Ties use newest created time, then ascending opaque ID.
+Cold-start entries say “Recently listed”; no popularity or inferred purchases.
+A suggested mode never changes request or offer terms. Previous buys continues
+to include only completed sales where the caller was the requester.
+
+### Notifications and runtime
+
+Notification records additionally return `accessible:boolean`; `url:null` when
+the exchange is deleted or the recipient no longer participates. Such receipts
+remain markable as read. Reading a receipt never emits an event. The inbox joins
+targets in one query; unread counts include older receipts. Polling pauses while
+hidden, resumes on visibility, and stops on sign-out/page exit; late responses
+cannot restore another identity's private content.
+
+`GET /api/ready` exercises the DB and requires the committed Alembic head;
+returns `200 {"status":"ready"}` or `503 {"status":"unavailable"}` with no
+connection details. `/healthz` and `/api/health` remain process liveness only.
+Production normalization quotas are 10/minute and other API writes 60/minute,
+per server-resolved identity (anonymous writes per IP). Fixed minute windows are
+stored transactionally in the DB, across workers. `429 rate_limited` includes
+`Retry-After`; DB quota failures return safe 503. Quotas never authorize an action.
+
+All date editors and displays use America/New_York. Date controls reject DST
+missing/repeated hours; backend inputs remain offset-aware UTC. Compact display
+uses month/day/year, hour/minute, and EST/EDT; ranges share redundant date text.
+
+`/about` is a public introduction; `/` remains the returning user's marketplace.
+
+PostgreSQL application tables are server-only: browser `anon`/`authenticated`
+roles and `PUBLIC` have no table grants, RLS is enabled without client policies,
+and the Flask migration/runtime role must bypass RLS. Storage policies are managed
+separately; public photos may be read anonymously, private evidence cannot.

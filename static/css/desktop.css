@@ -462,3 +462,31 @@ main :is(input,select,textarea,button,a,summary) { scroll-margin-block: 90px; }
 .meeting-picker .campus-map { width:100%; margin:0; }
 .meeting-picker .meeting-list { grid-template-columns:1fr; max-height:420px; overflow:auto; }
 @media(max-width:700px) { .meeting-picker { grid-template-columns:1fr; } .meeting-picker .campus-map { max-width:320px; justify-self:center; } .meeting-picker .meeting-list { max-height:none; } }
+
+/* Time editors have their own layout; specification rows stay compact. */
+.time-windows { min-width: 0; padding: 14px; border-radius: 15px; }
+.time-window-row { grid-template-columns: minmax(0,1fr); padding: 10px; border: 1px solid #b7d1d5; border-radius: 12px; background: #edf6f6; }
+.time-window-field { min-width: 0; display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+.time-window-field input { width: 100%; min-width: 0; max-width: 100%; font-weight: 400; }
+.time-window-row > .btn { justify-self: end; grid-column: 1; }
+.results-overview .section__head { align-items: center; }
+.results-overview h1 { font-size: clamp(27px,2.5vw,36px); }
+.results-workspace > *, #interp-box form, #interp-body { min-width: 0; }
+.results-overview blockquote { overflow-wrap: anywhere; }
+#results-badges { max-width: 100%; }
+@media (min-width: 1100px) { #confirm .time-window-row, .listing-terms-pane .time-window-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } #confirm .time-window-row > .btn, .listing-terms-pane .time-window-row > .btn { grid-column: 1 / -1; } }
+.about-intro { display: grid; grid-template-columns: 1.2fr 1fr; overflow: hidden; border: 1px solid #a6c7cf; border-radius: 22px; background: #f4fbfb; box-shadow: inset 0 2px 0 #fff, 0 8px 18px #32647620; }
+.about-copy { padding: clamp(22px,4vw,44px); }
+.about-copy h1 { max-width: 13em; margin: 15px 0; }
+.about-mark { display: inline-flex; width: 50px; height: 50px; align-items: center; justify-content: center; border-radius: 50%; color: #fff; background: linear-gradient(#96d598,#448c4f); box-shadow: inset 0 2px 2px #ffffffb0, 0 4px 7px #294f3935; }
+.about-mark svg { width: 26px; height: 26px; }
+.about-nature { min-height: 250px; background: url('../assets/leaves.webp') center / cover; border-left: 1px solid #adcabe; }
+.about-guide { margin: 24px 0; }
+.about-guide dl { display: grid; grid-template-columns: 140px minmax(0,1fr); gap: 12px 20px; }
+.about-guide dt { display: flex; align-items: center; gap: 8px; color: #256342; font-weight: 600; }
+.about-guide dt svg { width: 20px; height: 20px; }
+.about-guide dd { margin: 0; }
+.about-community { border-top: 1px solid #b5d0c6; padding-top: 20px; max-width: 740px; }
+.about-community h2 { font-size: 23px; }
+.about-team { font-size: 18px; }.about-team span { padding: 0 8px; color: #58806e; }
+@media (max-width: 600px) { .about-intro { grid-template-columns: 1fr; }.about-nature { min-height: 130px; grid-row: 1; border-left: 0; }.about-guide dl { grid-template-columns: 1fr; gap: 6px; }.about-guide dd { margin-bottom: 12px; } }
