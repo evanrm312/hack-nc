@@ -22,7 +22,7 @@ Built at HackNC 2026.
 ## How we built it
 
 - **Backend:** Python, Flask, SQLAlchemy, Flask-Migrate, Pydantic
-- **Frontend:** Jinja templates, hand-written CSS, vanilla JavaScript, in a Frutiger Aero style
+- **Frontend:** Jinja templates, CSS, vanilla JavaScript, in a Frutiger Aero style
 - **AI:** Gemini 3.5 Flash-Lite through the google-genai SDK, with structured output validated by Pydantic and a fallback to larger Gemini models when the API is busy
 - **Data:** SQLite locally, Supabase (PostgreSQL, Auth, Storage) in production
 - **Hosting:** Render
