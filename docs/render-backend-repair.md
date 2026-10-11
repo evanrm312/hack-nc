@@ -1,189 +1,149 @@
 # Render backend repair
 
-Prepared on `fix/render-backend` from `dd363fd` (PR #20). No production schema,
-configuration, release or catalog mutation was made. The existing
-`c708communitymerge` migration is sufficient; shared models/migrations,
-dependencies, Auth code and Gemini models/timeouts are unchanged.
+Branch `fix/render-backend`, based on `dd363fd` (PR #20). The user approved all
+repair operations on 2026-10-11; merging into `main` still requires approval.
+No new models, migrations, dependencies, Auth logic, Gemini models or timeouts.
 
-## Read-only findings, 2026-10-11
+## Confirmed target and original failure
 
-Live HTTP: `/api/ready` 503; `/api/listings` and `/api/recommendations` 500;
-`/api/health` and `/sign-in` 200. The locally configured Supabase Session pooler
-is `aws-0-us-east-1.pooler.supabase.com:5432`, database `postgres`, user
-`postgres.kkrvurwkufikbpzcbmek`, schema `public`. Its revision is
-`c707browserroles`, without community tables/columns. The deployed-model query
-produces `ProgrammingError`, SQLSTATE `42P01` (undefined table).
-Counts: profiles 3, listings 2, requests 2; exchanges/messages/evidence/reviews 0.
-Chrome DevTools inspection confirmed Render service `srv-db5iu4flk1mc73a5vvig`
-serves `dd363fd77b54efa527a121a8206105fb211e0aad` from `main` and uses exactly
-this database/project. Render logs contain repeated sanitized
-`Unhandled API error (ProgrammingError)` messages. Its pre-deploy command is
-empty, health check is `/api/health`, and automatic deploys are On Commit.
-The deployed `APP_ENV` is `development`; `AUTH_MODE` and `STORAGE_BACKEND` are
-both `supabase`. Gemini, Supabase and application secret keys are present.
-The application secret meets the production minimum length and is not a known
-development placeholder; no secret values were recorded. Production mode must
-be enabled during the approved configuration release.
+Render service `srv-db5iu4flk1mc73a5vvig` serves `https://hack-nc.onrender.com`
+from `main`, commit `dd363fd77b54efa527a121a8206105fb211e0aad` before repair.
+Dashboard environment and the operator connection independently matched:
 
-## 1. Confirm target, backup, approve migration
+- Supabase project `kkrvurwkufikbpzcbmek`.
+- Session pooler `aws-0-us-east-1.pooler.supabase.com:5432`, database `postgres`,
+  username `postgres.kkrvurwkufikbpzcbmek`, schema `public`.
+- Revision `c707browserroles`; deployed community models required c708.
+- Readiness 503, listings/recommendations 500; SQLSTATE `42P01` and sanitized
+  Render `ProgrammingError` logs confirmed missing schema.
+- Original profiles 3, listings 2, requests 2; no exchanges/messages/evidence/reviews.
 
-The existing Render service/database identity is confirmed above. Reconfirm its
-live commit and target immediately before the approved migration.
-Run the operator-only command in its environment using the reviewed build:
+## Production operations completed
 
-```bash
-flask --app server.app backend-diagnostics
-```
+The existing migrations upgraded this target to `c708communitymerge` once.
+Original-column hashes matched every original record across 13 tables before
+and after the targeted import. Club tables have RLS enabled; `anon` and
+`authenticated` have zero public-table grants. Live readiness, listings and
+recommendations returned 200 after upgrade.
 
-It reports `RENDER_GIT_COMMIT`, key presence (no secret values), database/storage
-identity, current/expected revision, counts and sanitized SQLSTATE. Compare that
-identity to Supabase and inspect sanitized Render errors. Confirm the public
-and private Storage buckets retain server-only writes and private read gating.
+The reviewed inventory inserted **52 public demo listings and 12 labeled,
+non-login demo owners**. The two unlicensed-image entries
+`clothing-event-tablecloths` and `dorm-storage-bins-pair` were excluded.
+All 52 public HTTP photo bodies matched the licensed asset SHA-256 values.
+The public catalog now contains 54 listings, including both original listings.
+A fresh dry-run/apply preserved all 52 and inserted/uploaded nothing.
+No clubs, memberships, meeting spots, price references, transactions or reviews
+were seeded. Existing photos and private evidence authorization are unchanged.
 
-A restricted read-only backup of the **locally configured project** is at
-`var/render-backend/configured-supabase-before-c708.dump` (directory 0700,
-file 0600). SHA-256:
-`3b2fed883ad9a98d747685848540d96deda3f7fddcab230fc69d4a2e96182a95`.
-The archive was restored into a separate local `render_backend_restore_test`
-PostgreSQL database. All original backed-up fields survived the c707→c708
-upgrade. Readiness, targeted import, catalog and recommendations passed there;
-that disposable database was removed afterward. After confirming the Render
-target, a fresh backup was taken at 2026-10-11 07:35:15 UTC:
-`var/render-backend/confirmed-render-before-c708-20261011T073515Z.dump`.
-SHA-256: `5ca5e9de6be89b8cf087946df3d3bf5a86f6ef44e7f0a5f754f3401af1282390`.
-Its archive contents are readable. Target/count metadata and original-column
-record hashes are in `var/render-backend/confirmed-render-backup.json` and
-`confirmed-render-record-hashes.json`, with restricted local permissions.
-Encrypt/export the backup through the operator's backup system and confirm the
-hosted recovery point before upgrade. Postgres dumps exclude Auth and Storage objects.
+Restricted operator artifacts live outside Git in `var/render-backend`:
 
-After the actual target and its fresh recoverable backup are confirmed, request
-approval for the single existing migration upgrade:
-
-```bash
-flask --app server.app db upgrade c708communitymerge
-flask --app server.app backend-diagnostics --require-ready
-```
-
-Compare existing records across original columns, not just counts. Check browser
-grants remain revoked and RLS is enabled on clubs/club_memberships. Recheck live
-readiness, catalog and recommendations. Prefer forward repair; do not restore
-over the shared database or downgrade to restore browser grants.
-
-## 2. Approve code release and migration gate
-
-Review/merge/deploy this branch only after approval. Docker packages the four
-fixture banks, 52 licensed images, authoritative provenance and validators.
-No new service, image source or runtime seed is added.
-
-For the existing Render service, propose these settings:
-
-| Setting | Proposed value |
+| Artifact | Evidence |
 | --- | --- |
-| Pre-Deploy Command | `/bin/sh deploy/render-release.sh` |
+| `confirmed-render-before-c708-20261011T073515Z.dump` | 47,856 bytes; readable custom public-schema archive |
+| Backup SHA-256 | `5ca5e9de6be89b8cf087946df3d3bf5a86f6ef44e7f0a5f754f3401af1282390` |
+| `confirmed-render-record-hashes.json` | Original columns and hashes, no raw private records |
+| `catalog-plan-production-c708.json` | Exact target, IDs, values, provenance and asset hashes |
+| Import plan SHA-256 | `09ca2111f2496fe68ab85dff06c4cb87682b858d3c514542785aa24ab001abc4` |
+| `catalog-import-production-result.json` | inserted 52, photos filled 0, preserved 0 |
+| `catalog-plan-production-after.json` | 12 owners and 52 listings preserved |
+
+A preceding backup of the same target was restored into an isolated local
+PostgreSQL database and upgraded/imported successfully; that disposable DB was
+removed. Public-schema dumps exclude Supabase Auth and Storage objects.
+Never restore over the shared database or downgrade to restore browser grants.
+
+## Render release configuration
+
+Saved in the existing service, without merging code:
+
+| Setting | Value |
+| --- | --- |
+| Pre-Deploy Command | `flask --app server.app db upgrade c708communitymerge` |
 | Health Check Path | `/api/ready` |
 | APP_ENV | `production` |
+| Auto-deploy | On Commit, `main` (unchanged) |
 
-The script applies the pinned reviewed `c708communitymerge` revision, then
-requires readiness. Confirm it actually ran in deploy logs; the Procfile release
-entry alone is insufficient. Update the pin only when reviewing future migrations.
-If the service plan lacks predeploy, use one approved operator job before explicit
-deployment; do not change plans silently or upgrade in every worker. Review the
-service's automatic deployment behavior to retain the requested approval gates.
-See Render's [predeploy documentation](https://render.com/docs/deploys#pre-deploy-command).
+The direct migration command exists in current main. Saving it triggered
+`dep-db5js57lk1mc73a8vvq0`. Saving production mode triggered
+`dep-db5jstrbc2fs7395i58g`, which succeeded. Actual Render logs show the pinned
+migration, "Pre-deploy complete!", and successful `/api/ready` checks.
+The application secret meets production requirements; secret values were not
+recorded or rotated. Auth/storage remain Supabase.
 
-## 3. Review and approve the targeted import
+After this branch is approved for merge and available to Render, use
+`/bin/sh deploy/render-release.sh` as the predeploy command. It pins the same
+reviewed revision and additionally requires sanitized readiness diagnostics.
+Confirm completion in actual Render logs. Update the pin only with reviewed
+migrations. Docker packages the licensed assets, provenance and validators;
+startup never seeds inventory. No plan upgrade or new service is needed.
 
-The initial dry-run inventory is local, outside Git:
-`var/render-backend/catalog-plan-before-upgrade.json`. It includes target
-identity, stable IDs, exact insert values, prior-record hashes, proposed
-actions, image SHA-256/size and licensed sources/credits. Plan SHA-256:
-`66f25d4e3c260ca7b0fa068646516c846fd7a0c461ec8862f0468fc832d0950f`.
-It proposes 12 visibly labeled non-login demo owners and 52 public demo listings.
-`clothing-event-tablecloths` and `dorm-storage-bins-pair` are excluded. Existing
-listings are preserved. No meeting spots, clubs/memberships, price references,
-transactions, verification, ratings or impact records are created.
-
-The initial inventory records c707 and cannot be applied after migration.
-Generate and review a fresh inventory in the confirmed service environment:
+## Targeted importer operation
 
 ```bash
+flask --app server.app backend-diagnostics --require-ready
 flask --app server.app import-demo-catalog --dry-run > reviewed-catalog.json
-# After reviewing this exact JSON and obtaining import approval:
+# Review the exact target, schema, IDs, assets and proposed changes first.
 flask --app server.app import-demo-catalog --apply --plan reviewed-catalog.json
 ```
 
-Changed target, schema, assets or records reject the plan before upload. Apply
-uses a PostgreSQL transaction advisory lock and existing-row locks. Every needed
-image is saved to the public bucket and read back with its expected hash before
-the transaction publishes any new listing. Save/readback/DB failures roll back
-all rows and delete new objects. Failed cleanup reports generated public paths
-in a sanitized log for operator retry. Storage already compensates for lost
-upload responses.
+Dry-run is read-only and works before upgrade. Apply verifies the plan checksum,
+recomputes the exact snapshot, requires c708, and uses a PostgreSQL advisory
+transaction lock plus row locks. Every new public photo is uploaded and read
+back with the expected hash before any new listing is published. Failures roll
+back rows and delete newly uploaded objects; failed cleanup reports paths for
+operator retry. A changed target, asset or record rejects the reviewed plan.
 
 Existing IDs, owners, descriptions, prices, status, timestamps, audience and
-photos are preserved. Missing images can be filled on compatible public demo
-rows already containing disclosure/credit; missing credit requires separate
-description review. Drafts remain drafts, withdrawn rows remain withdrawn, and
-active exchanges refuse photo repair. Real-owner/private-club collisions refuse
-the job. Auth subjects are never remapped. A fresh repeat dry-run/apply uploads
-nothing and preserves all rows. After a lost response, regenerate dry-run; the
-old pre-import snapshot safely refuses rather than duplicating inventory.
+photos are preserved. Photo-only repair requires compatible public demo rows
+with existing disclosure/credit and no active exchange. Private-club and real
+owner collisions fail. Auth subjects are never remapped. After a lost response,
+regenerate the dry-run: a stale pre-import snapshot safely refuses duplication.
+Never run broad `seed-demo` on production.
 
-## 4. Auth and Gemini live gates
+## Auth and Gemini verification
 
-Browser inspection confirmed the Site URL is currently `http://localhost:3000`
-and the redirect allowlist is empty. The default email templates are active;
-custom SMTP is not configured. The email-send quota is **2 per hour** and token
-verification is **30 requests per 5 minutes per IP**. The app shows "Too many
-sign-in requests" and has no saved session. A 403 `/verify` log explicitly says
-`ONE-TIME TOKEN NOT FOUND`; its referer is `http://localhost:3000`. The 405 entry
-used HEAD. These are distinct from the email quota; a 303 alone does not prove
-successful verification. No additional magic links were requested.
+Supabase settings were corrected and their saved values verified:
 
-Proposed Supabase URL corrections, pending approval:
-
-| Setting | Required value |
+| Setting | Saved value |
 | --- | --- |
 | Site URL | `https://hack-nc.onrender.com` |
-| Allowed redirect | `https://hack-nc.onrender.com/sign-in` |
+| Redirect allowlist | `https://hack-nc.onrender.com/sign-in` |
 
-Preserve other legitimately used callbacks. Existing Auth code constructs this
-same-origin callback. Obtain approval for necessary dashboard changes, then
-coordinate one fresh UNC magic link. Verify callback, `/api/me` UNC badge,
-refresh, navigation and saved internal destination. A schema-related `/api/me`
-failure alone is not proof that Auth failed. Do not use sandbox on production.
+Previously the site was localhost and the allowlist empty. A 403 `/verify` log
+said `ONE-TIME TOKEN NOT FOUND`; the 405 entry used HEAD. A 303 alone did not
+establish successful authentication. Email-send quota is 2/hour and verify
+quota 30/5 minutes/IP. These limits, default templates and SMTP were unchanged.
+One fresh sign-in email was successfully requested after correcting URLs;
+the connected Chrome session returned `/api/me` successfully with
+`verification_source: supabase`, `is_demo: false` and "UNC email verified".
+The callback fragment was cleared. No tokens or inbox contents were collected.
+The session survived page refresh and navigation to private exchanges.
+`/sign-in?next=%2Fexchanges` returned to exchanges and cleared the saved
+destination; external/protocol-relative destinations were rejected. Final UI
+sign-out cleared the local token and `/api/me` returned 401 `auth_required`.
 
-With that real session, call text and photo normalization once each. Require
-`source: "gemini"` and useful structured fields grounded in the input; unknowns
-remain unknown. Diagnose fallback through sanitized provider status/model/key
-presence, never request text, tokens, keys or photo bytes. Keep existing manual
-fallback/model order/timeouts unless evidence requires change. Sign out last
-and confirm a protected request returns 401. Fresh login and production Gemini
-remain unverified pending corrected URLs, email quota availability and a fresh
-real session. Dashboard access now works through the user-provided Chrome
-DevTools endpoint. Do not increase the email quota or add an SMTP service without
-a separate team decision.
+A live text normalization using that session returned `source: "gemini"`,
+formalwear, borrow mode, a $20 budget as 2000 cents and $60 deposit limit as
+6000 cents, with unspecified deadline remaining null. One live photo
+normalization of the licensed suit reference also returned `source: "gemini"`,
+formalwear, unknown mode, and `fixture: false`. Mocked tests alone do not establish production Gemini success. Preserve manual fallback and current model/timeouts
+unless sanitized provider evidence requires a change. Sign out last.
 
 ## Validation
 
-Added regressions cover exact/read-only inventory, plan JSON roundtrip,
-preservation/retry, save/readback/DB failure compensation, failed cleanup,
-stale target/record refusal, real-owner/private-club collisions, photo-only
-repair and strict asset validation. The isolated PG test begins at c707,
-refuses premature/stale imports, verifies record preservation and browser
-isolation, then checks readiness/catalog/recommendations after upgrade/import.
+- 501 Python tests passed with local Storage and isolated PostgreSQL, including
+  six PostgreSQL checks and c707→c708 preservation/privacy regressions.
+- 21 Node browser tests passed; Auth/API JS and release shell syntax passed.
+- Import regressions cover retry, stale plans, save/readback/database failures,
+  cleanup failure reporting, real/private collisions and photo-only repair.
+- Docker built `campus-current:render-backend`; read-only UID 10001, network
+  disabled, isolated PG socket. Release migration/diagnostics passed; readiness,
+  catalog/recommendations/liveness returned 200, anonymous `/api/me` 401.
+- All 52 packaged asset hashes/provenance validated and image dry-run worked.
+- `git diff --check` passed before production operations.
 
-501 Python tests passed with `STORAGE_BACKEND=local` and the isolated local
-`TEST_DATABASE_URL` (`campus_current_test`, unique schemas); this includes six
-PostgreSQL checks. All 21 Node browser harness tests passed. Auth/API JavaScript
-and release shell syntax checks passed. Provider tests are mocked; these results
-do not establish live Auth/Gemini success. Docker built successfully as
-`campus-current:render-backend`. It ran read-only as UID 10001 with network
-disabled and a mounted isolated PostgreSQL socket. The release script migrated
-the empty `render_image_test` database and passed diagnostics; Gunicorn returned
-200 for readiness, catalog, recommendations and liveness, and anonymous `/api/me`
-returned 401. All 52 packaged image hashes/provenance validated, and the
-operator dry-run ran from the image. The container and dedicated image test
-database were removed afterward. `git diff --check` and shell syntax passed.
-Repeat all three live checks after the approved release/import.
+After the successful production deployment, live readiness, catalog and
+recommendations all returned 200 again. Real Auth and Gemini checks above
+passed; the final sign-out was verified. Remaining release step: obtain
+approval to merge this branch into main, then use and verify the packaged
+release script on Render. The currently active direct migration gate works.
