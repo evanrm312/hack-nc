@@ -1370,10 +1370,10 @@
     // ---- borrow terms
     F.rental_fee_cents = C.field({ id: "l-rental-fee", label: "Rental fee", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "0", value: "0",
       hint: "Payment for use; $0 is a free loan." });
-    F.proposed_item_value_cents = C.field({ id: "l-item-value", label: "Proposed item value (required)", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 200",
-      hint: "The value you propose for borrowing; agreed terms are set in the offer." });
+    F.proposed_item_value_cents = C.field({ id: "l-item-value", label: "Item value (required)", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 200",
+      hint: "Proposed value, separate from the deposit." });
     F.collateral_percent = C.field({ id: "l-percent", label: "Deposit you propose", type: "number", value: "100", attrs: { min: 0, max: 100, step: 1, inputmode: "numeric" },
-      hint: "Percent of the agreed value, 0 to 100. Default 100%. Lowering it is voluntary and leaves the rest of the value at your risk." });
+      hint: "Percentage of the proposed value, 0 to 100. Default 100%. A lower deposit leaves part of the value uncovered." });
     const slider = C.el("input", { type: "range", min: 0, max: 100, step: 1, value: 100, "aria-label": "Deposit percent slider", className: "range" });
     F.collateral_percent.root.insertBefore(slider, F.collateral_percent.root.querySelector(".field__error"));
     const depositCalc = C.el("div", { className: "deposit-calc", "aria-live": "polite" });
