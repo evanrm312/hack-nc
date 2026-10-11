@@ -1,0 +1,400 @@
+{
+  "database": "disposable migrated local SQLite; removed after test",
+  "gemini_calls": 0,
+  "normalization": "editable manual controlled inputs",
+  "first_run_created": {
+    "listings": 56,
+    "profiles": 13,
+    "meeting_spots": 3,
+    "price_references": 2
+  },
+  "second_run_added": {
+    "listings": 0,
+    "profiles": 0,
+    "meeting_spots": 0,
+    "price_references": 0
+  },
+  "duplicate_catalog_ids": 0,
+  "second_run_added_image_files": 0,
+  "legacy_listings_preserved": 2,
+  "catalog": {
+    "listings": 54,
+    "owners": 12,
+    "categories": {
+      "formalwear": 6,
+      "dorm essentials": 6,
+      "clothing": 1,
+      "event equipment": 2,
+      "electronics": 10,
+      "academic supplies": 2,
+      "tools": 1,
+      "outdoor gear": 3,
+      "mobility": 2,
+      "tutoring": 4,
+      "proofreading": 3,
+      "moving help": 3,
+      "tech help": 3,
+      "repair and mending": 3,
+      "bike repair": 2,
+      "photography": 2,
+      "event help": 1
+    },
+    "modes": {
+      "borrow": 11,
+      "sale": 11,
+      "borrow+sale": 11,
+      "service": 21
+    },
+    "free_to_keep": 4,
+    "free_to_borrow": 8,
+    "free_services": 3,
+    "images": 52,
+    "missing_images": [
+      "clothing-event-tablecloths",
+      "dorm-storage-bins-pair"
+    ]
+  },
+  "public_media_checks": 52,
+  "showcase_authentication": {
+    "alice": "clothing-owner-1",
+    "bob": "services-owner-1"
+  },
+  "matching": {
+    "suit": {
+      "total_group_counts": {
+        "confirmed": 1,
+        "needs_confirmation": 1,
+        "rejected": 47
+      },
+      "every_returned_id_exists": true,
+      "confirmed": [
+        {
+          "listing_id": "8339fd2386cf5607974542f46953aa7b",
+          "reasons": [
+            "Listing supports requested mode: borrow.",
+            "Category matches: formalwear.",
+            "Required jacket_size matches: 40R.",
+            "Required type matches: suit.",
+            "Preferred color matches: navy.",
+            "Rental fee: 1500 cents, within budget 2000 cents.",
+            "Proposed deposit: 5400 cents (30% of 18000 cents item value), separate from rental fee.",
+            "Listing availability covers the requested dates."
+          ],
+          "shortcomings": [],
+          "unknown_required": [],
+          "listing_key": "clothing-navy-suit-40r"
+        }
+      ],
+      "needs_confirmation": [
+        {
+          "listing_id": "6a15df33d9355c5096bb0a78fdaac692",
+          "reasons": [
+            "Listing supports requested mode: borrow.",
+            "Category matches: formalwear.",
+            "Required type matches: suit.",
+            "Rental fee: 1200 cents, within budget 2000 cents.",
+            "Proposed deposit: 10500 cents (75% of 14000 cents item value), separate from rental fee."
+          ],
+          "shortcomings": [
+            "Required specification jacket_size needs confirmation.",
+            "Preferred color is unknown or not matched.",
+            "deposit negotiation required: proposed deposit 10500 cents exceeds maximum 8000 cents.",
+            "Availability for requested dates needs confirmation; listing date bounds are unknown."
+          ],
+          "unknown_required": [
+            "jacket_size",
+            "deposit_agreement",
+            "availability"
+          ],
+          "listing_key": "clothing-black-suit-size-unknown"
+        }
+      ],
+      "rejected": [
+        {
+          "listing_id": "384ddf6a8bab5d9c97f451a2d6a4728c",
+          "reasons": [
+            "Listing supports requested mode: borrow.",
+            "Category matches: formalwear.",
+            "Required type matches: suit.",
+            "Rental fee: 1000 cents, within budget 2000 cents.",
+            "Proposed deposit: 11000 cents (100% of 11000 cents item value), separate from rental fee.",
+            "Listing availability covers the requested dates."
+          ],
+          "shortcomings": [
+            "Preferred color is unknown or not matched.",
+            "deposit negotiation required: proposed deposit 11000 cents exceeds maximum 8000 cents.",
+            "Required jacket_size mismatch: requested 40R, listing has 44L."
+          ],
+          "unknown_required": [
+            "deposit_agreement"
+          ],
+          "listing_key": "clothing-charcoal-suit-44l"
+        }
+      ]
+    },
+    "proofreading": {
+      "total_group_counts": {
+        "confirmed": 1,
+        "needs_confirmation": 0,
+        "rejected": 51
+      },
+      "every_returned_id_exists": true,
+      "confirmed": [
+        {
+          "listing_id": "3c01e7e30a0a5f6093e1edfe76582f7e",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: proofreading.",
+            "Service price: 1500 cents, within budget 2000 cents.",
+            "Provider duration 45 minutes covers requested 45 minutes.",
+            "Service time windows overlap for at least 45 minutes before any deadline."
+          ],
+          "shortcomings": [],
+          "unknown_required": [],
+          "listing_key": "demo-evening-essay-proofreading"
+        }
+      ],
+      "needs_confirmation": [],
+      "rejected": [
+        {
+          "listing_id": "a79e0e4f5f94523da252f4cfa470e9df",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: proofreading.",
+            "Service price: 1200 cents, within budget 2000 cents.",
+            "Provider duration 60 minutes covers requested 45 minutes."
+          ],
+          "shortcomings": [
+            "No feasible service overlap is long enough for the requested duration before the deadline."
+          ],
+          "unknown_required": [],
+          "listing_key": "demo-late-proofreading"
+        },
+        {
+          "listing_id": "19eccb5bb91455c3ba8ec9d6a0397057",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: proofreading.",
+            "Provider duration 60 minutes covers requested 45 minutes.",
+            "Service time windows overlap for at least 45 minutes before any deadline."
+          ],
+          "shortcomings": [
+            "Service price 2500 cents exceeds or cannot be checked against budget 2000 cents."
+          ],
+          "unknown_required": [],
+          "listing_key": "demo-extended-proofreading"
+        }
+      ]
+    },
+    "calculator": {
+      "total_group_counts": {
+        "confirmed": 2,
+        "needs_confirmation": 0,
+        "rejected": 49
+      },
+      "every_returned_id_exists": true,
+      "confirmed": [
+        {
+          "listing_id": "85e18e20bc9746af94675fbc01b01d46",
+          "reasons": [
+            "Listing supports requested mode: borrow.",
+            "Category matches: academic supplies.",
+            "Required model matches: GC-84 demo model.",
+            "Required type matches: graphing calculator.",
+            "Rental fee: 0 cents, within budget 1000 cents.",
+            "Proposed deposit: 8500 cents (100% of 8500 cents item value), separate from rental fee.",
+            "Listing availability covers the requested dates."
+          ],
+          "shortcomings": [],
+          "unknown_required": [],
+          "listing_key": "controlled-calculator-free-loan"
+        },
+        {
+          "listing_id": "90a87ded08c65595884fe33310e95494",
+          "reasons": [
+            "Listing supports requested mode: borrow.",
+            "Category matches: academic supplies.",
+            "Required model matches: GC-84 demo model.",
+            "Required type matches: graphing calculator.",
+            "Rental fee: 500 cents, within budget 1000 cents.",
+            "Proposed deposit: 8500 cents (100% of 8500 cents item value), separate from rental fee.",
+            "Listing availability covers the requested dates."
+          ],
+          "shortcomings": [],
+          "unknown_required": [],
+          "listing_key": "demo-electronics-graphing-calculator"
+        }
+      ],
+      "needs_confirmation": [],
+      "rejected": [
+        {
+          "listing_id": "987d9e0aae824e7fa1959cc8d278b6a0",
+          "reasons": [
+            "Listing supports requested mode: borrow.",
+            "Category matches: academic supplies.",
+            "Required type matches: graphing calculator.",
+            "Rental fee: 500 cents, within budget 1000 cents.",
+            "Proposed deposit: 8500 cents (100% of 8500 cents item value), separate from rental fee.",
+            "Listing availability covers the requested dates."
+          ],
+          "shortcomings": [
+            "Required model mismatch: requested GC-84 demo model, listing has GC-83 controlled model."
+          ],
+          "unknown_required": [],
+          "listing_key": "controlled-calculator-wrong-model"
+        }
+      ]
+    },
+    "mending": {
+      "total_group_counts": {
+        "confirmed": 2,
+        "needs_confirmation": 0,
+        "rejected": 50
+      },
+      "every_returned_id_exists": true,
+      "confirmed": [
+        {
+          "listing_id": "fcefd606495e5a4a9b8edf8c9e4b1a21",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 0 cents, within budget 2000 cents.",
+            "Provider duration 45 minutes covers requested 45 minutes.",
+            "Service time windows overlap for at least 45 minutes before any deadline."
+          ],
+          "shortcomings": [],
+          "unknown_required": [],
+          "listing_key": "demo-button-seam-mending"
+        },
+        {
+          "listing_id": "f13c263f660756fdbcddfa0184d08632",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 1000 cents, within budget 2000 cents.",
+            "Provider duration 60 minutes covers requested 45 minutes.",
+            "Service time windows overlap for at least 45 minutes before any deadline."
+          ],
+          "shortcomings": [],
+          "unknown_required": [],
+          "listing_key": "demo-basic-mending"
+        }
+      ],
+      "needs_confirmation": [],
+      "rejected": [
+        {
+          "listing_id": "c4a3c5a009c25fcd9da83bbceb4d5b5c",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 500 cents, within budget 2000 cents.",
+            "Service time windows overlap for at least 45 minutes before any deadline."
+          ],
+          "shortcomings": [
+            "Service duration 30 minutes is shorter than requested 45 minutes."
+          ],
+          "unknown_required": [],
+          "listing_key": "demo-small-item-repair-assessment"
+        },
+        {
+          "listing_id": "3c01e7e30a0a5f6093e1edfe76582f7e",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Service price: 1500 cents, within budget 2000 cents.",
+            "Provider duration 45 minutes covers requested 45 minutes."
+          ],
+          "shortcomings": [
+            "Category mismatch: requested repair and mending, listing is proofreading.",
+            "No feasible service overlap is long enough for the requested duration before the deadline."
+          ],
+          "unknown_required": [],
+          "listing_key": "demo-evening-essay-proofreading"
+        }
+      ]
+    },
+    "mending_unknown_schedule": {
+      "total_group_counts": {
+        "confirmed": 0,
+        "needs_confirmation": 2,
+        "rejected": 50
+      },
+      "every_returned_id_exists": true,
+      "confirmed": [],
+      "needs_confirmation": [
+        {
+          "listing_id": "fcefd606495e5a4a9b8edf8c9e4b1a21",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 0 cents, within budget 2000 cents.",
+            "Provider duration 45 minutes covers requested 45 minutes."
+          ],
+          "shortcomings": [
+            "service_time_windows missing; scheduling needs confirmation."
+          ],
+          "unknown_required": [
+            "service_time_windows"
+          ],
+          "listing_key": "demo-button-seam-mending"
+        },
+        {
+          "listing_id": "f13c263f660756fdbcddfa0184d08632",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 1000 cents, within budget 2000 cents.",
+            "Provider duration 60 minutes covers requested 45 minutes."
+          ],
+          "shortcomings": [
+            "service_time_windows missing; scheduling needs confirmation."
+          ],
+          "unknown_required": [
+            "service_time_windows"
+          ],
+          "listing_key": "demo-basic-mending"
+        }
+      ],
+      "rejected": []
+    },
+    "mending_schedule_conflict": {
+      "total_group_counts": {
+        "confirmed": 0,
+        "needs_confirmation": 0,
+        "rejected": 52
+      },
+      "every_returned_id_exists": true,
+      "confirmed": [],
+      "needs_confirmation": [],
+      "rejected": [
+        {
+          "listing_id": "fcefd606495e5a4a9b8edf8c9e4b1a21",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 0 cents, within budget 2000 cents.",
+            "Provider duration 45 minutes covers requested 45 minutes."
+          ],
+          "shortcomings": [
+            "No feasible service overlap is long enough for the requested duration before the deadline."
+          ],
+          "unknown_required": [],
+          "listing_key": "demo-button-seam-mending"
+        },
+        {
+          "listing_id": "f13c263f660756fdbcddfa0184d08632",
+          "reasons": [
+            "Listing supports requested mode: service.",
+            "Category matches: repair and mending.",
+            "Service price: 1000 cents, within budget 2000 cents.",
+            "Provider duration 60 minutes covers requested 45 minutes."
+          ],
+          "shortcomings": [
+            "No feasible service overlap is long enough for the requested duration before the deadline."
+          ],
+          "unknown_required": [],
+          "listing_key": "demo-basic-mending"
+        }
+      ]
+    }
+  }
+}

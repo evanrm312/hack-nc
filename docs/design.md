@@ -321,7 +321,7 @@ renders a service layout with price, session length, category, and windows,
 no deposit section, and a disabled "Request this service" placeholder. All
 cards use the teal  "Service" badge. In the interpretation
 form (confirmation step and results) "A service" is exclusive with buy/borrow,
-switches the category list to the three service categories, hides deposit and
+switches the category list to the eight service categories, hides deposit and
 borrowing dates, and shows optional session length and private time windows;
 / build bodies that omit the rejected
 fields. The feed shows "Needs a service" plus the session length and a
@@ -546,3 +546,21 @@ scope.
   title seed; condition, specs, prices, and photo stay blank so nothing about
   the owner's item is invented. An info notice summarizes what was asked for;
   a 404 (closed or private request) leaves the form usable from scratch.
+
+Service selectors support tutoring, proofreading, moving help, tech help, repair and
+mending, bike repair, photography, and event help. Physical-item selectors use
+formalwear, clothing, electronics, academic supplies, dorm essentials, event
+equipment, outdoor gear, mobility, and tools. Existing custom categories remain
+editable when loading older records. Category expansion changes no service lifecycle
+or item price/deposit controls.
+
+The home catalog now has Offer type (All, Buy, Borrow, Services) and Category
+filters. Categories follow the selected offer type; requests use the existing
+`GET /api/listings?mode=...&category=...` filters. Older asynchronous responses
+cannot replace a newer selection. Service reference scenes appear on catalog,
+match, owner, and detail cards without introducing item terms. Seeded licensed
+reference photos describe fictional demo inventory, not a provider portrait or
+proof of an item's exact model, condition, or accessories. Photo attribution
+and the reference disclaimer remain visible in the listing description.
+
+Service detail omits the item meeting-spot section, matching the service contract.

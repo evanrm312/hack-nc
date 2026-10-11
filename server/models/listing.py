@@ -15,7 +15,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..db import db, iso_utc, new_id, utcnow
 
 LISTING_MODES = ("sale", "borrow", "service")
-SERVICE_CATEGORIES = ("tutoring", "proofreading", "moving help")
+SERVICE_CATEGORIES = (
+    "tutoring", "proofreading", "moving help", "tech help",
+    "repair and mending", "bike repair", "photography", "event help",
+)
 LISTING_STATUSES = ("available", "reserved", "sold", "withdrawn", "draft")
 
 

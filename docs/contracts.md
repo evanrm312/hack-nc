@@ -96,7 +96,10 @@ Other users see the same object without `created_at` (as `owner` / `requester`).
 #### Service Listing (public view)
 
 Services use the same listing endpoints and `allowed_modes: ["service"]`.
-Categories are exactly `tutoring`, `proofreading`, or `moving help`.
+Categories are exactly `tutoring`, `proofreading`, `moving help`, `tech help`,
+`repair and mending`, `bike repair`, `photography`, or `event help`.
+`server.models.listing.SERVICE_CATEGORIES` is the backend source of truth;
+these are category string values, requiring no database migration.
 `service_price_cents` may be zero; `service_duration_minutes` is 1–1440;
 `service_available_windows` is a nonempty list of offset-aware UTC intervals.
 Item condition, collateral, deposit, agreed value, sale price, and rental fee
@@ -167,7 +170,7 @@ Example published `200 {"listing": ...}` record after photo publication:
 
 #### Service NeedRequest (owner view)
 
-Service requests use `modes: ["service"]` and one of the three service
+Service requests use `modes: ["service"]` and one of the eight service
 categories in `normalized.category`. `max_deposit_cents`, loan dates, and pickup
 windows are rejected and omitted. `service_duration_minutes` and
 `service_time_windows` may be omitted when unknown; a missing constraint stays
@@ -736,7 +739,7 @@ private draft responses are `private, no-store` with `nosniff`.
 | Sale | Title, category, description, sale price in integer cents, image | Unknown condition, specifications, accessories/defects, meeting preferences |
 | Borrow | Title, category, description, proposed item value in cents, image | Fee defaults explicitly to 0; collateral defaults to 100%; condition/specifications, accessories/defects, availability and meeting preferences |
 | Sale + borrow | Both sets of monetary requirements, title, category, description, image | Same item optional fields |
-| Service | Title, description, category (`tutoring`, `proofreading`, `moving help`), service price in cents, duration 1–1440 minutes, nonempty availability windows with one fitting the duration, image | No physical-item fields |
+| Service | Title, description, one of the eight service categories defined above, service price in cents, duration 1–1440 minutes, nonempty availability windows with one fitting the duration, image | No physical-item fields |
 
 Unknown condition/specifications remain unknown. Zero prices are valid.
 

@@ -390,3 +390,36 @@ def test_empty_sqlite_migrates_for_item_and_service_exchanges(tmp_path):
             "listing_id": listing["id"], "mode": mode,
         }, headers=bob)
         assert response.status_code == 201, response.get_json()
+
+
+@pytest.mark.parametrize('category', [
+    'tutoring', 'proofreading', 'moving help', 'tech help', 'repair and mending',
+    'bike repair', 'photography', 'event help',
+])
+def test_all_supported_service_categories_create_filter_and_match(client, alice, bob, category):
+    created = client.post('/api/listings', json={**LISTING, 'category': category,
+        'title': 'Demo ' + category}, headers=alice)
+    assert created.status_code == 201, created.get_json()
+    listing = created.get_json()['listing']
+    assert listing['category'] == category
+    assert not {'condition', 'collateral_percent', 'sale_price_cents', 'rental_fee_cents'} & listing.keys()
+    filtered = client.get('/api/listings', query_string={'mode': 'service', 'category': category})
+    assert [row['id'] for row in filtered.get_json()['listings']] == [listing['id']]
+    created_request = client.post('/api/requests', json={**REQUEST,
+        'normalized': {**REQUEST['normalized'], 'category': category}}, headers=bob)
+    assert created_request.status_code == 201, created_request.get_json()
+    request_id = created_request.get_json()['request']['id']
+    groups = client.get(f'/api/requests/{request_id}/matches', headers=bob).get_json()
+    assert [entry['listing_id'] for entry in groups['confirmed']] == [listing['id']]
+    assert groups['needs_confirmation'] == []
+    assert groups['rejected'] == []
+
+
+def test_unknown_service_category_rejected_by_listing_and_request_api(client, alice):
+    response = client.post('/api/listings', json={**LISTING, 'category': 'other service'}, headers=alice)
+    assert response.status_code == 400
+    assert 'category' in response.get_json()['error']['fields']
+    response = client.post('/api/requests', json={**REQUEST,
+        'normalized': {**REQUEST['normalized'], 'category': 'other service'}}, headers=alice)
+    assert response.status_code == 400
+    assert 'normalized.category' in response.get_json()['error']['fields']
