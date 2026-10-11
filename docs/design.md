@@ -326,16 +326,7 @@ then `/listings/mine` is served by the listing-detail route and the script
 mounts the same view there. Flow: redirect to `/sign-in` without a token;
 identity from `GET /api/me`; listings from
 `GET /api/listings?owner_id=<me>&status=all` (filtered again by `owner_id`
-client-side); a Show filter (All / Items / Services, `aria-pressed` buttons
-with counts) above tabs Active (available, reserved) and Past (sold,
-withdrawn), whose counts follow the filter. Services come from the same
-endpoint and carry the teal **Service** badge, price per session with the
-duration, and the service category. Listing status is the contract's
-`available | reserved | sold | withdrawn` for every kind: a reserved service
-is shown as **Scheduled** (both participants accepted, so the session holds
-the listing's single reservation) with "Session scheduled; manage it in the
-exchange"; completion releases it back to Available. "Completed" is an
-exchange status and lives on My exchanges, not on the listing card.
+client-side); tabs Active (available, reserved) and Past (sold, withdrawn);
 Withdraw only on available listings, confirmed in a `components.dialog`, then
 `PATCH /api/listings/{id} {"status": "withdrawn"}`; `409 listing_locked` and
 `403` are shown inside the dialog. Withdrawn listings get a **Relist** button
@@ -358,24 +349,7 @@ their results; anonymous visitors see "Sign in to respond". States: loading,
 "No open requests right now", "No requests match these filters" with a clear
 button, and an error with retry.
 
-## Header navigation widths
-
-- < 720px: hamburger toggle, links stacked when open.
-- 720–1179px: brand and session on row one, all links on one centered row
-  with slightly tighter pills. The `<nav>` element (not the `ul`) is the grid
-  item and is placed in the `nav` area with `min-width: 0`; the brand column
-  is `minmax(0, 1fr)` so the nowrap link row can never widen it (that was
-  the cause of "Account" wrapping and of page overflow).
-- ≥ 1180px: brand, links, session on a single row.
-
 ## Accessibility rules
-
-- Headings that receive programmatic focus (`h1`/`h2` with `tabindex="-1"`,
-  e.g. My listings on load, the interpretation heading after Update results)
-  show the focus ring only once the user has pressed a key:
-  `components.js` records the last input kind on `html[data-input]`, and
-  the ring rule is scoped to `data-input="keyboard"`. Pointer users never see
-  a box on page load; keyboard users keep a visible ring.
 
 - Every interactive element shows `--focus` on `:focus-visible`.
 - Mobile nav toggle has `aria-expanded` and `aria-controls`.
@@ -441,12 +415,7 @@ button, and an error with retry.
 
 ## Listing form and detail (implemented)
 
-- `/listings/new` (page `listing-form`, heading "List an item or service"):
-  the modes fieldset offers sale, borrow, and the exclusive Service pill;
-  choosing Service shows category, price per session, session length, and
-  time windows and hides condition, photo, specifications, accessories,
-  defects, meeting spots, and every sale/borrow money field (deposit,
-  collateral, agreed value). Item path: title and category (required),
+- `/listings/new` (page `listing-form`): title and category (required),
   description, condition, photo (JPEG/PNG/WebP ≤ 5 MB, client preview),
   specifications (key/value rows), accessories and known defects (one per
   line), modes as pills (`sale`, `borrow`), and only the matching term groups
@@ -467,41 +436,7 @@ button, and an error with retry.
   Terms card listing sale price, rental fee, agreed item value, proposed
   deposit (dollars and percent) and amount not covered on separate rows, plus
   availability and the simulation notice; meeting spots resolved from
-  `/api/meeting-spots`; owner card with the server's badge text and the
-  exchange entry point (below). States: loading, 404 "Listing not found",
-  error with retry.
-
-## Exchange entry points (implemented)
-
-- **Start exchange** (items) / **Request this service** (services) on
-  `/listings/{id}`, built by `exchangeEntry()` in `marketplace.js`. The live
-  button appears only when `/api/me` returned 200 for the current token (the
-  server's idea of "verified"; sandbox users count), the user is not the owner,
-  and the listing is `available` with at least one mode. Every other case is a
-  hint instead: own listing, listing `reserved`/`sold`/`withdrawn`, signed out
-  (a "Sign in to start an exchange" link), or a token the server rejected
-  (401/403 message from `/api/me`).
-- A listing with more than one mode shows a radio picker ("Buy it" /
-  "Borrow it", reusing `.choices`/`.choice`); the button stays disabled with a
-  `.field__todo` line until one is picked. Single-mode listings skip the
-  picker. `?mode=sale|borrow` preselects.
-- Click → `POST /api/exchanges {listing_id, mode[, source_request_id]}` with a
-  `starting` guard and `aria-busy`, then `/exchanges/{id}` from the returned
-  `exchange.id`. `?from_request=<id>` (added by the results page's View
-  listing links) supplies `source_request_id`.
-- Errors render in a `role="alert"` notice under the button and receive
-  focus: `forbidden` (owner, shown as the server message, never as a sign-in
-  prompt), 401 / `email_not_confirmed` / `domain_not_allowed` (sign-in link),
-  `reservation_conflict` / `listing_unavailable` (no longer available, Reload
-  listing button), `request_closed` / `validation_error.source_request_id` /
-  404 request (could not link your request, "Start without linking" retries
-  without it), `validation_error.mode` (reload), other validation (field
-  list), 404 listing.
-- **Post a listing for this** on `/requests` replaces "I have this": only the
-  requester can start an exchange, so an owner answers by posting a listing
-  at `/listings/new?from_request=<id>` and a note says the requester finds
-  it through matching. The form fetches the public request and prefills only
-  the modes, the category (service category for service requests), and a
-  title seed; condition, specs, prices, and photo stay blank so nothing about
-  the owner's item is invented. An info notice summarizes what was asked for;
-  a 404 (closed or private request) leaves the form usable from scratch.
+  `/api/meeting-spots`; owner card with the server's badge text and a disabled
+  placeholder **Start exchange** button with a hint (Person 4 wires it to
+  `POST /api/exchanges`). States: loading, 404 "Listing not found", error with
+  retry.

@@ -515,12 +515,6 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountCirculations);
   else mountCirculations();
 
-  // Input modality for focus styling: headings that get programmatic focus
-  // (page load, "Update results") show a ring only after keyboard use.
-  // Pointer users never see a box on a heading they did not click.
-  document.addEventListener("keydown", (e) => { if (!e.metaKey && !e.ctrlKey && !e.altKey) document.documentElement.dataset.input = "keyboard"; }, true);
-  document.addEventListener("pointerdown", () => { document.documentElement.dataset.input = "pointer"; }, true);
-
   // Circulation mark for completed exchanges (static under reduced motion via CSS).
   function circulationMark(spin) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");

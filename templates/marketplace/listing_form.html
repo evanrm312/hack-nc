@@ -6,20 +6,19 @@
 {% block page_id %}listing-form{% endblock %}
 {% block content %}
 <section class="card card--hero" aria-labelledby="listing-form-heading">
-  <h1 id="listing-form-heading">List an item or service</h1>
-  <p class="lede">Sell something you own, lend it for a deposit, or offer a service such as tutoring,
-    proofreading, or moving help. Be specific about size, model, and condition for items, and about
-    length and available times for services, so matches are accurate.</p>
+  <h1 id="listing-form-heading">List an item</h1>
+  <p class="lede">Offer something you already own for sale, to borrow, or both. Be specific about
+    size, model, condition, and what is included so matches are accurate.</p>
 
   <div id="auth-gate" class="notice notice--info" role="status" hidden>
     <div>
-      <strong>Sign in to post.</strong> Posting a listing needs a confirmed @{{ public_config.allowed_email_domain }} email.
+      <strong>Sign in to post.</strong> Listing an item needs a confirmed @{{ public_config.allowed_email_domain }} email.
       <a href="{{ url_for('pages.sign_in') }}">Sign in</a>.
     </div>
   </div>
 
   <div class="simulated-notice" role="note">
-    <div><strong>Simulated money.</strong> Deposits, payments, and service fees in this prototype are simulated.
+    <div><strong>Simulated money.</strong> Deposits and payments in this prototype are simulated.
       No real funds are ever held, reserved, or charged. All amounts are entered in US dollars.</div>
   </div>
 
