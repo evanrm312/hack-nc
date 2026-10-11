@@ -165,9 +165,9 @@ def test_malformed_provider_response_fails_closed(supabase_client, monkeypatch, 
 
 
 def test_production_rejects_sandbox_and_development_secret(tmp_path):
-    common = {"APP_ENV": "production", "UPLOAD_DIR": str(tmp_path / "uploads")}
+    common = {"APP_ENV": "production", "UPLOAD_DIR": str(tmp_path / "uploads"), "SQLALCHEMY_DATABASE_URI": "postgresql+psycopg://unused@127.0.0.1/unused"}
     with pytest.raises(RuntimeError, match="AUTH_MODE=supabase"):
-        create_app({**common, "AUTH_MODE": "sandbox", "SANDBOX_USERS": ["a@unc.edu"], "SECRET_KEY": "strong-secret"})
+        create_app({**common, "AUTH_MODE": "sandbox", "SANDBOX_USERS": ["a@unc.edu"], "SECRET_KEY": "test-only-production-secret-32-characters"})
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         create_app({**common, "AUTH_MODE": "supabase", "SUPABASE_URL": "https://example.supabase.co", "SUPABASE_ANON_KEY": "public-key", "SECRET_KEY": "dev-only-change-me"})
-    create_app({**common, "AUTH_MODE": "supabase", "SUPABASE_URL": "https://example.supabase.co", "SUPABASE_ANON_KEY": "public-key", "SECRET_KEY": "strong-secret"})
+    create_app({**common, "AUTH_MODE": "supabase", "SUPABASE_URL": "https://example.supabase.co", "SUPABASE_ANON_KEY": "public-key", "SECRET_KEY": "test-only-production-secret-32-characters"})

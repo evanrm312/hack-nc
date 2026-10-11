@@ -1,6 +1,6 @@
 # Community club handoff
 
-Implementation branch: `p2-community-clubs`. No commit or push authorized.
+Implementation branch: `p2-community-clubs`. Community implementation checkpoint is committed; main synchronization is a normal merge.
 Migration: `c706_community_clubs.py`, revision `c706community`, after
 `c705exchangekeys`. Apply with `flask --app server.app db upgrade` to a reviewed
 development target; existing listings/exchanges default to public/not-required.
@@ -112,5 +112,24 @@ needed. The smoke did not complete pickup/return or fabricate a review.
 
 Changed files are limited to community models/migration/helpers/routes/seed,
 existing access and exchange integration, profile and Aero UI integration,
-contracts/handoff documentation, and focused regression tests. Implementation
-remains uncommitted on `p2-community-clubs` pending team review.
+contracts/handoff documentation, and focused regression tests. Implementation is on `p2-community-clubs` for team review.
+
+## Main synchronization
+
+The parallel community and production-readiness branches join at migration
+`c708communitymerge`, with parents `c706community` and `c707browserroles`.
+The merge preserves both migration chains and applies the production browser-role
+isolation to `clubs` and `club_memberships` on PostgreSQL. Downgrade does not
+restore unsafe browser grants. Recommendations use current club membership
+before candidate limits/ranking; the latest personalized reasons, Eastern date
+editors, deployment/runtime safeguards, and public About page are retained.
+
+Synchronization validation:
+- `STORAGE_BACKEND=local .venv/bin/python -m pytest -q tests/test_community.py tests/test_exchanges.py tests/test_reviews.py tests/test_catalog.py tests/test_demo_catalog.py tests/test_services.py tests/test_discovery.py`: **207 passed**, 68.53 seconds.
+- `STORAGE_BACKEND=local .venv/bin/python -m pytest -q`: **484 passed,
+  5 skipped**, 78.89 seconds; isolated PostgreSQL integration unavailable.
+- `node --test tests/browser_*.test.cjs`: **21 passed**.
+- `node --check` passed for all 11 `static/js/*.js` files.
+- Conflict-marker search and `git diff --check` passed.
+- No new live browser, Gemini, Supabase or deployment validation was performed
+  for this merge; browser JavaScript checks above are Node harnesses.

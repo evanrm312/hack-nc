@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify
+from sqlalchemy.orm import joinedload
 from ..auth import current_profile, require_verified_user
 from ..db import db, utcnow
 from ..errors import not_found
@@ -14,7 +15,7 @@ def private(response):
 @bp.get('')
 @require_verified_user
 def notifications():
-    query = db.select(Notification).where(Notification.recipient_id == current_profile().id)
+    query = db.select(Notification).options(joinedload(Notification.exchange)).where(Notification.recipient_id == current_profile().id)
     rows = db.session.scalars(query.order_by(Notification.created_at.desc(),Notification.id.desc()).limit(100)).all()
     unread = db.session.scalar(db.select(db.func.count()).select_from(Notification).where(
         Notification.recipient_id == current_profile().id,Notification.read_at.is_(None)))

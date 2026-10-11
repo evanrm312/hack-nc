@@ -20,6 +20,7 @@ from __future__ import annotations
 from functools import wraps
 
 from flask import current_app, request
+from sqlalchemy.exc import IntegrityError
 
 from ..db import db
 from ..errors import ApiError
@@ -86,10 +87,19 @@ def _get_or_create_profile(identity: Identity) -> Profile:
             is_demo=identity.source != "supabase",
         )
         db.session.add(profile)
-        db.session.flush()
-        # Neutral default; never derived from the email address.
-        profile.display_name = f"Member {profile.id[:6]}"
-        db.session.commit()
+        try:
+            db.session.flush()
+            # Neutral default; never derived from the email address.
+            profile.display_name = f"Member {profile.id[:6]}"
+            db.session.commit()
+        except IntegrityError:
+            # Initial page requests may resolve the same new identity together.
+            db.session.rollback()
+            profile = db.session.scalar(
+                db.select(Profile).where(Profile.auth_subject == identity.subject)
+            )
+            if profile is None:
+                raise
     return profile
 
 

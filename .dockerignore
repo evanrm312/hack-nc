@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+.aws
+.venv
+var
+instance
+uploads
+*.sqlite*
+*.db
+__pycache__
+.pytest_cache
+*.pem
+*.key

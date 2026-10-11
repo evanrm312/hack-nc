@@ -61,7 +61,7 @@
       pre_handoff: "Before pickup", handoff: "At pickup",
       pre_return: "Before return (borrower)", post_return: "After return (owner)",
     };
-    const timeText = (value) => value ? api.formatTime(value) + " Eastern" : "Not agreed yet";
+    const timeText = (value) => value ? api.formatTime(value) : "Not agreed yet";
     function meetingText(spot, id) {
       return spot ? spot.label + (spot.access_notes ? "\n" + spot.access_notes : "")
         : id ? "Meeting spot unavailable; confirm in the exchange room" : "Not agreed yet";
@@ -289,27 +289,8 @@
     await load();
   }
 
-  // Convert Eastern wall time explicitly; never silently use the browser's zone.
-  // Reject DST gaps and repeated hours, asking for an unambiguous meeting time.
-  const easternFormatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  });
-  function easternInput(iso) {
-    if (!iso) return "";
-    const parts = Object.fromEntries(easternFormatter.formatToParts(new Date(iso)).map((part) => [part.type, part.value]));
-    return parts.year + "-" + parts.month + "-" + parts.day + "T" + parts.hour + ":" + parts.minute;
-  }
-  function easternToUtc(value) {
-    if (!value) return null;
-    const wallTime = Date.parse(value + "Z");
-    const candidates = [4, 5].map((hours) => new Date(wallTime + hours * 3600000))
-      .filter((date) => Number.isFinite(date.getTime()) && easternInput(date.toISOString()) === value);
-    if (candidates.length !== 1) {
-      throw new Error("Choose a different Eastern time: this time is missing or repeated at the daylight-saving change.");
-    }
-    return candidates[0].toISOString();
-  }
+  const easternInput = api.timeInput;
+  const easternToUtc = api.timeToUtc;
   window.campusExchangeTime = {input:easternInput,toUtc:easternToUtc};
 
   function cents(id) {
@@ -357,7 +338,7 @@
     function confirmationText(stage) {
       return [detail.exchange.owner_id, detail.exchange.requester_id].map((id) => {
         const entry = confirmations(stage).find((record) => record.participant_id === id);
-        return participantName(id) + ": " + (entry ? "confirmed " + api.formatTime(entry.confirmed_at) + " Eastern" : "awaiting confirmation");
+        return participantName(id) + ": " + (entry ? "confirmed " + api.formatTime(entry.confirmed_at) : "awaiting confirmation");
       }).join(" · ");
     }
     function renderWorkflow() {
@@ -427,7 +408,7 @@
       evidence.forEach((photo) => {
         const figure = node("figure");
         const caption = node("figcaption", stageLabels[photo.stage] + " · " + participantName(photo.uploader_id)
-          + " · " + api.formatTime(photo.created_at) + " Eastern");
+          + " · " + api.formatTime(photo.created_at));
         const preview = node("img", undefined, "exchange-photo");
         preview.alt = stageLabels[photo.stage] + " condition evidence";
         preview.hidden = true;
@@ -471,10 +452,10 @@
       const snapshot = offer.condition_snapshot || {};
       const listText = (items) => items === null || items === undefined ? "Unknown" : items.length ? items.join("\n") : "None listed";
       const rows = moneyRows(offer).concat([
-        ["Pickup", spotName(offer.pickup_meeting_spot_id) + "\n" + (offer.pickup_at ? api.formatTime(offer.pickup_at) + " Eastern" : "Time not agreed")],
+        ["Pickup", spotName(offer.pickup_meeting_spot_id) + "\n" + (offer.pickup_at ? api.formatTime(offer.pickup_at) : "Time not agreed")],
       ]);
       if (detail.exchange.mode === "borrow") {
-        rows.push(["Return", spotName(offer.return_meeting_spot_id) + "\n" + (offer.return_deadline ? api.formatTime(offer.return_deadline) + " Eastern" : "Time not agreed")]);
+        rows.push(["Return", spotName(offer.return_meeting_spot_id) + "\n" + (offer.return_deadline ? api.formatTime(offer.return_deadline) : "Time not agreed")]);
       }
       rows.push(["Condition", snapshot.condition ? components.conditionLabel(snapshot.condition) : "Unknown / needs confirmation"],
         ["Included accessories", listText(snapshot.accessories)], ["Known defects", listText(snapshot.known_defects)]);
@@ -583,7 +564,7 @@
           const disclosure = node("details", undefined, "exchange-revision");
           disclosure.dataset.version = String(revision.version);
           disclosure.open = openVersions.has(disclosure.dataset.version);
-          disclosure.append(node("summary", "Revision " + revision.version + " · " + api.formatTime(revision.created_at) + " Eastern"));
+          disclosure.append(node("summary", "Revision " + revision.version + " · " + api.formatTime(revision.created_at)));
           const terms = node("dl", undefined, "exchange-terms");
           summary(terms, revision);
           disclosure.append(terms, node("p", "Owner: " + (revision.owner_accepted_at ? "accepted" : "not accepted")
@@ -610,7 +591,7 @@
         container.replaceChildren();
         sorted.forEach((message) => {
           const item = node("li", undefined, "exchange-message" + (message.sender_id === profile.id ? " exchange-message--mine" : ""));
-          const time = node("time", api.formatTime(message.created_at) + " Eastern");
+          const time = node("time", api.formatTime(message.created_at));
           time.dateTime = message.created_at;
           item.append(node("strong", participantName(message.sender_id)), time, node("p", message.body));
           container.append(item);

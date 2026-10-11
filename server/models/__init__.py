@@ -46,3 +46,5 @@ from .notification import Notification
 from .exchange_location import ExchangeLocation
 
 from .club import Club, ClubMembership
+
+from .rate_limit import RateLimit

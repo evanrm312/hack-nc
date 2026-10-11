@@ -370,7 +370,7 @@ def test_empty_sqlite_migrates_for_item_and_service_exchanges(tmp_path):
     })
     with app.app_context():
         upgrade()
-        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "c706community"
+        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "c708communitymerge"
         columns = lambda table: {column["name"] for column in inspect(db.engine).get_columns(table)}
         assert {"service_price_cents", "service_duration_minutes", "service_available_windows", "publication_required", "creation_key"} <= columns("listings")
         assert {"recipient_id", "event_key", "read_at", "created_at"} <= columns("notifications")

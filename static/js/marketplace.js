@@ -607,7 +607,7 @@
         questions.forEach((q) => list.append(C.el("li", { text: String(q) })));
         ambiguous.forEach((a) => list.append(C.el("li", {},
           C.el("strong", { text: "Date needs confirmation: " }),
-          `"${a.text}" was read as ${api.formatTime(a.proposed)} (America/New_York). Correct it below if that is wrong.`)));
+          `"${a.text}" was read as ${api.formatTime(a.proposed)} · Edit if needed.`)));
         interpBody.append(C.el("div", { className: "notice notice--warn", role: "note" },
           C.el("div", {}, C.el("strong", { text: "Please confirm" }), list)));
       }
@@ -1027,7 +1027,7 @@
     const windows = Array.isArray(listing.service_available_windows) ? listing.service_available_windows : [];
     if (!windows.length) return C.el("p", { className: "muted", text: "No time windows given." });
     const shown = limit ? windows.slice(0, limit) : windows;
-    const list = C.el("ul", { className: "spot-list" }, shown.map((w) => C.el("li", { text: api.formatTime(w.start) + " to " + api.formatTime(w.end) })));
+    const list = C.el("ul", { className: "spot-list" }, shown.map((w) => C.el("li", { text: api.formatTimeRange(w.start, w.end) })));
     if (limit && windows.length > limit) list.append(C.el("li", { className: "muted", text: "+ " + (windows.length - limit) + " more" }));
     return C.el("div", {}, C.el("div", { className: "muted", style: { fontSize: ".85rem", marginTop: "6px" }, text: "Available windows" }), list);
   }
@@ -1094,7 +1094,7 @@
     if (values.max_deposit_cents == null) markLabel(F.max_deposit_cents, unknownBadge());
 
     F.needed_by = C.field({ id: "f-needed-by", label: "Needed by", type: "datetime-local", optional: true, value: C.isoToLocal(values.needed_by),
-      hint: "Times are read in your browser's time zone and shown in America/New_York." });
+      hint: "Eastern time." });
     F.use_start = C.field({ id: "f-use-start", label: "Borrowing starts", type: "datetime-local", optional: true, value: C.isoToLocal(values.use_start) });
     F.use_end = C.field({ id: "f-use-end", label: "Borrowing ends", type: "datetime-local", optional: true, value: C.isoToLocal(values.use_end) });
     const ambiguousTargets = new Set((meta.ambiguous || []).map((a) => a.field).filter(Boolean));
@@ -1121,10 +1121,10 @@
     // apply to services and are hidden (and sent as null) in service mode.
     F.service_duration_minutes = C.field({ id: "f-service-duration", label: "Session length (minutes)", type: "number", optional: true,
       value: Number.isInteger(values.service_duration_minutes) ? String(values.service_duration_minutes) : "",
-      attrs: { min: 1, max: 1440, step: 5, inputmode: "numeric" }, hint: "How long you need, 1 to 1440 minutes. Blank means unknown." });
+      attrs: { min: 1, max: 1440, step: 5, inputmode: "numeric" }, hint: "1–1440 minutes · Optional" });
     const serviceWindows = timeWindowsEditor({
       title: "Times that work for you", initial: values.service_time_windows || [],
-      hint: "Private; never shown publicly. Times are read in your browser's zone and shown in America/New_York. Leave empty if any time works.",
+      hint: "Private · Optional · Eastern time",
     });
     F.service_time_windows = serviceWindows;
     const serviceOnly = C.el("div", {}, C.el("div", { className: "field-row" }, F.service_duration_minutes.root), serviceWindows.root);
@@ -1727,22 +1727,22 @@
   // Rows of start/end datetime-local inputs -> [{start, end}] in UTC.
   function timeWindowsEditor(opts) {
     opts = opts || {};
-    const rows = C.el("div", { className: "kv-rows" });
+    const rows = C.el("div", { className: "kv-rows time-window-rows" });
     const error = C.el("p", { className: "field__error", role: "alert" });
     const addRow = (start, end) => {
       const s = C.el("input", { type: "datetime-local", "aria-label": "Window start" });
       const e = C.el("input", { type: "datetime-local", "aria-label": "Window end" });
       if (start) s.value = C.isoToLocal(start);
       if (end) e.value = C.isoToLocal(end);
-      const row = C.el("div", { className: "kv-row" }, s, e, C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this time window" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
+      const row = C.el("div", { className: "kv-row time-window-row" }, C.el("label", {className:"time-window-field"}, C.el("span", {text:"From"}), s), C.el("label", {className:"time-window-field"}, C.el("span", {text:"Until"}), e), C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this time window" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
       rows.append(row);
       return row;
     };
     const initial = Array.isArray(opts.initial) ? opts.initial.filter((w) => w && w.start && w.end) : [];
     if (initial.length) initial.forEach((w) => addRow(w.start, w.end)); else addRow();
     const add = C.button({ label: "+ Add a window", size: "sm", onClick: () => { addRow().querySelector("input").focus(); } });
-    const root = C.el("fieldset", {}, C.el("legend", { text: opts.title || "Available time windows" }),
-      C.el("p", { className: "field__hint", text: opts.hint || "When you can provide the service. Required: at least one window, and one must be long enough for a session. Times are read in your browser's zone and shown in America/New_York." }),
+    const root = C.el("fieldset", {className:"time-windows"}, C.el("legend", { text: opts.title || "Available time windows" }),
+      C.el("p", { className: "field__hint", text: opts.hint || "Eastern time · At least one window long enough for a session." }),
       rows, C.el("div", { style: { marginTop: "8px" } }, add), error);
     const editor = {
       root, control: rows,

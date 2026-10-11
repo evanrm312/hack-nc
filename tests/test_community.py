@@ -384,3 +384,13 @@ def test_club_private_photo_preview_and_draft_guessing(client, community):
     assert preview.status_code == 200 and preview.get_json()['data_url'].startswith('data:image/jpeg;base64,')
     assert 'no-store' in preview.headers['Cache-Control']
     assert client.get(listing['public_photo_url'] + '?preview=1').status_code == 404
+
+
+def test_recommendations_respect_club_visibility(client, community):
+    club_id, headers, _ = community
+    listing = create_listing(client, headers['alice'], audience='club', club_id=club_id)
+    for viewer, visible in [({}, False), (headers['outsider'], False), (headers['bob'], True)]:
+        response = client.get('/api/recommendations', headers=viewer)
+        assert response.status_code == 200
+        ids = {entry['listing']['id'] for entry in response.get_json()['items']}
+        assert (listing['id'] in ids) is visible

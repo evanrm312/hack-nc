@@ -41,6 +41,11 @@ def _database_url() -> str:
     return url
 
 
+def engine_options(uri):
+    return ({"pool_pre_ping": True, "pool_size": int(_env("DB_POOL_SIZE", "4")), "max_overflow": 0,
+        "pool_timeout": 10, "pool_recycle": 300, "connect_args": {"connect_timeout": 5, "options": "-c statement_timeout=15000 -c lock_timeout=5000"}} if uri.startswith("postgresql") else {})
+
+
 class Config:
     """Default configuration. Values come from the environment."""
 
@@ -51,6 +56,14 @@ class Config:
 
     SQLALCHEMY_DATABASE_URI = _database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = engine_options(_database_url())
+    TRUSTED_PROXY_HOPS = int(_env("TRUSTED_PROXY_HOPS", "0"))
+    RATE_LIMIT_ENABLED = APP_ENV == "production"
+    NORMALIZE_RATE_PER_MINUTE = int(_env("NORMALIZE_RATE_PER_MINUTE", "10"))
+    WRITE_RATE_PER_MINUTE = int(_env("WRITE_RATE_PER_MINUTE", "60"))
+    SESSION_COOKIE_SECURE = APP_ENV == "production"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
 
     # "supabase": verify bearer tokens against Supabase Auth (real email
     #             confirmation). Use this for the deployed app.
@@ -85,6 +98,13 @@ def validate_config(config) -> None:
     """Fail fast on contradictory settings."""
     if config["APP_ENV"] not in {"development", "production"}:
         raise RuntimeError("APP_ENV must be 'development' or 'production'")
+    if config.get("TRUSTED_PROXY_HOPS", 0) not in (0,1):
+        raise RuntimeError("TRUSTED_PROXY_HOPS must be 0 or 1; trust only an isolated reverse proxy")
+    if min(config.get("NORMALIZE_RATE_PER_MINUTE",10),config.get("WRITE_RATE_PER_MINUTE",60)) < 1:
+        raise RuntimeError("Rate limits must be positive")
+    pool_size=config.get("SQLALCHEMY_ENGINE_OPTIONS",{}).get("pool_size",4)
+    if not 1 <= pool_size <= 16:
+        raise RuntimeError("DB_POOL_SIZE must be between 1 and 16")
     mode = config["AUTH_MODE"]
     if mode not in {"supabase", "sandbox"}:
         raise RuntimeError(f"AUTH_MODE must be 'supabase' or 'sandbox', got {mode!r}")
@@ -98,8 +118,10 @@ def validate_config(config) -> None:
     if config["APP_ENV"] == "production":
         if mode != "supabase":
             raise RuntimeError("APP_ENV=production requires AUTH_MODE=supabase")
-        if not config["SECRET_KEY"] or config["SECRET_KEY"] in {"dev-only-change-me", "change-me"}:
-            raise RuntimeError("APP_ENV=production requires a nondevelopment SECRET_KEY")
+        if not config["SECRET_KEY"] or len(config["SECRET_KEY"]) < 32 or config["SECRET_KEY"] in {"dev-only-change-me", "change-me", "REPLACE_WITH_RANDOM_SECRET"}:
+            raise RuntimeError("APP_ENV=production requires a unique SECRET_KEY of at least 32 characters")
+        if not config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql+psycopg://"):
+            raise RuntimeError("APP_ENV=production requires postgresql+psycopg DATABASE_URL")
     if config["STORAGE_BACKEND"] not in {"local", "supabase"}:
         raise RuntimeError("STORAGE_BACKEND must be 'local' or 'supabase'")
     if config["STORAGE_BACKEND"] == "supabase":

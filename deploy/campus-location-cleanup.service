@@ -1,0 +1,10 @@
+[Unit]
+Description=Campus Current expired private location cleanup
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/campus-current
+ExecStart=/usr/bin/docker compose run --rm --no-deps -T web flask --app server.app purge-exchange-locations
+TimeoutStartSec=120

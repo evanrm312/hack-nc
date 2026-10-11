@@ -13,7 +13,7 @@ from pathlib import Path
 import click
 from flask import Flask
 
-from .config import Config, validate_config
+from .config import Config, validate_config, engine_options
 from .db import db, migrate
 from .errors import register_error_handlers
 
@@ -29,6 +29,10 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.config.from_object(Config)
     if overrides:
         app.config.update(overrides)
+    if not overrides or "SQLALCHEMY_ENGINE_OPTIONS" not in overrides:
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options(app.config["SQLALCHEMY_DATABASE_URI"])
+    if not overrides or "RATE_LIMIT_ENABLED" not in overrides:
+        app.config["RATE_LIMIT_ENABLED"] = app.config["APP_ENV"] == "production"
     validate_config(app.config)
 
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite:///"):
@@ -47,6 +51,8 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     register_error_handlers(app)
     register_blueprints(app)
+    from .runtime import register_runtime
+    register_runtime(app)
     _register_cli(app)
 
     @app.get("/healthz")
@@ -62,9 +68,19 @@ def _register_cli(app: Flask) -> None:
         """Delete expired private locations. Schedule hourly in deployment."""
         from .models import ExchangeLocation
         from .db import utcnow
-        result = db.session.execute(db.delete(ExchangeLocation).where(ExchangeLocation.expires_at <= utcnow()))
-        db.session.commit()
-        click.echo(f"Removed {result.rowcount} expired location records")
+        from .models.rate_limit import RateLimit
+        from sqlalchemy.exc import SQLAlchemyError
+        import time
+        try:
+            result = db.session.execute(db.delete(ExchangeLocation).where(ExchangeLocation.expires_at <= utcnow()))
+            quotas = db.session.execute(db.delete(RateLimit).where(RateLimit.window < int(time.time())//60-60))
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.error("Hourly cleanup failed; retry required")
+            raise click.ClickException("Cleanup database operation failed") from None
+        app.logger.info("Hourly cleanup complete: locations=%s quotas=%s", result.rowcount, quotas.rowcount)
+        click.echo(f"Removed {result.rowcount} expired location records; removed {quotas.rowcount} expired quota records")
 
     @app.cli.command("seed-demo")
     @click.option("--allow-supabase-postgres-dev", is_flag=True, help="Explicitly seed the dedicated Supabase development database named postgres; requires APP_ENV=development.")
