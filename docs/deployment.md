@@ -122,9 +122,12 @@ it did not perform a live backup restoration or enable PITR.
 
 `deploy/verify.workflow.example.yml` is a prepared GitHub Actions workflow for Python + browser harnesses + isolated PG and
 building/starting a read-only Docker image with placeholder provider config. It never
-publishes an image or deploys. This machine has no Docker CLI/daemon: image build
-and Compose startup await that CI run or Evan's Docker host. Native Gunicorn
-runtime/readiness was checked locally against designated development Supabase.
+publishes an image or deploys. A temporary rootless Docker daemon built the image
+and started it read-only as UID 10001 with two Gunicorn workers. Fresh migrations,
+readiness, unauthorized /me, the About page and repeated cleanup passed against
+isolated PostgreSQL (mounted Unix socket, placeholder provider credentials).
+Native Gunicorn readiness also passed against development Supabase. Compose,
+TLS/proxy and the hourly systemd timer still need checking on Evan's selected host.
 Real UNC session and two-real-participant journeys remain separate live gates;
 sandbox and adapter checks do not establish them.
 

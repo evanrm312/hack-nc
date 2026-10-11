@@ -21,6 +21,10 @@ and intelligence files are unchanged. All former Emily/Sid handoffs are Evan's.
   Eastern time instead of mixing browser-local input and Eastern output. DST
   gaps/repeated hours are rejected. Compact dates omit seconds and repeated range
   text. Matches heading is smaller and aligned; helper copy shortened.
+- Confirmed first-sign-in race: simultaneous authenticated requests could both
+  insert the same auth subject and return one 500. Unique-conflict recovery now
+  returns the committed profile; an isolated PostgreSQL concurrency regression
+  proves both requests return 200 and exactly one profile exists.
 - Production Docker/Gunicorn, safe logs, DB readiness, shared DB quotas,
   PostgreSQL connection bounds, migration indexes, hourly systemd cleanup units,
   reverse proxy example, release/backup runbook and build/startup CI template.
@@ -35,10 +39,10 @@ Automated provider responses are mocked unless explicitly marked live. Python
 checks use fresh isolated SQLite; PostgreSQL uses separately identified local
 `campus_current_test` on 127.0.0.1:5544. DATABASE_URL is never a destructive target.
 
-- Full Python: **463 passed, 0 failed, 0 skipped** (includes four isolated PG
+- Full Python: **464 passed, 0 failed, 0 skipped** (includes five isolated PG
   tests: fresh install, deployed-service-schema upgrade/preservation, concurrent
   publication + exchange notification dedup, competing reservation + repeated
-  acceptance/messages). One existing Google SDK deprecation warning.
+  acceptance/messages, concurrent first-sign-in profile creation). One existing Google SDK deprecation warning.
 - Node browser harnesses: **20 passed, 0 failed, 0 skipped**. Auth/SDK/network/DOM
   are mocked. Date/DST formatting and visibility/sign-out polling have regressions.
 - Firefox isolated journeys: **78 checks passed, 0 failed**: 41 page/desktop/
@@ -71,8 +75,11 @@ checks use fresh isolated SQLite; PostgreSQL uses separately identified local
   through actual Flask APIs. Server-side key, unchanged configured models; API
   identity sandbox, database/uploads isolated. No auth email requested.
 - Native two-worker Gunicorn ran against development Supabase locally and returned
-  ready. No debug server or public exposure. Docker build/startup is delegated to
-  the prepared CI/host check because this machine lacks Docker.
+  ready. A temporary rootless Docker daemon built the image and ran it read-only
+  as UID 10001 with two workers. Fresh isolated-PG migrations, readiness 200,
+  anonymous /me 401, About 200, rejected root write and twice-run cleanup passed.
+  Container health is healthy. Placeholder provider config; no public exposure.
+  The local PostgreSQL Unix socket was mounted for this isolated check.
 
 ## Blocked / release gates
 
@@ -85,7 +92,7 @@ remain pending. Alice/Billy dummy accounts are not substitutes for consenting
 real participants. No repeated magic-link emails or impersonation.
 
 Evan: complete real session checks (sign out last), obtain a second consenting
-account, run Docker CI/startup, select machine/domain/TLS, configure Supabase
+account, enable the prepared CI workflow, select machine/domain/TLS, configure Supabase
 callback allowlist, review migrations/permissions and install the hourly timer.
 Exact entrance/safety metadata remains unknown unless sourced; no guarantees.
 Aarush: publish ratings/levels branch and agree on the additive contract in
@@ -104,6 +111,6 @@ at all three sizes. Home/listing/account/requests/exchanges baseline/after shots
 and all QA logs are in the same directory. Screenshots contain isolated QA records.
 Current assets and licenses are unchanged; no generated artwork/new font.
 
-Approval checklist: review feature diff + live permission change; pass Docker
-build/startup; finish real auth/Storage/two-user checks; verify backups, domain /
+Approval checklist: review feature diff + live permission change; finish real
+auth/Storage/two-user checks; verify host Compose, backups, domain /
 callback / proxy / hourly timer; then explicit merge and public deployment approval.
