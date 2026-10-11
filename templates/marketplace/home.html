@@ -8,13 +8,10 @@
 {% block content %}
 
 <section class="card card--hero" aria-labelledby="request-heading">
-  <div class="hero-grid hero-grid--single">
+  <div class="hero-grid">
     <div class="request-box">
-      <div class="hero-mark" data-circulation data-autoplay="true" data-replay="true"
-           aria-label="An item carried in a bubble from one person to another: reuse in motion"></div>
-      <h1 id="request-heading">Describe what you need</h1>
-      <p class="lede">Say it the way you would to a friend. We pull out the size, dates, budget, and
-        whether you want to buy or borrow, then show you what is already on campus.</p>
+      <h1 id="request-heading">What do you need?</h1>
+      <p class="lede">Describe the item, dates, and whether you want to buy or borrow.</p>
 
       <div id="auth-gate" class="notice notice--info" role="status" hidden>
         <div>
@@ -25,17 +22,16 @@
 
       <form id="request-form" novalidate>
         <div class="field">
-          <label class="field__label" for="request-text"><span>What do you need?</span></label>
-          <p class="field__hint" id="request-text-hint">Include size or model, when you need it, your budget, and whether borrowing is fine. You can correct every interpreted field on the next page.</p>
-          <textarea id="request-text" name="text" rows="4" required maxlength="4000"
+          <label class="field__label" for="request-text"><span>Your request</span></label>
+          <p class="field__hint" id="request-text-hint">Include size or model and budget. Confirm the proposed details before searching.</p>
+          <textarea id="request-text" name="text" rows="3" required maxlength="4000"
                     aria-describedby="request-text-hint request-text-error"
                     placeholder="I need a navy suit, 40R, for an interview next Tuesday. Would rather borrow than buy, budget around $40 and I can put down up to $80 as a deposit."></textarea>
           <p class="field__error" id="request-text-error" role="alert"></p>
         </div>
         <div class="field photo-field">
-          <label class="field__label" for="request-photo"><span>Add a reference photo</span><span class="field__optional">optional</span></label>
-          <p class="field__hint" id="request-photo-hint">A picture of the kind of item you mean, for example a suit you like. JPEG, PNG, or WebP.
-            Only broad visual details (category, type, color, pattern, style) are proposed, never size, price, or condition. The photo is private, is not stored, and never appears on public cards.</p>
+          <label class="field__label" for="request-photo"><span>Add a reference photo</span><span class="field__optional">Optional</span></label>
+          <details class="photo-guidance"><summary>Private, not stored · JPEG, PNG, or WebP</summary><p class="field__hint" id="request-photo-hint">Use a photo of the kind of item you need. It proposes category, type, color, pattern, and style—never size, price, condition, or dates. Your photo is not stored or made public.</p></details>
           <input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="request-photo-hint request-photo-error">
           <div class="photo-preview photo-preview--row" id="request-photo-preview" hidden>
             <img alt="Preview of your reference photo">
@@ -60,6 +56,19 @@
       </form>
     </div>
 
+    <aside class="campus-pane discovery-sidebar" aria-label="Campus browsing and your purchases">
+      <div class="sidebar-nature" aria-hidden="true"></div>
+      <section class="sidebar-section" aria-labelledby="recommended-heading">
+        <h2 id="recommended-heading">{{ icon('search') }} Recommended</h2>
+        <p class="sidebar-caption">Catalog suggestions, not personalized.</p>
+        <div id="recommended-items" aria-live="polite"></div>
+      </section>
+      <section class="sidebar-section" aria-labelledby="previous-buys-heading">
+        <h2 id="previous-buys-heading">{{ icon('listing') }} Previous buys</h2>
+        <p class="sidebar-caption">Completed purchases, visible only to you.</p>
+        <div id="previous-buys" aria-live="polite"></div>
+      </section>
+    </aside>
   </div>
 </section>
 
@@ -84,36 +93,36 @@
   </form>
 </section>
 
-<section class="card how" aria-labelledby="how-heading">
+<section class="process-strip how" aria-labelledby="how-heading">
   <h2 id="how-heading">How it works</h2>
   <ol class="how__steps">
     <li class="how__step">
       <span class="how__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>
+        {{ icon('requests') }}
       </span>
       <h3>Say what you need</h3>
-      <p>Describe it in plain words: size or model, when, and your budget. We propose the details; you confirm them.</p>
+      <p>We propose the details; you confirm them.</p>
     </li>
     <li class="how__step">
       <span class="how__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.5-4.5"/><path d="M8 10.5l1.8 1.8L13 9"/></svg>
+        {{ icon('search') }}
       </span>
-      <h3>See matches with reasons</h3>
-      <p>Every result is a real listing on campus, with why it fits and what still needs confirming.</p>
+      <h3>See matches</h3>
+      <p>Real listings, with reasons and things to confirm.</p>
     </li>
     <li class="how__step">
       <span class="how__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="5"/><path d="M14 8a5 5 0 0 1 0 8"/><path d="M17 7a7 7 0 0 1 0 10"/><path d="M9 10v4M7.5 12h3"/></svg>
+        {{ icon('check') }}
       </span>
-      <h3>Agree on price and deposit</h3>
-      <p>Settle the fee, the agreed value, and the deposit with the owner in a private exchange. Both of you accept the same terms.</p>
+      <h3>Agree on terms</h3>
+      <p>Both accept the same terms in a private exchange.</p>
     </li>
     <li class="how__step">
       <span class="how__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>
+        {{ icon('pin') }}
       </span>
-      <h3>Meet at a public campus spot</h3>
-      <p>Hand off at a well-lit public place, confirm the condition together, and return the same way.</p>
+      <h3>Meet on campus</h3>
+      <p>Choose a public place for item handoffs.</p>
     </li>
   </ol>
   <div class="simulated-notice" role="note">
@@ -125,11 +134,10 @@
   <div class="section__head">
     <h2 id="listings-heading">Available on campus now</h2>
     <div class="cluster">
-      <a class="btn btn--sm" href="{{ url_for('pages.requests_feed') }}">Browse public requests</a>
-      <a class="btn btn--sm btn--primary" href="{{ url_for('pages.listing_form') }}">List an item</a>
+      <a href="{{ url_for('pages.listing_form') }}">New Listing</a>
     </div>
   </div>
-  <div id="listings" class="grid" aria-live="polite" aria-busy="true"></div>
+  <div id="listings" class="grid catalog-list" aria-live="polite" aria-busy="true"></div>
 </section>
 
 {% endblock %}

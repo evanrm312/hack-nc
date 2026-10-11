@@ -1,99 +1,77 @@
 <!doctype html>
-{# Shared Frutiger Aero shell (Person 3). Every page extends this.
-   Blocks: title, page_id (sets <body data-page>), content, scripts.
-   Keep: #session-status and #nav-sign-in (read by static/js/auth.js),
-   window.CAMPUS_CONFIG, and the api.js -> auth.js -> components.js load order
-   so Person 4's exchanges.js can rely on window.api and window.components. #}
+{% from "_icons.html" import icon %}
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#8fd6ff">
+  <meta name="theme-color" content="#247ea0">
   <title>{% block title %}Campus Current{% endblock %}</title>
+  <link rel="preload" href="{{ url_for('static', filename='assets/fonts/OpenSans-Upright.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+  {% block styles %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/desktop.css') }}">
 </head>
 <body data-page="{% block page_id %}{% endblock %}">
   <a class="skip-link" href="#main">Skip to main content</a>
-
-  <div class="aero-bubbles" aria-hidden="true">
-    <span></span><span></span><span></span><span></span><span></span>
-  </div>
-
   <div class="shell">
     <header class="aero-header">
-      <div class="aero-header__inner">
-        <a class="brand" href="{{ url_for('pages.home') }}">
-          <span class="brand__orb" aria-hidden="true"></span>
-          <span>Campus Current</span>
-          <span class="brand__tag">buy · borrow · UNC</span>
-        </a>
-
-        <button class="btn btn--icon nav-toggle" type="button" id="nav-toggle"
-                aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu">
-          <span class="bars" aria-hidden="true"></span>
-        </button>
-
-        <nav aria-label="Primary">
-          <ul class="nav" id="primary-nav">
-            <li><a href="{{ url_for('pages.home') }}">Home</a></li>
-            <li><a href="{{ url_for('pages.requests_feed') }}">Public requests</a></li>
-            <li><a href="{{ url_for('pages.listing_form') }}">New listing</a></li>
-            <li id="nav-my-listings" hidden><a href="/listings/mine">My listings</a></li>
-            <li><a href="{{ url_for('pages.my_exchanges') }}">My exchanges</a></li>
-            <li><a href="{{ url_for('pages.sign_in') }}" id="nav-sign-in">Sign in</a></li>
-          </ul>
-        </nav>
-
-        <div class="session" id="session-status" aria-live="polite"></div>
-      </div>
+      <a class="brand" href="{{ url_for('pages.home') }}">
+        <span class="brand__orb">{{ icon('leaf') }}</span>
+        <span>Campus Current</span>
+      </a>
+      <span class="brand__tag">Buy · Borrow · UNC</span>
+      <div class="session" id="session-status" role="status" aria-live="polite"></div>
     </header>
-
     <main class="shell-main" id="main" tabindex="-1">
-      {% block content %}{% endblock %}
-    </main>
-
-    <footer class="aero-footer">
-      <div class="aero-footer__inner">
-        <span>Reuse what already exists on campus: short-term access, local handoffs.</span>
-        <span>Prototype. Payments and deposits are simulated and labeled as such.</span>
+      <div class="desktop-window">
+        <div class="window-titlebar">
+          <span class="window-emblem">{{ icon('leaf') }}</span>
+          <span>{% block window_title %}{% if request.path == '/' %}Campus Exchange{% elif request.path == '/requests' %}Public Requests{% elif request.path == '/listings/new' %}New Listing{% elif request.path == '/listings/mine' %}My Listings{% elif request.path.startswith('/listings/') %}Listing Details{% elif request.path == '/sign-in' %}Your Account{% elif request.path == '/exchanges' %}My Exchanges{% elif request.path.startswith('/exchanges/') %}Private Exchange{% else %}Request Workspace{% endif %}{% endblock %}</span>
+        </div>
+        <div class="window-toolbar">
+          <a href="{{ url_for('pages.home') }}">{{ icon('home') }} Campus</a>
+          <span aria-hidden="true">›</span><span>Exchange workspace</span>
+          <span class="toolbar-purpose">UNC community exchange</span>
+        </div>
+        <div class="window-content">{% block content %}{% endblock %}</div>
       </div>
+    </main>
+    <footer class="aero-footer">
+      <span>Buy, borrow, and share on campus.</span>
+      <span>Prototype. Payments and deposits are simulated.</span>
+      <details class="asset-credits"><summary>Photo &amp; font credits</summary><p>Sky: <a href="https://www.pexels.com/photo/blue-skies-53594/">Pixabay / Pexels</a>. Leaves: <a href="https://www.pexels.com/photo/green-leaves-1154623/">Free Nature Stock / Pexels</a>. Both photographs are marked CC0 on their source pages. <a href="https://github.com/googlefonts/opensans">Open Sans by Steve Matteson and the Open Sans Project Authors</a>, SIL Open Font License 1.1.</p></details>
     </footer>
   </div>
-
-  <script>
-    window.CAMPUS_CONFIG = {{ public_config | tojson }};
-  </script>
+  <section class="start-menu" id="start-menu" aria-label="Campus launcher" hidden>
+    <div class="start-menu__title">{{ icon('leaf') }} Campus Current</div>
+    <div class="start-menu__body">
+      <nav aria-label="Launcher destinations">
+        <a href="/">{{ icon('home') }}<span>Home<small>Make a request</small></span></a>
+        <a href="/requests">{{ icon('requests') }}<span>Public Requests<small>Browse campus needs</small></span></a>
+        <a href="/listings/new">{{ icon('add') }}<span>New Listing<small>Offer an item or service</small></span></a>
+        <a href="/listings/mine">{{ icon('listing') }}<span>My Listings<small>Manage your listings</small></span></a>
+        <a href="/exchanges">{{ icon('exchange') }}<span>My Exchanges<small>Agreements and messages</small></span></a>
+      </nav>
+      <div class="start-menu__aside"><span class="start-nature">{{ icon('leaf') }}</span><h2>Your Workspace</h2><p>Requests, listings, and private exchanges.</p><a href="/sign-in">{{ icon('user') }} Your Account</a></div>
+    </div>
+  </section>
+  <nav class="taskbar" aria-label="Primary">
+    <button class="start-orb" id="start-toggle" type="button" aria-expanded="false" aria-controls="start-menu" aria-label="Open Campus menu">{{ icon('leaf') }}</button>
+    <div class="taskbar__tasks" id="primary-nav">
+      {% for href, label, glyph in [('/', 'Home', 'home'), ('/requests', 'Public Requests', 'requests'), ('/listings/new', 'New Listing', 'add'), ('/listings/mine', 'My Listings', 'listing'), ('/exchanges', 'My Exchanges', 'exchange')] %}
+      <a class="task-button" href="{{ href }}"{% if request.path == href or (href == '/exchanges' and request.path.startswith('/exchanges/')) %} aria-current="page"{% elif href == '/' and (request.path.startswith('/results/') or (request.path.startswith('/listings/') and request.path not in ['/listings/mine', '/listings/new'])) %} aria-current="location"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
+      {% endfor %}
+    </div>
+    <a class="taskbar__account"{% if request.path == '/sign-in' %} aria-current="page"{% endif %} href="{{ url_for('pages.sign_in') }}">{{ icon('user') }}<span id="nav-sign-in">Sign In</span></a>
+  </nav>
+  <script>window.CAMPUS_CONFIG = {{ public_config | tojson }};</script>
   <script src="{{ url_for('static', filename='js/api.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script src="{{ url_for('static', filename='js/components.js') }}"></script>
-  <script>
-    // Shell behavior: mobile nav toggle + current-page marker. Kept inline so it
-    // works on every page regardless of which page script loads afterwards.
-    (function () {
-      var toggle = document.getElementById("nav-toggle");
-      var nav = document.getElementById("primary-nav");
-      if (toggle && nav) {
-        toggle.addEventListener("click", function () {
-          var open = nav.getAttribute("data-open") === "true";
-          nav.setAttribute("data-open", open ? "false" : "true");
-          toggle.setAttribute("aria-expanded", open ? "false" : "true");
-          toggle.setAttribute("aria-label", open ? "Open menu" : "Close menu");
-        });
-      }
-      var here = window.location.pathname.replace(/\/$/, "") || "/";
-      nav && nav.querySelectorAll("a").forEach(function (a) {
-        var path = a.getAttribute("href").replace(/\/$/, "") || "/";
-        if (path === here || (path !== "/" && path !== "/listings/mine" && here.indexOf(path + "/") === 0)) a.setAttribute("aria-current", "page");
-      });
-      // "My listings" only for signed-in users (token presence; the page itself verifies with /api/me).
-      var mine = document.getElementById("nav-my-listings");
-      function syncMine() { if (mine && window.api) mine.hidden = !api.getToken(); }
-      document.addEventListener("campus:auth-changed", syncMine);
-      syncMine();
-    })();
-  </script>
+  <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
   <script src="{{ url_for('static', filename='js/marketplace.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/discovery.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

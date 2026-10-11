@@ -7,15 +7,15 @@
 {% block title %}Results · Campus Current{% endblock %}
 {% block page_id %}results{% endblock %}
 {% block content %}
-<div id="results-root" data-request-id="{{ request_id }}">
+<div class="results-workspace" id="results-root" data-request-id="{{ request_id }}">
 
-  <section class="card" aria-labelledby="results-heading">
+  <section class="card results-overview" aria-labelledby="results-heading">
     <div class="section__head">
       <h1 id="results-heading" style="margin:0">Matches for your request</h1>
       <div class="cluster" id="results-badges"></div>
     </div>
     <blockquote class="lede" id="results-original" style="margin:0 0 var(--space-3); padding-left: var(--space-3); border-left: 4px solid var(--sky-200)"></blockquote>
-    <p class="muted" style="margin:0">Every result below is a real current listing. Compatibility is checked in code, not guessed; anything unverified is marked "needs confirmation".</p>
+    <p class="muted" style="margin:0">Matches use current listings. Check the details marked “Needs confirmation” before agreeing.</p>
   </section>
 
   <section class="card" id="interp-box" aria-labelledby="interp-heading">

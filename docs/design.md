@@ -18,27 +18,36 @@ without redesign. Files: `static/css/theme.css`, `static/js/components.js`,
 - Honest labels: fixture/stub data is purple-striped, anything money-related
   that is not real says "simulated", a profile badge shows the server's text
   verbatim and is green only when `verification_source === "supabase"`.
-- Unknown is rendered as "unknown" (via `api.formatCents`/`api.formatTime`),
+- Unknown is rendered as "Unknown" in standalone UI labels (the shared API
+  formatting helpers retain their existing lowercase return values),
   never as `$0.00` or a made-up value.
 
 ## Typography
 
-System stack only, no downloaded fonts, matching the mid-2000s Frutiger Aero
-era (Windows Vista/7, Mac OS X, early iPhone):
+The current refinement uses Segoe UI when installed and bundles Open Sans
+upright variable type, by Steve Matteson and the Open Sans Project Authors,
+under the SIL Open Font License 1.1. Direct browser inspection of the user's
+Aero Archive reference confirmed its Segoe UI/Tahoma stack and regular-weight
+headings. Open Sans supplies a readable humanist approximation on Linux;
+no commercial Microsoft or Frutiger font is redistributed.
 
 ```css
---font: "Segoe UI", "Lucida Grande", "Lucida Sans Unicode", Tahoma, Verdana, sans-serif;
+--font: "Segoe UI", "Open Sans", Tahoma, "DejaVu Sans", sans-serif;
 ```
 
-Windows renders Segoe UI, macOS/iOS fall back to Lucida Grande, older systems
-to Tahoma/Verdana. Body text is 1rem/1.5, plain weight, `--ink` on opaque
-surfaces. Only large headings get polish: `h1` has a white top highlight plus a
-faint sky shadow, the hero `h1` uses an ink-to-sky-900 gradient fill (both
-colors are dark, so contrast stays high; it falls back to plain ink where
-`background-clip: text` is unsupported), `h2` gets the highlight only. Form
-fields, buttons, badges, and body copy have no shadows or gradients on text
-except the white text on primary/leaf buttons, which keeps a 1px dark shadow
-for legibility. No pixel, novelty, or display fonts anywhere.
+The local font works on Linux without an installed Microsoft font. Page
+headings use 32–42px regular type; section titles use 23–24px semibold; window
+titles use 17px semibold; form labels use 17px semibold; body uses 17px/1.45; supporting
+information uses 14–15px/1.4. Prices and agreed terms use tabular numerals.
+Text stays solid navy or green. Reflections belong to surfaces; a small
+shadow supports light text on primary buttons. No novelty display font is used.
+
+Window frames have 22px corners (18px on phones), hero panels 20px, controls
+11–12px, and dialogs 20px. White upper/left bevels, shaded lower lips, and
+contact shadows make the chrome and primary actions raised; fields and
+conversation wells remain inset. Catalog rows remain flat inside a rounded
+collection frame, so depth reinforces hierarchy. Application enum labels use
+explicit display mappings, never CSS capitalization or rewrites of user text.
 
 ## Tokens (`:root`)
 

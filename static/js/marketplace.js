@@ -35,14 +35,16 @@
   //     absent/null; optional service_duration_minutes and private
   //     service_time_windows. Public view adds service_duration_minutes.
   const SERVICE_CATEGORIES = [["tutoring", "Tutoring"], ["proofreading", "Proofreading"], ["moving help", "Moving help"]];
-  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "unknown"])[1];
+  const serviceCategoryLabel = (c) => (SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c ? String(c) : "Unknown"])[1];
+  const categoryLabel = (c) => ([...CATEGORIES, ...SERVICE_CATEGORIES].find(([v]) => v && v === c) || [c, c ? String(c) : "Uncategorized"])[1];
+  const modeLabel = (m) => ({ sale: "Buy", borrow: "Borrow", service: "Service" })[m] || String(m);
   const isServiceCategory = (c) => SERVICE_CATEGORIES.some(([v]) => v === c);
   const isService = (listing) => !!listing && (listing.allowed_modes || []).includes("service");
   const isServiceRequest = (r) => !!r && ((r.modes || []).includes("service") || (r.normalized && (r.normalized.modes || []).includes("service")));
-  const formatDuration = (min) => (Number.isInteger(min) ? (min >= 60 ? (min / 60).toFixed(min % 60 ? 1 : 0) + " h" : min + " min") : "unknown");
+  const formatDuration = (min) => (Number.isInteger(min) ? (min >= 60 ? (min / 60).toFixed(min % 60 ? 1 : 0) + " h" : min + " min") : "Unknown");
 
   const CONDITIONS = [["", "Unknown"], ["new", "New"], ["like_new", "Like new"], ["good", "Good"], ["fair", "Fair"], ["worn", "Worn"]];
-  const conditionLabel = (c) => (CONDITIONS.find(([v]) => v === c) || [c, c ? String(c).replace("_", " ") : "unknown"])[1];
+  const conditionLabel = C.conditionLabel;
 
   if (page === "home") initHome();
   if (page === "results") initResults();
@@ -336,7 +338,7 @@
             actions.append(C.button({ label: "Change", variant: "ghost", size: "sm", attrs: { "aria-label": "Change decision for " + p.name }, onClick: () => { if (p.status === "accepted") undoProposal(p); p.status = null; renderProposals(); refresh(); focusProposal(i); } }));
           }
           list.append(C.el("li", { className: "proposal" + (p.status ? " proposal--" + p.status : ""), dataset: { index: String(i) } },
-            C.el("span", { className: "proposal__attr" }, C.badge("from photo", "warn"), " ", C.el("strong", { text: String(p.name).replace(/_/g, " ") }), " = ", C.el("span", { text: String(p.value) })),
+            C.el("span", { className: "proposal__attr" }, C.badge("From photo", "warn"), " ", C.el("strong", { text: String(p.name).replace(/_/g, " ") }), " = ", C.el("span", { text: String(p.value) })),
             C.el("span", { className: "proposal__status muted", text: statusText }),
             actions));
         });
@@ -574,8 +576,8 @@
         interpBadges.append(C.badge("Manual entry", "warn"));
         interpBody.append(C.notice("warn", "Nothing was guessed for this request. Fill in the fields you know and update the results."));
       } else {
-        interpBadges.append(C.badge("Proposed by Gemini", "info"));
-        interpBody.append(C.notice("info", "These are proposals from the interpreter, not facts. Edit anything that is wrong; blank means unknown."));
+        interpBadges.append(C.badge(source === "gemini" ? "Proposed by Gemini" : "Review details", "info"));
+        interpBody.append(C.notice("info", source === "gemini" ? "These are proposals from the interpreter, not facts. Edit anything that is wrong; blank means unknown." : "Review and correct these details. Blank means unknown; no interpreter source was recorded."));
       }
 
       const questions = (n.follow_up_questions || []).filter(Boolean);
@@ -611,9 +613,9 @@
       if (photoAttrs) {
         interpBody.append(C.notice("info", C.el("span", {},
           C.el("strong", { text: "Reference photo. " }),
-          "Fields marked \"from photo (accepted)\" were proposed from your photo and confirmed by you. They are preferences you can still edit. The photo itself is private and was not stored.")));
+          "Fields marked \"From photo (accepted)\" were proposed from your photo and confirmed by you. They are preferences you can still edit. The photo itself is private and was not stored.")));
       }
-      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs, photoLabel: "from photo (accepted)", photoVariant: "neutral" };
+      const meta = { modesUnknown: !modesKnown, ambiguous, photoAttributes: photoAttrs, photoLabel: "From photo (accepted)", photoVariant: "neutral" };
 
       const form = C.el("form", { id: "interp-form", novalidate: true });
       const editor = buildInterpretationForm(form, values, meta);
@@ -713,7 +715,7 @@
           C.el("h2", { id: "confirmed-heading", text: "Confirmed matches" }),
           C.badge(confirmed.length + (confirmed.length === 1 ? " match" : " matches"), confirmed.length ? undefined : "neutral")));
       if (confirmed.length) {
-        confirmedSection.append(C.el("div", { className: "grid" }, confirmed.map((e) => matchCard(e, "confirmed"))));
+        confirmedSection.append(C.el("div", { className: "grid catalog-list" }, confirmed.map((e) => matchCard(e, "confirmed"))));
       } else {
         confirmedSection.append(C.state.block("empty", {
           title: needs.length ? "No confirmed matches yet" : "No matches yet",
@@ -731,7 +733,7 @@
             C.el("h2", { id: "needs-heading", text: "Needs confirmation before it counts" }),
             C.badge(needs.length + (needs.length === 1 ? " option" : " options"), "warn")),
           C.el("p", { className: "muted", style: { marginBottom: "var(--space-3)" }, text: "These are not confirmed matches. A required detail is unknown or has not been checked. Confirm it with the owner before relying on it." }),
-          C.el("div", { className: "grid" }, needs.map((e) => matchCard(e, "needs"))));
+          C.el("div", { className: "grid catalog-list" }, needs.map((e) => matchCard(e, "needs"))));
         matchesBox.append(needsSection);
       }
 
@@ -761,16 +763,16 @@
       const chips = [];
       const confirmed = cleanModes(n.modes);
       const modes = confirmed.includes("service") ? confirmed : (request.modes || []);
-      const labels = modes.map((m) => (m === "sale" ? "buy" : m === "borrow" ? "borrow" : "service"));
+      const labels = modes.map(modeLabel);
       if (labels.length) chips.push(labels.join(" or "));
-      if (n.category) chips.push("category: " + n.category);
+      if (n.category) chips.push("Category: " + categoryLabel(n.category));
       Object.entries(n.required_specifications || {}).forEach(([k, v]) => chips.push(k.replace(/_/g, " ") + " = " + String(v) + " (required)"));
-      if (request.budget_cents != null) chips.push("budget up to " + api.formatCents(request.budget_cents));
-      if (request.max_deposit_cents != null) chips.push("deposit up to " + api.formatCents(request.max_deposit_cents));
-      if (request.needed_by) chips.push("needed by " + api.formatTime(request.needed_by));
-      if (request.use_start && request.use_end) chips.push("borrow " + api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end));
-      if (Number.isInteger(request.service_duration_minutes)) chips.push("session " + formatDuration(request.service_duration_minutes));
-      if (request.area) chips.push((isServiceRequest(request) ? "around " : "pickup around ") + request.area);
+      if (request.budget_cents != null) chips.push("Budget up to " + api.formatCents(request.budget_cents));
+      if (request.max_deposit_cents != null) chips.push("Deposit up to " + api.formatCents(request.max_deposit_cents));
+      if (request.needed_by) chips.push("Needed by " + api.formatTime(request.needed_by));
+      if (request.use_start && request.use_end) chips.push("Borrow " + api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end));
+      if (Number.isInteger(request.service_duration_minutes)) chips.push("Session " + formatDuration(request.service_duration_minutes));
+      if (request.area) chips.push((isServiceRequest(request) ? "Around " : "Pickup around ") + request.area);
       return chips;
     }
 
@@ -822,7 +824,7 @@
         renderPublishSuccess(box, null);
         return;
       }
-      const btn = C.button({ label: "Publish Request", variant: "leaf", attrs: { id: "publish-btn" } });
+      const btn = C.button({ label: "Publish request", variant: "leaf", attrs: { id: "publish-btn" } });
       box.append(
         C.el("h3", { text: "Let other members know" }),
         C.el("p", { className: "muted", text: "Publishing shares a sanitized version of this request in the public feed: the item, buy or borrow, the day you need it by, and your campus area. Your exact times, borrowing dates, deposit limit, and contact details stay private. Nothing is published until you confirm." }),
@@ -833,26 +835,26 @@
     // Mirrors the server's public view (docs/contracts.md -> NeedRequest public view).
     function buildPublicPreview(profile) {
       const n = request.normalized || {};
-      const fmtSpecs = (obj) => Object.entries(obj || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "none";
+      const fmtSpecs = (obj) => Object.entries(obj || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "None";
       const modes = request.modes || [];
       const neededDate = request.needed_by ? request.needed_by.slice(0, 10) : null;
       const publicRows = [
-        ["Who", profile ? profile.display_name + " (" + profile.badge + ")" : "your display name and verification badge"],
-        ["Item category", n.category || "unknown"],
+        ["Who", profile ? profile.display_name + " (" + profile.badge + ")" : "Your display name and verification badge"],
+        ["Item category", n.category ? categoryLabel(n.category) : "Unknown"],
         ["Required details", fmtSpecs(n.required_specifications)],
         ["Preferred details", fmtSpecs(n.preferred_specifications)],
-        ["Buy or borrow", modes.length ? modes.map((m) => (m === "sale" ? "buy" : "borrow")).join(" or ") : "unknown"],
-        ["Budget", request.budget_cents != null ? api.formatCents(request.budget_cents) : "unknown"],
-        ["Needed by", neededDate ? neededDate + " (date only)" : "unknown"],
-        ["Campus area", request.area || "unknown"],
+        ["Buy or borrow", modes.length ? modes.map(modeLabel).join(" or ") : "Unknown"],
+        ["Budget", request.budget_cents != null ? api.formatCents(request.budget_cents) : "Unknown"],
+        ["Needed by", neededDate ? neededDate + " (date only)" : "Unknown"],
+        ["Campus area", request.area || "Unknown"],
       ];
       const privateRows = [
         ["Your original wording", request.original_text ? "“" + request.original_text.slice(0, 80) + (request.original_text.length > 80 ? "…" : "") + "”" : "—"],
-        ["Exact needed-by time", request.needed_by ? api.formatTime(request.needed_by) : "unknown"],
-        ["Borrowing dates", request.use_start || request.use_end ? api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end) : "unknown"],
-        ["Pickup windows", (request.pickup_windows || []).length ? (request.pickup_windows.length + " window(s)") : "none set"],
-        ["Deposit you can afford", request.max_deposit_cents != null ? api.formatCents(request.max_deposit_cents) : "unknown"],
-        ["Email and contact details", "never shown"],
+        ["Exact needed-by time", request.needed_by ? api.formatTime(request.needed_by) : "Unknown"],
+        ["Borrowing dates", request.use_start || request.use_end ? api.formatTime(request.use_start) + " to " + api.formatTime(request.use_end) : "Unknown"],
+        ["Pickup windows", (request.pickup_windows || []).length ? (request.pickup_windows.length + " window(s)") : "None set"],
+        ["Deposit you can afford", request.max_deposit_cents != null ? api.formatCents(request.max_deposit_cents) : "Unknown"],
+        ["Email and contact details", "Never shown"],
       ];
       const list = (rows, lock) => C.el("dl", { className: "privacy-list" }, rows.flatMap(([k, v]) => [
         C.el("dt", {}, C.el("span", { className: "privacy-list__lock privacy-list__lock--" + lock, "aria-hidden": "true" }), k),
@@ -919,17 +921,17 @@
             C.button({ label: "See it in the public feed", variant: "primary", href: "/requests" }),
             C.statusBadge(request.status), C.badge("Published", "sale")))));
       if (pub) {
-        const specs = (o) => Object.entries(o || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "none";
+        const specs = (o) => Object.entries(o || {}).map(([k, v]) => k.replace(/_/g, " ") + " = " + String(v)).join(", ") || "None";
         box.append(C.el("p", { className: "muted", style: { margin: "var(--space-3) 0 var(--space-1)" }, text: "Exactly what was published:" }),
           C.el("dl", { className: "privacy-list" }, [
-            ["Who", pub.requester ? pub.requester.display_name + " (" + pub.requester.badge + ")" : "unknown"],
-            ["Item category", pub.category || "unknown"],
+            ["Who", pub.requester ? pub.requester.display_name + " (" + pub.requester.badge + ")" : "Unknown"],
+            ["Item category", pub.category ? categoryLabel(pub.category) : "Unknown"],
             ["Required details", specs(pub.required_specifications)],
             ["Preferred details", specs(pub.preferred_specifications)],
-            ["Buy or borrow", (pub.modes || []).length ? pub.modes.map((m) => (m === "sale" ? "buy" : "borrow")).join(" or ") : "unknown"],
-            ["Budget", pub.budget_cents != null ? api.formatCents(pub.budget_cents) : "unknown"],
-            ["Needed by", pub.needed_by_date || "unknown"],
-            ["Campus area", pub.area || "unknown"],
+            ["Buy or borrow", (pub.modes || []).length ? pub.modes.map(modeLabel).join(" or ") : "Unknown"],
+            ["Budget", pub.budget_cents != null ? api.formatCents(pub.budget_cents) : "Unknown"],
+            ["Needed by", pub.needed_by_date || "Unknown"],
+            ["Campus area", pub.area || "Unknown"],
           ].flatMap(([k, v]) => [C.el("dt", {}, C.el("span", { className: "privacy-list__lock privacy-list__lock--open", "aria-hidden": "true" }), k), C.el("dd", { text: v })])));
       }
     }
@@ -978,7 +980,7 @@
       const footer = [
         C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: owner.display_name || "Owner" }), C.profileBadge(owner)),
         C.el("span", { className: "cluster" },
-          typeof entry.score === "number" ? C.badge("fit " + entry.score.toFixed(2), "neutral") : null,
+          typeof entry.score === "number" ? C.badge("Fit " + entry.score.toFixed(2), "neutral") : null,
           // Carry the request along so the detail page can link the exchange
           // to it (source_request_id) and preselect the matched mode.
           C.button({ label: service ? "View service" : "View listing", size: "sm", variant: kind === "confirmed" ? "primary" : "default",
@@ -991,7 +993,7 @@
         title: listing.title || "Untitled listing",
         subtitle: service
           ? serviceCategoryLabel(listing.category) + " · " + formatDuration(listing.service_duration_minutes)
-          : [listing.category, listing.condition ? "condition " + String(listing.condition).replace("_", " ") : "condition unknown"].filter(Boolean).join(" · "),
+          : [categoryLabel(listing.category), "Condition: " + conditionLabel(listing.condition)].filter(Boolean).join(" · "),
         badges,
         body: [money, specList, windows, C.el("h4", { className: "reasons__title", text: kind === "confirmed" ? "Why it matches" : "What still needs checking" }), reasons],
         footer,
@@ -1026,13 +1028,13 @@
   function buildInterpretationForm(container, values, meta) {
     meta = meta || {};
     const F = {};
-    const unknownBadge = () => C.badge("unknown", "neutral");
-    const confirmBadge = () => C.badge("needs confirmation", "warn");
+    const unknownBadge = () => C.badge("Unknown", "neutral");
+    const confirmBadge = () => C.badge("Needs confirmation", "warn");
     const markLabel = (fieldApi, badge) => { fieldApi.root.querySelector(".field__label").append(badge); };
 
     const modesErr = C.el("p", { className: "field__error", id: "modes-error", role: "alert" });
     const modesGroup = C.el("fieldset", {},
-      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("required", "info") : null),
+      C.el("legend", {}, "What are you looking for? ", meta.modesUnknown ? confirmBadge() : meta.requireModes ? C.badge("Required", "info") : null),
       C.el("p", { className: "field__hint", id: "modes-hint", text: meta.modesUnknown
         ? "The interpreter did not say. Buy and borrow are selected as a search preference; confirm or narrow it."
         : (meta.requireModes ? "Required. " : "") + "Pick at least one. Buy and borrow together is fine as a search preference. Service means help from a person (tutoring, proofreading, moving help)." }),
@@ -1050,7 +1052,7 @@
       F.category.control.value = values.category;
     }
     const photoAttrs = meta.photoAttributes || {};
-    const photoLabel = meta.photoLabel || "from photo (accepted)";
+    const photoLabel = meta.photoLabel || "From photo (accepted)";
     const photoBadge = () => C.badge(photoLabel, meta.photoVariant || "neutral");
     if (!values.category) markLabel(F.category, unknownBadge());
     else if (photoAttrs.category && photoAttrs.category === values.category) markLabel(F.category, photoBadge());
@@ -1062,10 +1064,10 @@
     F.preferred_specifications = preferredSpecs;
 
     F.budget_cents = C.field({ id: "f-budget", label: "Purchase or rental budget", type: "text", prefix: "$", optional: true,
-      attrs: { inputmode: "decimal" }, placeholder: "unknown", value: C.centsToDollars(values.budget_cents),
+      attrs: { inputmode: "decimal" }, placeholder: "Unknown", value: C.centsToDollars(values.budget_cents),
       hint: "The most you would pay to buy, or as a rental fee." });
     F.max_deposit_cents = C.field({ id: "f-deposit", label: "Deposit you can afford", type: "text", prefix: "$", optional: true,
-      attrs: { inputmode: "decimal" }, placeholder: "unknown", value: C.centsToDollars(values.max_deposit_cents),
+      attrs: { inputmode: "decimal" }, placeholder: "Unknown", value: C.centsToDollars(values.max_deposit_cents),
       hint: "Separate from your budget. A free loan can still be unaffordable if the deposit is too high. Deposits are simulated in this prototype." });
     if (values.budget_cents == null) markLabel(F.budget_cents, unknownBadge());
     if (values.max_deposit_cents == null) markLabel(F.max_deposit_cents, unknownBadge());
@@ -1080,7 +1082,7 @@
       else if (!values[key]) markLabel(f, unknownBadge());
     });
 
-    F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "unknown", value: values.area || "", attrs: { maxlength: 80 } });
+    F.area = C.field({ id: "f-area", label: "Campus area for pickup", type: "text", optional: true, placeholder: "Unknown", value: values.area || "", attrs: { maxlength: 80 } });
     if (!values.area) markLabel(F.area, unknownBadge());
 
     // Service-only fields (docs/contracts.md -> Service NeedRequest): optional
@@ -1246,6 +1248,12 @@
     const status = $("listing-status");
     const authGate = $("auth-gate");
     let submitting = false;
+    let unsaved = false;
+    form.addEventListener("input", () => { unsaved = true; });
+    form.addEventListener("change", () => { unsaved = true; });
+    window.addEventListener("beforeunload", (event) => {
+      if (unsaved && !submitting) { event.preventDefault(); event.returnValue = ""; }
+    });
 
     function refreshGate() {
       const signedIn = !!api.getToken();
@@ -1257,9 +1265,9 @@
 
     // ---- basics
     const F = {};
-    F.title = C.field({ id: "l-title", label: "Title", required: true, placeholder: "e.g. Navy suit, 40R", attrs: { maxlength: 120 }, hint: "Required." });
-    F.category = C.field({ id: "l-category", label: "Category", type: "select", required: true,
-      options: CATEGORIES.map(([value, label]) => ({ value, label: value ? label : "Choose a category" })), hint: "Required." });
+    F.title = C.field({ id: "l-title", label: "Title (required)", required: true, placeholder: "e.g. Navy suit, 40R", attrs: { maxlength: 120 } });
+    F.category = C.field({ id: "l-category", label: "Category (required)", type: "select", required: true,
+      options: CATEGORIES.map(([value, label]) => ({ value, label: value ? label : "Choose a category" })) });
     F.description = C.field({ id: "l-description", label: "Description", type: "textarea", optional: true, rows: 4, attrs: { maxlength: 4000 },
       placeholder: "What it is, how it has been used, anything a borrower or buyer should know." });
     F.condition = C.field({ id: "l-condition", label: "Condition", type: "select", options: CONDITIONS.map(([value, label]) => ({ value, label })), hint: "Leave as unknown if you are not sure." });
@@ -1290,16 +1298,16 @@
     const modeService = choiceInput("allowed_modes", "service", "Service", false, "l-modes-hint l-modes-error");
     const modesGroup = C.el("fieldset", {},
       C.el("legend", { text: "What are you offering?" }),
-      C.el("p", { className: "field__hint", id: "l-modes-hint", text: "Required. An item can be for sale, to borrow, or both. A service (tutoring, proofreading, moving help) has its own price and time windows and no deposit." }),
+      C.el("p", { className: "field__hint", id: "l-modes-hint", text: "Choose sale, borrowing, or both for an item. Services have separate session terms and no deposit." }),
       C.el("div", { className: "choices" }, modeSale.label, modeBorrow.label, modeService.label),
       modesErr);
     F.allowed_modes = { control: modesGroup, setError(m) { modesErr.textContent = m || ""; }, clearError() { modesErr.textContent = ""; } };
 
     // ---- service terms (assumed shape; see SERVICES block at the top)
-    F.service_category = C.field({ id: "l-service-category", label: "Service category", type: "select", required: true,
-      options: [{ value: "", label: "Choose a category" }].concat(SERVICE_CATEGORIES.map(([value, label]) => ({ value, label }))), hint: "Required." });
-    F.service_price_cents = C.field({ id: "l-service-price", label: "Price per session", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 25", hint: "Required. $0 is allowed for a free service. Payment is simulated in this prototype." });
-    F.service_duration_minutes = C.field({ id: "l-service-duration", label: "Session length (minutes)", type: "number", value: "60", attrs: { min: 1, max: 1440, step: 5, inputmode: "numeric" }, hint: "Required. 1 to 1440 minutes." });
+    F.service_category = C.field({ id: "l-service-category", label: "Service category (required)", type: "select", required: true,
+      options: [{ value: "", label: "Choose a category" }].concat(SERVICE_CATEGORIES.map(([value, label]) => ({ value, label }))) });
+    F.service_price_cents = C.field({ id: "l-service-price", label: "Price per session (required)", prefix: "$", attrs: { inputmode: "decimal" }, placeholder: "e.g. 25", hint: "$0 is allowed for a free service." });
+    F.service_duration_minutes = C.field({ id: "l-service-duration", label: "Session length (minutes)", type: "number", value: "60", attrs: { min: 1, max: 1440, step: 1, inputmode: "numeric" }, hint: "Required. 1 to 1440 minutes." });
     const windowsEditor = timeWindowsEditor();
     F.service_available_windows = windowsEditor;
     const serviceGroup = C.el("fieldset", { id: "l-service-group" },
@@ -1332,16 +1340,17 @@
       C.el("div", { className: "field-row" }, F.rental_fee_cents.root, F.proposed_item_value_cents.root),
       F.collateral_percent.root,
       depositCalc, lowNote,
-      C.el("h3", { style: { marginTop: "var(--space-4)" }, text: "Availability" }),
-      C.el("div", { className: "field-row" }, F.available_from.root, F.available_until.root),
-      F.availability_notes.root);
+      C.el("details", { className: "listing-disclosure" },
+        C.el("summary", { text: "Availability (optional)" }),
+        C.el("div", { className: "field-row" }, F.available_from.root, F.available_until.root),
+        F.availability_notes.root));
 
     // ---- meeting spots
     const spotsBox = C.el("div", { id: "l-spots" });
     const spotsErr = C.el("p", { className: "field__error", role: "alert" });
     const spotsGroup = C.el("fieldset", {},
       C.el("legend", { text: "Preferred public meeting spots" }),
-      C.el("p", { className: "field__hint", text: "Optional. Public, well-lit campus spots. Suggested locations do not guarantee safety." }),
+      C.el("p", { className: "field__hint", text: "Optional. Choose from the campus catalog. Access notes are recorded information; no location is guaranteed safe." }),
       spotsBox, spotsErr);
     F.meeting_spot_ids = { control: spotsBox, setError(m) { spotsErr.textContent = m || ""; }, clearError() { spotsErr.textContent = ""; } };
     loadSpots();
@@ -1358,16 +1367,24 @@
       }
     }
 
-    const itemOnly = C.el("div", {},
-      C.el("div", { className: "field-row" }, F.condition.root, F.photo.root),
-      specs.root, F.accessories.root, F.known_defects.root);
+    const itemOnly = C.el("div", { className: "listing-item-fields" },
+      F.condition.root,
+      C.el("details", { className: "listing-disclosure", id: "listing-optional-details" },
+        C.el("summary", { text: "Specifications, accessories, and defects" }),
+        specs.root, F.accessories.root, F.known_defects.root));
+    const photosSection = C.el("details", { className: "listing-disclosure listing-photo-section" },
+      C.el("summary", { text: "Photos (optional)" }), F.photo.root);
     const previewBox = C.el("div", { id: "l-service-preview" });
     fieldsBox.append(
       modesGroup,
-      C.el("div", { className: "field-row" }, F.title.root, F.category.root),
-      F.description.root,
-      itemOnly,
-      saleGroup, borrowGroup, serviceGroup, spotsGroup, previewBox);
+      C.el("div", { className: "listing-editor-layout" },
+        C.el("section", { className: "listing-details-pane", "aria-label": "Listing details" },
+          C.el("h2", { text: "Basics" }),
+          C.el("div", { className: "field-row" }, F.title.root, F.category.root),
+          F.description.root, itemOnly, photosSection),
+        C.el("section", { className: "listing-terms-pane", "aria-label": "Terms and availability" },
+          C.el("h2", { text: "Terms" }),
+          saleGroup, borrowGroup, serviceGroup, spotsGroup, previewBox)));
 
     // ---- live behavior
     const isServiceMode = () => modeService.input.checked;
@@ -1381,8 +1398,17 @@
       serviceGroup.hidden = !service;
       spotsGroup.hidden = service;        // meeting_spot_ids is rejected for services
       F.description.root.querySelector(".field__optional").hidden = service; // description is required for a service
+      F.description.root.querySelector(".field__label span").textContent = service ? "Description (required)" : "Description";
       itemOnly.hidden = service;          // condition, photo, specs, accessories, defects
+      photosSection.hidden = service;
       F.category.root.hidden = service;   // item category is replaced by the service category
+      // Hidden fields keep their draft values but are never sent for this kind.
+      [itemOnly, photosSection, saleGroup, borrowGroup, serviceGroup, spotsGroup, F.category.root].forEach((group) => {
+        group.querySelectorAll("input, textarea, select").forEach((input) => {
+          input.disabled = group.hidden;
+          if (group.hidden) input.removeAttribute("aria-invalid");
+        });
+      });
       F.title.control.placeholder = service ? "e.g. STOR 155 tutoring" : "e.g. Navy suit, 40R";
       if (service || modeSale.input.checked || modeBorrow.input.checked) F.allowed_modes.clearError();
       if (!service) C.clear(previewBox);
@@ -1483,8 +1509,8 @@
         const price = C.dollarsToCents(F.service_price_cents.value());
         if (price.error) { F.service_price_cents.setError(price.error); bad = true; }
         else if (price.cents == null) { F.service_price_cents.setError("Enter a price (0 for free)."); bad = true; }
-        const duration = parseInt(F.service_duration_minutes.value(), 10);
-        if (Number.isNaN(duration) || duration < 1 || duration > 1440) { F.service_duration_minutes.setError("Enter a length from 1 to 1440 minutes."); bad = true; }
+        const duration = Number(F.service_duration_minutes.value());
+        if (!Number.isInteger(duration) || duration < 1 || duration > 1440) { F.service_duration_minutes.setError("Enter a whole number from 1 to 1440 minutes."); bad = true; }
         if (!F.description.value().trim()) { F.description.setError("A description is required for a service."); bad = true; }
         const windows = windowsEditor.read();
         if (!windows.ok) bad = true;
@@ -1567,6 +1593,10 @@
       if (bad) {
         showNotice(errorBox, "Some fields need attention; see the messages next to them.");
         const first = form.querySelector('[aria-invalid="true"]') || (!modes.length ? modeSale.input : null);
+        if (first) {
+          let disclosure = first.closest("details");
+          while (disclosure) { disclosure.open = true; disclosure = disclosure.parentElement.closest("details"); }
+        }
         if (first) first.focus(); // after the banner so the first invalid field keeps focus
         return;
       }
@@ -1659,7 +1689,7 @@
         C.el("dl", { className: "kv-list" },
           C.el("dt", { text: "Price per session" }), C.el("dd", { text: api.formatCents(listing.service_price_cents) }),
           C.el("dt", { text: "Session length" }), C.el("dd", { text: formatDuration(listing.service_duration_minutes) }),
-          C.el("dt", { text: "Deposit" }), C.el("dd", { text: "none (services have no collateral)" })),
+          C.el("dt", { text: "Deposit" }), C.el("dd", { text: "None (services have no collateral)" })),
         serviceWindowsNode(listing),
       ],
       footer: owner.display_name ? [C.el("span", { className: "muted", text: owner.display_name }), C.profileBadge(owner)] : null,
@@ -1741,7 +1771,7 @@
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
         C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
-        C.el("div", { className: "meta" }, C.el("span", { text: listing.category || "uncategorized" }), C.el("span", { text: "condition: " + conditionLabel(listing.condition) })),
+        C.el("div", { className: "meta" }, C.el("span", { text: categoryLabel(listing.category) }), C.el("span", { text: "Condition: " + conditionLabel(listing.condition) })),
         listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
         section("Specifications", kv(listing.specifications, "No specifications listed.")),
         section("Included accessories", stringList(listing.accessories, "None listed.")),
@@ -1761,15 +1791,15 @@
           row("Deposit proposed (simulated)", api.formatCents(deposit) + " (" + pct + "% of value)");
           row("Not covered by deposit", api.formatCents(uncovered), uncovered > 0 ? "kv-list__warn" : "");
         } else {
-          row("Deposit proposed (simulated)", "unknown");
+          row("Deposit proposed (simulated)", "Unknown");
         }
         const av = listing.availability || {};
         row("Available", (av.available_from || av.available_until)
-          ? (av.available_from ? "from " + api.formatTime(av.available_from) : "") + (av.available_until ? " until " + api.formatTime(av.available_until) : "")
-          : "no fixed dates");
+          ? (av.available_from ? "From " + api.formatTime(av.available_from) : "") + (av.available_until ? (av.available_from ? " until " : "Until ") + api.formatTime(av.available_until) : "")
+          : "No fixed dates");
         if (av.notes) row("Availability notes", av.notes);
       }
-      if (!allowed.length) row("Terms", "unknown");
+      if (!allowed.length) row("Terms", "Unknown");
 
       // ---- meeting spots
       const spotIds = new Set(listing.meeting_spot_ids || []);
@@ -1815,7 +1845,7 @@
       const facts = C.el("div", { className: "stack" },
         C.el("div", { className: "cluster" }, badges),
         C.el("h1", { style: { marginBottom: "4px" }, text: listing.title }),
-        C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "session: " + formatDuration(listing.service_duration_minutes) })),
+        C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "Session: " + formatDuration(listing.service_duration_minutes) })),
         listing.description ? C.el("p", { text: listing.description }) : C.el("p", { className: "muted", text: "No description provided." }),
         section("Available time windows", serviceWindowsNode(listing)));
 
@@ -1995,7 +2025,7 @@
 
   // ============================================================ MY LISTINGS
   function initMyListings(root) {
-    document.title = "My listings · Campus Current";
+    document.title = "My Listings · Campus Current";
     document.body.dataset.page = "my-listings";
     let me = null;
     let listings = [];
@@ -2049,11 +2079,11 @@
       root.append(
         C.el("section", { className: "card" },
           C.el("div", { className: "section__head" },
-            C.el("h1", { id: "mine-heading", tabindex: "-1", style: { margin: 0 }, text: "My listings" }),
+            C.el("h1", { id: "mine-heading", tabindex: "-1", style: { margin: 0 }, text: "My Listings" }),
             C.button({ label: "Post a new listing", variant: "primary", size: "sm", href: "/listings/new" })),
-          C.el("p", { className: "lede", text: "Everything you have posted: items for sale or to borrow, and services you offer. Withdraw an available listing to hide it. Reserved or on-loan items and scheduled services belong to an exchange and cannot be withdrawn here; a completed session frees the service for the next booking." }),
+          C.el("p", { className: "lede", text: "Manage your items and services. Only available listings can be withdrawn; a completed session releases its service listing." }),
           kindFilter, tabs),
-        C.el("div", { id: "mine-grid", className: "grid", role: "tabpanel", "aria-live": "polite" }));
+        C.el("div", { id: "mine-grid", className: "grid catalog-list", role: "tabpanel", "aria-live": "polite" }));
       renderGrid();
       if (!root.dataset.focused) { root.dataset.focused = "1"; $("mine-heading").focus(); }
     }
@@ -2140,7 +2170,7 @@
         variant: ["compact"],
         media,
         title: C.el("a", { href: "/listings/" + enc(listing.id), text: listing.title }),
-        subtitle: service ? serviceCategoryLabel(listing.category) : listing.category,
+        subtitle: categoryLabel(listing.category),
         badges,
         body: [price, C.el("p", { className: "muted", style: { fontSize: ".85rem" }, text: "Updated " + api.formatTime(listing.updated_at) })],
         footer: [C.el("span", { className: "visually-hidden", id: "withdraw-hint", text: "Withdrawing hides the listing; you will be asked to confirm." }), actions],
@@ -2304,14 +2334,14 @@
       const specs = Object.entries(r.required_specifications || {});
       const prefs = Object.entries(r.preferred_specifications || {});
       const item = C.el("div", { className: "stack--tight" },
-        C.el("div", { className: "req-item", text: r.category ? (service ? serviceCategoryLabel(r.category) : capitalize(r.category)) : (service ? "Service not specified" : "Item not specified") }),
+        C.el("div", { className: "req-item", text: r.category ? categoryLabel(r.category) : (service ? "Service not specified" : "Item not specified") }),
         specs.length ? C.el("dl", { className: "specs" }, specs.flatMap(([k, v]) => [C.el("dt", { text: k.replace(/_/g, " ") }), C.el("dd", { text: String(v) })])) : C.el("p", { className: "muted", text: "No required details given." }),
         prefs.length ? C.el("p", { className: "muted", text: "Prefers " + prefs.map(([k, v]) => k.replace(/_/g, " ") + " " + String(v)).join(", ") }) : null);
 
       const facts = C.el("dl", { className: "kv-list kv-list--plain" },
         C.el("dt", { text: "Needed by" }), C.el("dd", { text: formatDateOnly(r.needed_by_date) }),
-        C.el("dt", { text: "Campus area" }), C.el("dd", { text: r.area || "not given" }),
-        C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "up to " + api.formatCents(r.budget_cents) : "not given" }),
+        C.el("dt", { text: "Campus area" }), C.el("dd", { text: r.area || "Not given" }),
+        C.el("dt", { text: "Budget" }), C.el("dd", { text: r.budget_cents != null ? "Up to " + api.formatCents(r.budget_cents) : "Not given" }),
         service ? C.el("dt", { text: "Session" }) : null, service ? C.el("dd", { text: formatDuration(r.service_duration_minutes) }) : null);
 
       // Only the requester can start an exchange, so an owner responds by
@@ -2335,7 +2365,7 @@
         body: [item, facts, respondNote],
         footer: [
           C.el("span", { className: "cluster" }, C.el("span", { className: "muted", text: requester.display_name || "Member" }), C.profileBadge(requester),
-            C.el("span", { className: "muted", text: "posted " + api.formatTime(r.created_at) })),
+            C.el("span", { className: "muted", text: "Posted " + api.formatTime(r.created_at) })),
           action,
         ],
       });
@@ -2350,7 +2380,6 @@
     const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
-  function capitalize(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
 
   // Key/value editor for specifications. Returns {root, control, value(), setError, clearError}.
   function kvEditor(title, hint, initial, opts) {
@@ -2362,7 +2391,7 @@
       const v = C.el("input", { type: "text", placeholder: "value (e.g. 40R)", "aria-label": title + " attribute value", maxlength: 120 });
       if (key != null) k.value = key;
       if (value != null) v.value = typeof value === "object" ? JSON.stringify(value) : String(value);
-      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "please confirm", opts.flagVariant || "warn") : null;
+      const flag = opts.flagged && key != null && opts.flagged.has(String(key).toLowerCase()) ? C.badge(opts.flagLabel || "Please confirm", opts.flagVariant || "warn") : null;
       if (flag) v.setAttribute("aria-description", opts.flagLabel || "please confirm");
       const row = C.el("div", { className: "kv-row" + (flag ? " kv-row--flag" : "") }, k, v, flag,
         C.button({ label: "Remove", size: "sm", attrs: { "aria-label": "Remove this " + title.toLowerCase() + " row" }, onClick: () => { row.remove(); if (!rows.children.length) addRow(); } }));
@@ -2372,7 +2401,7 @@
     const entries = Object.entries(initial || {});
     if (entries.length) entries.forEach(([k, v]) => addRow(k, v)); else addRow();
     const add = C.button({ label: "+ Add another", size: "sm", onClick: () => { const r = addRow(); r.querySelector("input").focus(); } });
-    const legend = C.el("legend", {}, title + " ", (entries.length || opts.badge === false) ? null : C.badge("none known", "neutral"));
+    const legend = C.el("legend", {}, title + " ", (entries.length || opts.badge === false) ? null : C.badge("None known", "neutral"));
     const root = C.el("fieldset", {}, legend, C.el("p", { className: "field__hint", text: hint }), rows, C.el("div", { style: { marginTop: "8px" } }, add), error);
     return {
       root,
@@ -2411,7 +2440,7 @@
         C.state.empty(grid, {
           title: "Nothing listed yet",
           message: "Be the first to offer something for sale or to borrow.",
-          action: C.button({ label: "List an item", variant: "primary", size: "sm", href: "/listings/new" }),
+          action: C.button({ label: "New Listing", variant: "primary", size: "sm", href: "/listings/new" }),
         });
         return;
       }
@@ -2537,7 +2566,7 @@
         title: C.el("a", { className: "card__link", href: "/listings/" + enc(listing.id), text: listing.title }),
         badges,
         body: [
-          C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "session: " + formatDuration(listing.service_duration_minutes) })),
+          C.el("div", { className: "meta" }, C.el("span", { text: serviceCategoryLabel(listing.category) }), C.el("span", { text: "Session: " + formatDuration(listing.service_duration_minutes) })),
           C.el("div", {}, C.el("span", { className: "price", text: api.formatCents(listing.service_price_cents) }), C.el("span", { className: "muted", text: " per session · no deposit" })),
           serviceWindowsNode(listing, 2),
         ],
@@ -2563,8 +2592,8 @@
     const specList = specs.length ? C.el("dl", { className: "specs" }, specs.flatMap(([k, v]) => [C.el("dt", { text: k.replace(/_/g, " ") }), C.el("dd", { text: String(v) })])) : null;
 
     const meta = C.el("div", { className: "meta" },
-      C.el("span", { text: listing.category || "uncategorized" }),
-      listing.condition ? C.el("span", { text: "condition: " + String(listing.condition).replace("_", " ") }) : C.el("span", { text: "condition unknown" }),
+      C.el("span", { text: categoryLabel(listing.category) }),
+      listing.condition ? C.el("span", { text: "Condition: " + conditionLabel(listing.condition) }) : C.el("span", { text: "Condition unknown" }),
       listing.known_defects && listing.known_defects.length ? C.el("span", { text: listing.known_defects.length + " known defect" + (listing.known_defects.length > 1 ? "s" : "") }) : null);
 
     const title = C.el("a", { className: "card__link", href: "/listings/" + enc(listing.id), text: listing.title });

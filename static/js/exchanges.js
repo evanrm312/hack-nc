@@ -8,11 +8,11 @@
   const $ = (id) => document.getElementById(id);
   const initialToken = api.getToken();
   const statusLabels = {
-    negotiating: "Negotiating", reserved: "Reserved", on_loan: "On loan",
+    negotiating: "Negotiating", scheduled: "Scheduled", reserved: "Reserved", on_loan: "On loan",
     return_pending: "Return pending", completed: "Completed",
     disputed: "Disputed", cancelled: "Cancelled",
   };
-  const modeLabel = (mode) => mode === "borrow" ? "Borrow" : "Buy";
+  const modeLabel = (mode) => mode === "service" ? "Service" : mode === "borrow" ? "Borrow" : "Buy";
   const node = (tag, text, className) => {
     const element = document.createElement(tag);
     if (text !== undefined) element.textContent = text;
@@ -519,12 +519,12 @@
       const snapshot = offer.condition_snapshot || {};
       const listText = (items) => items === null || items === undefined ? "Unknown" : items.length ? items.join("\n") : "None listed";
       const rows = moneyRows(offer).concat([
-        ["Pickup", spotName(offer.pickup_meeting_spot_id) + "\n" + api.formatTime(offer.pickup_at) + " Eastern"],
+        ["Pickup", spotName(offer.pickup_meeting_spot_id) + "\n" + (offer.pickup_at ? api.formatTime(offer.pickup_at) + " Eastern" : "Time not agreed")],
       ]);
       if (detail.exchange.mode === "borrow") {
-        rows.push(["Return", spotName(offer.return_meeting_spot_id) + "\n" + api.formatTime(offer.return_deadline) + " Eastern"]);
+        rows.push(["Return", spotName(offer.return_meeting_spot_id) + "\n" + (offer.return_deadline ? api.formatTime(offer.return_deadline) + " Eastern" : "Time not agreed")]);
       }
-      rows.push(["Condition", snapshot.condition?.replaceAll("_", " ") || "Unknown / needs confirmation"],
+      rows.push(["Condition", snapshot.condition ? components.conditionLabel(snapshot.condition) : "Unknown / needs confirmation"],
         ["Included accessories", listText(snapshot.accessories)], ["Known defects", listText(snapshot.known_defects)]);
       target.replaceChildren();
       rows.forEach(([label, value]) => target.append(node("dt", label), node("dd", value)));

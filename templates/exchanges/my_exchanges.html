@@ -1,11 +1,13 @@
 {% extends "base.html" %}
-{% block title %}My exchanges · Campus Current{% endblock %}
+{% block title %}My Exchanges · Campus Current{% endblock %}
+{% block page_id %}exchanges{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/exchanges.css') }}">{% endblock %}
 {% block content %}
-{% include "exchanges/_styles.html" %}
+
 <div class="exchanges" id="my-exchanges-page">
   {% if config.get("EXCHANGE_PREVIEW") %}<p class="simulated-notice" role="note">Sandbox preview: demo inventory and identities. Exchanges here are local examples.</p>{% endif %}
   <section class="card">
-    <h1>My exchanges</h1>
+    <h1>My Exchanges</h1>
     <p>Track your campus pickups, active loans, and returns. Photos and conversations stay private to each exchange's participants.</p>
     <div class="simulated-notice" role="note">Simulated: no real funds are reserved or charged.</div>
     <p id="page-status" role="status">Loading your exchanges…</p>

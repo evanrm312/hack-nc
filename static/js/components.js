@@ -115,7 +115,7 @@
 
     const label = el("label", { className: "field__label", for: id },
       el("span", { text: opts.label }),
-      opts.optional ? el("span", { className: "field__optional", text: "optional" }) : null);
+      opts.optional ? el("span", { className: "field__optional", text: "Optional" }) : null);
     const hint = opts.hint ? el("p", { className: "field__hint", id: hintId, text: opts.hint }) : null;
     const error = el("p", { className: "field__error", id: errorId, role: "alert" });
 
@@ -153,7 +153,11 @@
       else leftovers.push(`${name}: ${message}`);
     }
     const first = Object.values(fieldMap).find((f) => f && f.control && f.control.getAttribute("aria-invalid") === "true");
-    if (first) first.control.focus();
+    if (first) {
+      let disclosure = first.control.closest("details");
+      while (disclosure) { disclosure.open = true; disclosure = disclosure.parentElement.closest("details"); }
+      first.control.focus();
+    }
     return leftovers;
   }
 
@@ -295,12 +299,18 @@
   const STATUS_LABELS = {
     available: ["Available", "borrow"], reserved: ["Reserved", "info"], sold: ["Sold", "neutral"], withdrawn: ["Withdrawn", "neutral"],
     draft: ["Draft", "neutral"], open: ["Open", "borrow"], fulfilled: ["Fulfilled", "neutral"], cancelled: ["Cancelled", "neutral"], expired: ["Expired", "neutral"],
-    negotiating: ["Negotiating", "info"], on_loan: ["On loan", "borrow"], return_pending: ["Return pending", "warn"],
+    negotiating: ["Negotiating", "info"], scheduled: ["Scheduled", "info"], on_loan: ["On loan", "borrow"], return_pending: ["Return pending", "warn"],
     completed: ["Completed", undefined], disputed: ["Disputed", "error"],
   };
   function statusBadge(status) {
-    const [label, variant] = STATUS_LABELS[status] || [String(status || "unknown"), "neutral"];
+    const [label, variant] = STATUS_LABELS[status] || [String(status || "Unknown"), "neutral"];
     return badge(label, variant);
+  }
+
+  // Translate application enums only. Unrecognized/user-written values stay intact.
+  function conditionLabel(value) {
+    const labels = { new: "New", like_new: "Like new", good: "Good", fair: "Fair", worn: "Worn" };
+    return Object.hasOwn(labels, value) ? labels[value] : (value ? String(value) : "Unknown");
   }
 
   // -------------------------------------------------------- 6. offer summary
@@ -312,11 +322,11 @@
   function offerSummary(offer, opts) {
     offer = offer || {};
     opts = opts || {};
-    const fmt = (c) => (window.api ? api.formatCents(c) : String(c));
-    const time = (t) => (window.api ? api.formatTime(t) : String(t));
+    const fmt = (c) => (c == null ? "Unknown" : window.api ? api.formatCents(c) : String(c));
+    const time = (t) => (t == null ? "Unknown" : window.api ? api.formatTime(t) : String(t));
     const mode = opts.mode || (offer.sale_price_cents != null && offer.agreed_item_value_cents == null ? "sale" : "borrow");
     const spots = new Map((opts.meetingSpots || []).map((s) => [s.id, s]));
-    const spotLabel = (id) => (id ? (spots.get(id) ? spots.get(id).label : "Meeting spot " + id) : "not chosen yet");
+    const spotLabel = (id) => (id ? (spots.get(id) ? spots.get(id).label : "Meeting spot " + id) : "Not chosen yet");
 
     const dl = el("dl");
     const row = (label, valueNode, cls) => {
@@ -328,8 +338,8 @@
     if (mode === "sale") {
       row("Sale price", fmt(offer.sale_price_cents));
     } else {
-      row("Rental fee", offer.rental_fee_cents === 0 ? el("span", {}, fmt(0), el("small", { text: "explicit free loan" })) : fmt(offer.rental_fee_cents));
-      row("Agreed item value", el("span", {}, fmt(offer.agreed_item_value_cents), el("small", { text: "reference for non-return, not a market guarantee" })));
+      row("Rental fee", offer.rental_fee_cents === 0 ? el("span", {}, fmt(0), el("small", { text: "Explicit free loan" })) : fmt(offer.rental_fee_cents));
+      row("Agreed item value", el("span", {}, fmt(offer.agreed_item_value_cents), el("small", { text: "Reference for non-return, not a market guarantee" })));
       let depositNode = fmt(offer.deposit_cents);
       if (offer.deposit_cents != null && offer.agreed_item_value_cents) {
         const pct = Math.round((offer.deposit_cents / offer.agreed_item_value_cents) * 100);
@@ -345,14 +355,14 @@
     group("Meeting");
     row("Pickup", el("span", {}, spotLabel(offer.pickup_meeting_spot_id), el("small", { text: time(offer.pickup_at) })));
     if (mode !== "sale") {
-      row("Return", el("span", {}, spotLabel(offer.return_meeting_spot_id), el("small", { text: "by " + time(offer.return_deadline) })));
+      row("Return", el("span", {}, spotLabel(offer.return_meeting_spot_id), el("small", { text: "By " + time(offer.return_deadline) })));
     }
 
     const snap = offer.condition_snapshot || {};
     group("Condition agreed");
-    row("Condition", snap.condition ? String(snap.condition).replace("_", " ") : "unknown");
-    row("Accessories", (snap.accessories && snap.accessories.length) ? snap.accessories.join(", ") : "none listed");
-    row("Known defects", (snap.known_defects && snap.known_defects.length) ? snap.known_defects.join(", ") : "none listed");
+    row("Condition", conditionLabel(snap.condition));
+    row("Accessories", (snap.accessories && snap.accessories.length) ? snap.accessories.join(", ") : "None listed");
+    row("Known defects", (snap.known_defects && snap.known_defects.length) ? snap.known_defects.join(", ") : "None listed");
 
     const acks = el("div", { className: "offer-summary__acks" });
     const ackRow = (who, at) => acks.append(el("div", { className: "offer-summary__ack" },
@@ -583,7 +593,7 @@
     field, applyFieldErrors,
     card,
     dialog,
-    badge, profileBadge, modeBadge, fixtureBadge, statusBadge,
+    badge, profileBadge, modeBadge, fixtureBadge, statusBadge, conditionLabel,
     offerSummary,
     state, notice, simulationNotice, toast,
     errorMessage, isAuthError,
