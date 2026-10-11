@@ -177,6 +177,16 @@ def offer(exchange_id: str):
     listing = db.session.get(Listing, exchange.listing_id)
     if not _fits_window(listing, scheduled_at, duration):
         raise validation_error({"service_scheduled_at": "must fit an available time window"})
+    current = _current_offer(exchange)
+    current_time = current.service_scheduled_at if current else None
+    if current_time is not None and current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    if current and (current.service_price_cents, current.service_duration_minutes,
+                    current_time, current.service_delivery or "remote", current.service_meeting_spot_id) == (
+                    price, duration, scheduled_at, delivery, spot_id):
+        # Retried unchanged terms preserve both acceptances and emit no event.
+        db.session.commit()
+        return jsonify({"offer": current.to_dict(), "exchange": exchange.to_dict()})
     version = exchange.current_offer_revision + 1
     row = OfferRevision(exchange=exchange, version=version, created_by=current_profile().id,
                         service_price_cents=price, service_duration_minutes=duration,

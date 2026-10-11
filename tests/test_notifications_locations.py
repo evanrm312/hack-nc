@@ -124,3 +124,20 @@ def test_service_offers_reject_remaining_item_fields(client,alice,bob):
             'service_scheduled_at':WINDOW['start'],field:value})
         assert response.status_code==400
         assert field in response.get_json()['error']['fields']
+
+
+def test_unchanged_service_offer_retry_preserves_acceptance_and_notifications(client,alice,bob,app):
+    _,exchange,offer=exchange_with_offer(client,alice,bob)
+    base='/api/exchanges/'+exchange['id']
+    client.post(base+'/accept',headers=alice,json={'version':offer['version']})
+    before=notices(client,bob)['unread_count']
+    response=client.post(base+'/offers',headers=alice,json={
+        'service_price_cents':2500,'service_duration_minutes':60,
+        'service_scheduled_at':WINDOW['start']})
+    assert response.status_code==200
+    assert response.get_json()['offer']['version']==offer['version']
+    assert response.get_json()['offer']['owner_accepted_at'] is not None
+    assert notices(client,bob)['unread_count']==before
+    with app.app_context():
+        from server.models import OfferRevision
+        assert db.session.query(OfferRevision).filter_by(exchange_id=exchange['id']).count()==1

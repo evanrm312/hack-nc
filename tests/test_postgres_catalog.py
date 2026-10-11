@@ -61,7 +61,9 @@ def test_postgres_migration_and_persistence(tmp_path):
         listing_id = created.get_json()["listing"]["id"]
 
         fresh_app = create_app(config)
-        response = fresh_app.test_client().get(f"/api/listings/{listing_id}")
+        client = fresh_app.test_client()
+        assert client.get(f"/api/listings/{listing_id}").status_code == 404
+        response = client.get(f"/api/listings/{listing_id}", headers=auth("alice@unc.edu"))
         assert response.status_code == 200
         assert response.get_json()["listing"]["title"] == LISTING_BODY["title"]
     finally:
