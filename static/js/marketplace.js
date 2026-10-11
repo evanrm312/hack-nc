@@ -440,6 +440,7 @@
     kindFilter.control.addEventListener("change", () => { refreshCatalogCategories(); loadListings(); });
     categoryFilter.control.addEventListener("change", loadListings);
     refreshCatalogCategories();
+    document.addEventListener("campus:auth-changed", loadListings);
     loadListings();
   }
 
@@ -967,6 +968,7 @@
       else allowed.forEach((m) => badges.push(C.modeBadge(m)));
       if (kind === "needs") badges.push(C.badge("Needs confirmation", "warn"));
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      if (listing.club) badges.push(C.badge("Club only: " + listing.club.name, "info"));
 
       // Money: show only what the listing actually offers for the relevant mode(s).
       const money = C.el("div", { className: "stack--tight match-money" });
@@ -1289,6 +1291,8 @@
     let resumeSpots = [];
     const listingCreationKey = crypto.randomUUID();
     async function publishDraft(body) {
+      body.audience = F.audience.value() ? "club" : "public";
+      body.club_id = F.audience.value() || null;
       const draft = draftId ? (await api.patch("/api/listings/" + enc(draftId), body)).listing : (await api.post("/api/listings", body,{headers:{"Idempotency-Key":listingCreationKey}})).listing;
       draftId = draft.id;
       status.textContent = "Uploading and publishing…";
@@ -1312,6 +1316,23 @@
 
     // ---- basics
     const F = {};
+    F.audience = C.field({ id: "l-audience", label: "Audience", type: "select", options: [{ value: "", label: "Public" }],
+      hint: "Club-only listings are visible only to current members and need manager approval after both participants accept." });
+    form.prepend(F.audience.root);
+    let audienceGeneration = 0;
+    async function loadAudience() {
+      const generation = ++audienceGeneration;
+      const token = api.getToken();
+      F.audience.control.replaceChildren(C.el("option", { value: "", text: "Public" }));
+      if (!token) return;
+      try {
+        const result = await api.get("/api/clubs/me");
+        if (generation !== audienceGeneration || token !== api.getToken() || F.audience.control.disabled) return;
+        result.memberships.forEach(m => F.audience.control.append(C.el("option", { value: m.club.id, text: "Club only: " + m.club.name })));
+      } catch (_) { if (generation === audienceGeneration) F.audience.setError("Club choices unavailable. Refresh to retry."); }
+    }
+    document.addEventListener("campus:auth-changed", loadAudience);
+    loadAudience();
     F.title = C.field({ id: "l-title", label: "Title (required)", required: true, placeholder: "e.g. Navy suit, 40R", attrs: { maxlength: 120 } });
     F.category = C.field({ id: "l-category", label: "Category (required)", type: "select", required: true,
       options: CATEGORIES.map(([value, label]) => ({ value, label: value ? label : "Choose a category" })) });
@@ -1542,6 +1563,11 @@
     if (resumeId) {
       submitting = true; C.setBusy(submit,true,"Loading draft");
       api.get("/api/listings/"+enc(resumeId)).then(({listing:l})=>{
+        if (l.club_id) {
+          F.audience.control.append(C.el("option", {value:l.club_id,text:"Club only: "+l.club.name}));
+          F.audience.control.value=l.club_id;
+        }
+        F.audience.control.disabled=true;
         if (l.status!=="draft") throw new Error("This listing is no longer a draft.");
         draftId=l.id;resumeSpots=l.meeting_spot_ids||[];
         for (const key of ["title","description","condition","category","service_duration_minutes","collateral_percent"])
@@ -1818,10 +1844,11 @@
       allowed.forEach((m) => badges.push(C.modeBadge(m)));
       badges.push(C.statusBadge(listing.status));
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      if (listing.club) badges.push(C.badge("Club only: " + listing.club.name, "info"));
       if (isMine) badges.push(C.badge("Your listing", "info"));
 
       const media = C.el("div", { className: "detail-media" + (listing.public_photo_url ? "" : " detail-media--empty") });
-      if (listing.public_photo_url) media.append(C.el("img", { src: listing.public_photo_url, alt: "Photo of " + listing.title }));
+      if (listing.public_photo_url) media.append((listing.club ? C.protectedImage(listing.public_photo_url, "Club photo of " + listing.title) : C.el("img", { src: listing.public_photo_url, alt: "Photo of " + listing.title })));
       else media.append(C.mediaPlaceholder({ category: listing.category, label: isMine ? "No photo yet. Add one so people can see what you are offering." : "No photo provided" }));
       // Owner: add or replace the photo here; the server swaps the file and
       // the page reloads from the returned listing.
@@ -1905,10 +1932,11 @@
 
       const badges = [C.modeBadge("service"), C.statusBadge(listing.status)];
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      if (listing.club) badges.push(C.badge("Club only: " + listing.club.name, "info"));
       if (isMine) badges.push(C.badge("Your listing", "info"));
 
       const media = listing.public_photo_url
-        ? C.el("div", { className: "detail-media" }, C.el("img", { src: listing.public_photo_url, alt: "Reference scene for " + listing.title }))
+        ? C.el("div", { className: "detail-media" }, (listing.club ? C.protectedImage(listing.public_photo_url, "Club reference scene for " + listing.title) : C.el("img", { src: listing.public_photo_url, alt: "Reference scene for " + listing.title })))
         : null;
 
       const facts = C.el("div", { className: "stack" },
@@ -2507,12 +2535,13 @@
     grid.setAttribute("aria-busy", "true");
     C.state.loading(grid, "Loading available listings…");
     const version = ++listingLoadVersion;
+    const catalogToken = api.getToken();
     try {
       const query = new URLSearchParams();
       if ($("catalog-kind") && $("catalog-kind").value) query.set("mode", $("catalog-kind").value);
       if ($("catalog-category") && $("catalog-category").value) query.set("category", $("catalog-category").value);
       const { listings } = await api.get("/api/listings" + (query.size ? "?" + query.toString() : ""));
-      if (version !== listingLoadVersion) return;
+      if (version !== listingLoadVersion || catalogToken !== api.getToken()) return;
       grid.removeAttribute("aria-busy");
       if (!listings || !listings.length) {
         C.state.empty(grid, {
@@ -2525,7 +2554,7 @@
       C.clear(grid);
       listings.forEach((listing) => grid.append(listingCard(listing)));
     } catch (err) {
-      if (version !== listingLoadVersion) return;
+      if (version !== listingLoadVersion || catalogToken !== api.getToken()) return;
       grid.removeAttribute("aria-busy");
       C.state.error(grid, err, { title: "Could not load listings", retry: loadListings });
     }
@@ -2539,7 +2568,7 @@
     return Math.min(Number((window.CAMPUS_CONFIG || {}).max_upload_bytes) || Infinity, 5 * 1024 * 1024);
   }
   function cardMedia(listing) {
-    if (listing.public_photo_url) return { src: listing.public_photo_url, alt: (isService(listing) ? "Reference scene for " : "Photo of ") + (listing.title || "listing") };
+    if (listing.public_photo_url) return { src: listing.club ? null : listing.public_photo_url, privateSrc: listing.club ? listing.public_photo_url : null, alt: (isService(listing) ? "Reference scene for " : "Photo of ") + (listing.title || "listing") };
     return isService(listing)
       ? { placeholder: { category: listing.category, kind: "service", label: serviceCategoryLabel(listing.category) } }
       : { placeholder: { category: listing.category } };
@@ -2558,7 +2587,7 @@
     const preview = C.el("div", { className: "photo-preview", hidden: true }, C.el("img", { alt: "Preview of the chosen photo" }));
     const errorBox = C.el("div", { className: "notice notice--error", role: "alert", hidden: true });
     const current = hasPhoto
-      ? C.el("div", { className: "cluster" }, C.el("div", { className: "photo-preview", style: { marginTop: 0, width: "120px" } }, C.el("img", { src: listing.public_photo_url, alt: "Current photo of " + listing.title })),
+      ? C.el("div", { className: "cluster" }, C.el("div", { className: "photo-preview", style: { marginTop: 0, width: "120px" } }, (listing.club ? C.protectedImage(listing.public_photo_url, "Current club photo of " + listing.title) : C.el("img", { src: listing.public_photo_url, alt: "Current photo of " + listing.title }))),
           C.el("span", { className: "muted", text: "Current photo. The new one replaces it." }))
       : null;
     let objectUrl = null;
@@ -2639,6 +2668,7 @@
       const badges = [C.modeBadge("service")];
       if (listing.status !== "available") badges.push(C.statusBadge(listing.status));
       if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      if (listing.club) badges.push(C.badge("Club only: " + listing.club.name, "info"));
       return C.card({
         variant: ["compact"], interactive: true,
         media: cardMedia(listing),
@@ -2656,6 +2686,7 @@
     (listing.allowed_modes || []).forEach((m) => badges.push(C.modeBadge(m)));
     if (listing.status !== "available") badges.push(C.statusBadge(listing.status));
     if (owner.is_demo) badges.push(C.badge("Demo account", "fixture"));
+      if (listing.club) badges.push(C.badge("Club only: " + listing.club.name, "info"));
 
     const money = C.el("div", { className: "stack--tight" });
     if ((listing.allowed_modes || []).includes("sale")) {

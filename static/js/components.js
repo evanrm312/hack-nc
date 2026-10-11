@@ -168,6 +168,19 @@
   // ----------------------------------------------------------------- 3. card
   // card({title, subtitle, badges: [node], body: node|node[], footer: node|node[],
   //       variant: "leaf"|"sky"|"glass"|"compact"|"hero", interactive, media: {src, alt}})
+  function protectedImage(url, alt) {
+    const image = el("img", { alt, hidden: true });
+    const token = window.api.getToken();
+    window.api.get(url + "?preview=1").then(result => {
+      if (token !== window.api.getToken()) return;
+      image.src = result.data_url; image.hidden = false;
+    }).catch(() => { image.alt = "Club photo unavailable"; });
+    document.addEventListener("campus:auth-changed", () => {
+      if (token !== window.api.getToken()) { image.removeAttribute("src"); image.hidden = true; }
+    });
+    return image;
+  }
+
   function card(opts) {
     opts = opts || {};
     const classes = ["card"];
@@ -182,7 +195,8 @@
       // fetched from anywhere but the listing's own public_photo_url.
       const ph = (opts.media && opts.media.placeholder) || {};
       const media = el("div", { className: "card__media" + (opts.media && opts.media.src ? "" : " card__media--empty" + (ph.kind === "service" ? " card__media--service" : "")) });
-      if (opts.media && opts.media.src) media.append(el("img", { src: opts.media.src, alt: opts.media.alt || "", loading: "lazy" }));
+      if (opts.media && opts.media.privateSrc) media.append(protectedImage(opts.media.privateSrc, opts.media.alt || "Club listing photo"));
+      else if (opts.media && opts.media.src) media.append(el("img", { src: opts.media.src, alt: opts.media.alt || "", loading: "lazy" }));
       else media.append(mediaPlaceholder(ph));
       root.append(media);
     }
@@ -589,7 +603,7 @@
     offerSummary,
     state, notice, simulationNotice, toast,
     errorMessage, isAuthError,
-    categoryIcon, mediaPlaceholder,
+    categoryIcon, mediaPlaceholder, protectedImage,
     dollarsToCents, centsToDollars, localToIso, isoToLocal,
     circulation, mountCirculations, circulationMark,
   };

@@ -847,6 +847,163 @@ Dismiss. Confirmed request creation retains its retry key after a lost response.
 Server validation failures return to editable review rather than silently clearing
 terms or changing the selected mode.
 
+## Community clubs and profiles (c706community)
+
+Clubs are seeded, fictional demo communities. There are no club create/delete,
+role-changing or membership-removal endpoints. Membership is not verification,
+insurance, a payment guarantee or a safety guarantee. Codes use Werkzeug scrypt
+password hashes and are never included in responses or server logs.
+
+### Club and membership shapes
+
+```json
+{"id":"club-id","slug":"demo-study-circle","name":"Study Circle (fictional DEMO club)","is_demo":true}
+```
+
+```json
+{"club":{"id":"club-id","slug":"demo-study-circle","name":"Study Circle (fictional DEMO club)","is_demo":true},"role":"member"}
+```
+
+Roles are exactly `member` and `manager`. Public embedded profiles now also
+include `avatar_url`, `bio`, `graduation_year` and `clubs: [Membership]`.
+`GET /api/me` additionally includes private `preferred_meeting_spot_id`,
+`show_transaction_history` and `created_at`. No auth subject or email is exposed.
+
+| Endpoint | Request | Response |
+|---|---|---|
+| GET `/api/clubs/me` | verified bearer | `200 {"memberships":[Membership]}` |
+| POST `/api/clubs/join` | verified; `{"code":"fictional team code"}` | `200 {"membership":Membership}`; repeated join keeps role and creates no duplicate |
+| GET `/api/clubs/{club_id}` | current member | `200 {"club":Club}` |
+| GET `/api/clubs/{club_id}/exchanges` | current manager | `200 {"exchanges":[ManagerExchange]}` |
+| POST `/api/clubs/{club_id}/exchanges/{id}/review` | nonparticipant manager; body below | `200 {"exchange":ManagerExchange}` |
+
+Invalid, empty or malformed join codes have the same generic result:
+
+```json
+{"error":{"code":"invalid_club_code","message":"Unable to join with that code","fields":{}}}
+```
+
+Nonmembers receive `404` club/listing/exchange errors. Members without the
+manager role and managers reviewing their own exchanges receive `403 forbidden`.
+Authentication remains the existing `401`/`403` contract.
+
+### Club listing audience
+
+Both item and service listing create bodies may add:
+
+```json
+{"audience":"club","club_id":"club-id"}
+```
+
+Omitting these fields preserves `audience:"public", club_id:null`. Responses
+include `audience`, `club_id`, and sanitized `club: Club|null`. A public audience
+requires null club ID; club audience requires a current membership. These fields
+are immutable after creation. Invalid combinations give `400 validation_error`
+with `audience` or `club_id` fields. The draft/photo publication flow is unchanged.
+
+Collections, details, recommendations and match candidates enforce membership
+before serialization and before deterministic matching. Inaccessible IDs return
+`404`, including owner edits after membership loss. Drafts remain owner-only,
+even to fellow members. Club photos use **private storage**, not the public
+bucket. Their `/media/public/{path}` URLs enforce club membership and return 404
+for anonymous/nonmember access; `?preview=1` returns authenticated
+`{"data_url":"data:image/jpeg;base64,..."}` for browser images. Do not put a
+bearer token in an image URL. The shared client fetches the preview with its API
+helper and clears it when authorization changes.
+
+### Club review gate
+
+Exchange responses add `club: Club|null`, `club_review_state`,
+`club_review_note: string|null`. Club exchanges snapshot their club association;
+both participants must remain members. Review states are `not_required` (public),
+`awaiting_participants`, `pending`, `approved`, `changes_requested`.
+
+After both latest-revision acceptances, a club exchange stays `negotiating` with
+`pending` review. No reservation or scheduling occurs yet. New changed offers
+reset both acceptances and the review; identical offer retries keep their state.
+Requesting changes requires a nonempty note of at most 300 characters and a new
+offer before accepting again. Public acceptances retain their existing behavior.
+
+Review body includes the displayed version to prevent stale manager approval:
+
+```json
+{"decision":"approve","version":2,"note":null}
+```
+
+```json
+{"decision":"request_changes","version":2,"note":"Please clarify the agreed schedule."}
+```
+
+`version` is a required positive integer. Unknown decision, missing version or
+invalid note gives `400 validation_error`. Old version gives `409 stale_offer`;
+missing acceptances or nonpending review gives `409 review_not_ready`. Duplicate
+approval of the same approved revision is idempotent. Under the exchange row
+lock, approval rechecks participant memberships, terms, lender acknowledgment,
+service availability and active service meeting spot, then uses the existing
+atomic `reserve_listing` protection. Items become `reserved`, services become
+`scheduled`. A losing reservation gives `409 reservation_conflict` and rolls back
+review changes. Existing cancellation/dispute/payment simulation behavior stays.
+
+`ManagerExchange` is an explicit allowlist, never an ordinary exchange detail:
+
+```json
+{"id":"exchange-id","listing_title":"Demo suit","participants":{"owner":"Alice (demo)","requester":"Bob (demo)"},"mode":"borrow","status":"negotiating","club_review_state":"pending","club_review_note":null,"offer_version":2,"agreed_terms":{"sale_price_cents":null,"rental_fee_cents":1500,"agreed_item_value_cents":20000,"deposit_cents":20000,"lower_deposit_acknowledged":false,"pickup_at":"2026-10-13T18:00:00Z","return_deadline":"2026-10-15T22:00:00Z"}}
+```
+
+Service agreed terms instead contain only `service_price_cents`,
+`service_duration_minutes`, `service_scheduled_at`. Managers never get messages,
+evidence, meeting-spot IDs, private locations/contact data, condition free text,
+request IDs/text or counterpart profile objects through these endpoints.
+Ordinary private exchange endpoints remain participant-only, including locations.
+
+### Public community profiles
+
+`GET /api/profiles/{profile_id}` is public (`404` for missing profile):
+
+```json
+{"profile":{"id":"profile-id","display_name":"Alice (demo)","confirmed_email_domain":"unc.edu","verification_source":"sandbox","badge":"Sandbox identity (not verified)","is_demo":true,"avatar_url":null,"bio":null,"graduation_year":null,"clubs":[],"rating":{"average":null,"review_count":0},"completed_counts":{"bought":0,"sold_lent_provided":0,"borrowed":0,"services":0},"transaction_history":null}}
+```
+
+Counts derive only from completed exchanges. `sold_lent_provided` counts the
+owner role in sale/borrow/service; `bought` and `borrowed` count requester roles;
+`services` counts service participation in either role (overlaps provided count).
+Ratings aggregate reviews attached to currently completed exchanges. Empty
+averages stay null. No demo ratings or completed exchanges are seeded.
+
+PATCH `/api/me` accepts existing fields plus:
+
+```json
+{"bio":"I share study supplies.","graduation_year":2028,"show_transaction_history":true}
+```
+
+Bio is null or at most 300 characters; year is null or integer 1900–2200;
+history visibility must be a boolean, defaults false. Response is
+`200 {"profile": MeProfile}`; invalid values produce `400 validation_error` with
+per-field messages. Preferred meeting spot stays private.
+
+Only explicit opt-in changes `transaction_history` from null to an array:
+
+```json
+[{"listing_title":"Demo lamp","mode":"sale","role":"requester","completed_at":"2026-10-11T18:00:00Z"}]
+```
+
+No transaction IDs, counterparty, money, deposit, locations, messages, evidence,
+request text or noncompleted exchanges appear. Club-restricted titles are omitted
+even after opt-in. Completion date derives from the existing exchange's updated
+UTC timestamp; no new history or completion-date model is introduced.
+
+### Avatar replacement
+
+POST `/api/me/avatar`, authenticated multipart `photo`, returns
+`200 {"profile": MeProfile}`. Accepts still JPEG, PNG, WebP with matching MIME,
+limit `min(MAX_UPLOAD_BYTES, 1 MiB)`. Reuses the decoded-image checks (16 megapixels,
+no animation, complete image), EXIF orientation, then resizes to at most 512×512
+and writes metadata-free RGB WebP through public storage. Unsupported/truncated
+images give `400 unsupported_image`, MIME mismatch `400 validation_error`, size
+`413 payload_too_large`, unavailable decoder/storage `503`. Prior avatar is
+removed only after successful commit; a failed commit cleans the new file.
+Profile reads use private/no-store caching to reflect visibility changes promptly.
+
 ## Production follow-up contracts
 
 ### `GET /api/recommendations` (public, optionally personalized)
@@ -857,7 +1014,7 @@ Authenticated responses use only the caller's private signals; every response
 is `private, no-store` with `nosniff`. No signal text, request IDs, scores,
 transaction details or locations are returned.
 
-Eligibility precedes ranking: available and unreserved public listings only;
+Eligibility precedes ranking: available and unreserved public listings or club listings visible to the caller;
 new image-required records must have an image; the caller's own listings and
 expired/invalid availability are excluded. Legacy sample inventory is preserved.
 The bounded pool is the newest 200 eligible-status listings (created time then

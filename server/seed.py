@@ -419,6 +419,8 @@ def seed_demo_data(*, allow_supabase_postgres_dev: bool = False) -> list[str]:
                 current_app.logger.warning("Demo catalog public photo storage failed: %s", key)
                 out.append(f"demo catalog photo unavailable: {key}")
         out.extend(_stage_legacy_demo_data())
+        from .community_seed import seed_demo_clubs
+        out.extend(seed_demo_clubs())
         db.session.commit()
         return out or ["nothing to do; demo data already present"]
     except Exception:

@@ -33,8 +33,8 @@
       else if (entry.mode === "borrow" || (!entry.mode && (item.allowed_modes || []).includes("borrow"))) terms = item.rental_fee_cents === 0 ? "Free loan · deposit may apply" : api.formatCents(item.rental_fee_cents) + " rental fee · deposit separate";
       else terms = api.formatCents(item.sale_price_cents) + " to buy";
       list.append(C.el("li", {}, C.el("a", { href: "/listings/" + enc(item.id) },
-        item.public_photo_url ? C.el("img", { src: item.public_photo_url, alt: "", loading: "lazy" }) : catalogSymbol(),
-        C.el("span", {}, C.el("strong", { text: item.title }), C.el("small", { text: terms }), entry.reason ? C.el("small", {text:entry.reason}) : null))));
+        item.public_photo_url ? (item.club ? C.protectedImage(item.public_photo_url, "Club listing photo") : C.el("img", { src: item.public_photo_url, alt: "", loading: "lazy" })) : catalogSymbol(),
+        C.el("span", {}, C.el("strong", { text: item.title }), C.el("small", { text: terms + (item.club ? " · Club only: " + item.club.name : "") }), entry.reason ? C.el("small", {text:entry.reason}) : null))));
     });
     host.append(list);
   }

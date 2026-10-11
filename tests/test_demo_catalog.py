@@ -32,7 +32,12 @@ def test_catalog_seed_idempotent_preserves_rows_and_public_media(catalog_app):
         first = seed_demo_data()
         assert sum('demo catalog listing created:' in line for line in first) == 54
         assert db.session.scalar(select(func.count()).select_from(Listing)) == 60
-        assert db.session.get(Listing, unrelated.id).to_dict() == unrelated_before
+        unrelated_after = db.session.get(Listing, unrelated.id).to_dict()
+        # Seeding intentionally adds visible demo club memberships; listing
+        # fields and every preexisting owner attribute must remain unchanged.
+        assert len(unrelated_after["owner"]["clubs"]) == 2
+        unrelated_after["owner"]["clubs"] = unrelated_before["owner"]["clubs"]
+        assert unrelated_after == unrelated_before
         navy = db.session.get(Listing, _catalog_id('listing', 'clothing-navy-suit-40r'))
         assert navy.owner_id == alice_id
         bob_subject = resolve_identity('sandbox:bob@unc.edu', catalog_app.config).subject

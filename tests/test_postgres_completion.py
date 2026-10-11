@@ -51,12 +51,15 @@ def test_upgrade_preserves_existing_service_item_and_private_records(tmp_path):
             after=db.session.execute(text('SELECT * FROM listings WHERE id=:id'),{'id':row['id']}).mappings().one()
             assert all(after[k]==v for k,v in row.items())
             assert after['publication_required'] is False
-        assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar()=='c707browserroles'
+        assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar()=='c708communitymerge'
         assert {'notifications','exchange_locations','rate_limits'} <= set(inspect(db.engine).get_table_names())
         assert db.session.execute(text("SELECT original_text FROM need_requests WHERE id='old-request'")).scalar()=='Existing private request'
         for role in roles:
             assert not db.session.execute(text("SELECT has_table_privilege(:role,:table,'SELECT,INSERT,UPDATE,DELETE')"),{'role':role,'table':schema+'.notifications'}).scalar()
             assert not db.session.execute(text("SELECT has_table_privilege(:role,:table,'SELECT,INSERT,UPDATE,DELETE')"),{'role':role,'table':schema+'.messages'}).scalar()
+            for table in ('clubs', 'club_memberships'):
+                assert not db.session.execute(text("SELECT has_table_privilege(:role,:table,'SELECT,INSERT,UPDATE,DELETE')"), {'role': role, 'table': schema + '.' + table}).scalar()
+                assert db.session.execute(text("SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass(:table)"), {'table': schema + '.' + table}).scalar()
         assert 'ix_notification_inbox' in {i['name'] for i in inspect(db.engine).get_indexes('notifications')}
 
 def test_postgres_publication_retry_and_notification_concurrency(tmp_path):

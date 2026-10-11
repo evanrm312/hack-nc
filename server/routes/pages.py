@@ -65,6 +65,10 @@ def exchange_room(exchange_id: str):
     return render_template("exchanges/room.html", exchange_id=exchange_id)
 
 
+@bp.get("/profiles/<profile_id>")
+def profile_page(profile_id):
+    return render_template("marketplace/profile.html", profile_id=profile_id)
+
 @bp.get("/about")
 def about():
     return render_template("about.html")

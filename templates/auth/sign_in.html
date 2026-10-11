@@ -40,7 +40,24 @@
 
 <section class="card" id="me-card" hidden>
   <h2>Your profile</h2>
-  <form id="profile-form"><label for="profile-name">Display name</label><input id="profile-name" maxlength="80" required><label for="profile-spot">Preferred campus meetup spot (optional)</label><select id="profile-spot"></select><p class="field__hint">A meeting preference, not your current location. Shared with participants in your exchanges; not shown on public listings.</p><button type="submit">Save profile</button><p id="profile-status" role="status"></p></form>
+  <div id="community-avatar" class="photo-preview" role="img" aria-label="No avatar"></div>
+  <form id="avatar-form"><label for="avatar-photo">Change avatar (public)</label><input id="avatar-photo" type="file" accept="image/jpeg,image/png,image/webp" required><p class="field__hint">Still JPEG, PNG or WebP, up to 1 MiB. Avatars are public.</p><button type="submit">Upload avatar</button><p id="avatar-status" role="status"></p></form>
+  <form id="profile-form">
+    <label for="profile-name">Display name</label><input id="profile-name" maxlength="80" required>
+    <label for="profile-bio">Short bio (public)</label><textarea id="profile-bio" maxlength="300" rows="3"></textarea>
+    <label for="profile-year">Graduation year (optional, public)</label><input id="profile-year" type="number" min="1900" max="2200">
+    <label for="profile-spot">Preferred campus meetup spot (private)</label><select id="profile-spot"></select>
+    <p class="field__hint">Shared only with your exchange participants; never on your public profile.</p>
+    <label><input id="profile-history" type="checkbox"> Show itemized completed history publicly</label>
+    <p class="field__hint">Off by default. Only public listing titles, mode, your role and completion date are shared. Club titles and private terms stay hidden.</p>
+    <button type="submit">Save profile</button><p id="profile-status" role="status"></p>
+  </form>
+  <div id="community-summary" aria-live="polite"></div>
+  <section aria-labelledby="clubs-heading"><h3 id="clubs-heading">Your clubs</h3><div id="community-clubs"></div>
+    <form id="join-club-form"><label for="club-code">Join with a club code</label><input id="club-code" type="password" maxlength="128" autocomplete="off" required><button type="submit">Join club</button><p id="club-status" role="status"></p></form>
+    <p class="field__hint">Membership and manager approval are administrative. They do not guarantee safety, insurance or payment.</p>
+  </section>
+  <section id="community-manager" hidden><h3>Club manager review</h3><button id="refresh-club-reviews" type="button">Refresh approvals</button><div id="club-reviews" aria-live="polite"></div></section>
   <p>Your account information is shown below. Verification confirms an email address, not student status.</p><details><summary>View account information</summary><pre class="json" id="me-json"></pre></details>
 </section>
 </div></div>

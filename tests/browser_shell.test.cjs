@@ -45,3 +45,19 @@ test('example pressed states track exact text and clear on editing', () => {
   const h = harness(); h.examples[0].events.click(); assert.equal(h.text.value, 'Original example'); assert.equal(h.examples[0].attrs['aria-pressed'], 'true');
   h.text.value += ' edited'; h.text.events.input(); assert.equal(h.examples[0].attrs['aria-pressed'], 'false'); assert.equal(h.examples[1].attrs['aria-pressed'], 'false');
 });
+test('signed-in Account opens the editor; signed-out sign-in retains the current destination', () => {
+  const listeners = {}, link = {href: '/sign-in'};
+  let token = null;
+  const document = {
+    getElementById: () => null,
+    querySelectorAll: selector => selector === 'a[href="/sign-in"]' ? [link] : [],
+    addEventListener: (key, fn) => { listeners[key] = fn; },
+  };
+  vm.runInNewContext(source, {document, location: {pathname:'/listings/new',search:''}, encodeURIComponent,
+    window: {api: {getToken: () => token}, addEventListener() {}}});
+  assert.equal(link.href, '/sign-in?next=%2Flistings%2Fnew');
+  token = 'sandbox:demo'; listeners['campus:profile-ready']();
+  assert.equal(link.href, '/sign-in');
+  token = null; listeners['campus:auth-changed']();
+  assert.equal(link.href, '/sign-in?next=%2Flistings%2Fnew');
+});

@@ -16,6 +16,10 @@ def register_blueprints(app: Flask) -> None:
     from .discovery import bp as discovery_bp
     app.register_blueprint(discovery_bp)
     from .locations import bp as locations_bp
+    from .community import bp as community_bp
+    from .profiles import bp as profiles_bp
+    app.register_blueprint(profiles_bp)
+    app.register_blueprint(community_bp)
     app.register_blueprint(locations_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(me_bp)

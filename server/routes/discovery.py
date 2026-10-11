@@ -4,6 +4,7 @@ from datetime import timedelta, timezone, datetime
 from flask import Blueprint, jsonify
 from ..auth import current_profile, optional_user
 from ..db import db, utcnow
+from ..community import listing_visibility
 from ..models import Listing, NeedRequest, Exchange
 from ..intelligence.matching import match_listings
 
@@ -25,7 +26,7 @@ def _available(listing, now):
 
 def recommendations(profile=None):
     now = utcnow()
-    query = db.select(Listing).where(Listing.status == 'available', Listing.active_exchange_id.is_(None),
+    query = db.select(Listing).where(listing_visibility(profile), Listing.status == 'available', Listing.active_exchange_id.is_(None),
         db.or_(Listing.publication_required.is_(False), Listing.public_photo_path.is_not(None)))
     if profile:
         query = query.where(Listing.owner_id != profile.id)

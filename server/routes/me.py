@@ -31,6 +31,20 @@ def update_me():
         if spot_id and (spot is None or not spot.is_active):
             errors.add("preferred_meeting_spot_id", "choose an active catalog spot")
         profile.preferred_meeting_spot_id = spot_id
+    if "bio" in body:
+        profile.bio = string(body["bio"], "bio", errors, max_len=300)
+    if "graduation_year" in body:
+        year = body["graduation_year"]
+        if year is not None and (isinstance(year, bool) or not isinstance(year, int) or not 1900 <= year <= 2200):
+            errors.add("graduation_year", "must be null or an integer from 1900 to 2200")
+        else:
+            profile.graduation_year = year
+    if "show_transaction_history" in body:
+        value = body["show_transaction_history"]
+        if not isinstance(value, bool):
+            errors.add("show_transaction_history", "must be true or false")
+        else:
+            profile.show_transaction_history = value
     errors.raise_if_any()
     profile = current_profile()
     profile.display_name = display_name
