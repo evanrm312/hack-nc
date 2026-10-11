@@ -84,6 +84,19 @@ def test_unknowns_and_followups(sdk):
     assert len(result['follow_up_questions']) >= 4
 
 
+@pytest.mark.parametrize('category,kind', [('calculator', 'calculator'), ('graphing calculators', 'graphing calculator')])
+def test_calculator_category_uses_catalog_parent_and_retains_kind(sdk, category, kind):
+    sdk[2](payload(modes=['borrow'], category=category,
+                   required_specifications=[dict(name='model', value='TI84')]))
+    result = normalize('Borrow a TI84 calculator')
+    assert result['category'] == 'academic supplies'
+    assert result['required_specifications'] == {'model': 'TI84', 'type': kind}
+    assert result['needed_by'] is None and result['use_start'] is None and result['use_end'] is None
+    instruction = sdk[1].models.generate_content.call_args.kwargs['config'].system_instruction
+    assert 'Calculators use academic supplies' in instruction
+    assert 'ITEM_CATEGORY_NAMES' not in instruction
+
+
 @pytest.mark.parametrize('offset,expected', [('-04:00', '06'), ('-05:00', '07')])
 def test_ambiguous_date_and_utc_conversion(sdk, offset, expected):
     proposed = '2026-10-11T02:00:00' + offset
